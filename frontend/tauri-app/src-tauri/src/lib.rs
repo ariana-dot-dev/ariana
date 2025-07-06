@@ -439,7 +439,7 @@ async fn get_found_git_directories_so_far(
 	let mut filtered_dirs = Vec::new();
 	
 	for path in &result.directories {
-		let exists = if path.starts_with("/mnt/") || path.starts_with("/home") {
+		let exists = if path.starts_with("/mnt/") || (path.starts_with("/home") && cfg!(target_os = "windows")) {
 			// WSL path - check existence using WSL command
 			check_wsl_path_exists(path)
 		} else {
