@@ -556,9 +556,6 @@ export const CommunicationPalette: React.FC<CommunicationPaletteProps> = ({
     setResponse("");
     
     try {
-      console.log("🚀 SEND BUTTON PRESSED");
-      console.log("📝 Input message:", message.trim());
-      
       // First, use LLM to parse natural language into JSON commands
       const systemPrompt = `You are an intelligent command parser for an AI development environment. Parse the following natural language input into structured JSON commands.
 
@@ -593,23 +590,18 @@ Examples:
 
 Return only the JSON array, no other text.`;
 
-      console.log("🤖 Sending to LLM for parsing...");
       const parseResponse = await communicationService.askClaude(systemPrompt);
       
       // Try to parse the response as JSON
       const responseText = parseResponse.content.trim();
-      console.log("📋 LLM Raw Response:", responseText);
       
       const jsonMatch = responseText.match(/\[[\s\S]*\]/);
       
       if (jsonMatch) {
         const parsedCommands: Command[] = JSON.parse(jsonMatch[0]);
-        console.log("✅ Parsed JSON Commands:", JSON.stringify(parsedCommands, null, 2));
         
         // Execute the parsed commands
-        console.log("⚡ Executing commands via CommandDispatcher...");
         const results = await commandDispatcher.executeCommands(parsedCommands);
-        console.log("📊 Command Results:", results);
         
         // Format the results for display
         const resultMessages = results.map((result, index) => {
@@ -626,16 +618,11 @@ Return only the JSON array, no other text.`;
         });
         
         setResponse(resultMessages.join('\n---\n'));
-        console.log("✨ Command execution completed successfully");
       } else {
-        console.log("❌ Failed to parse LLM response as JSON");
-        
         // Fallback: if no commands detected, handle as regular message
         if (onSend) {
-          console.log("🔄 Falling back to onSend callback");
           await onSend(message.trim());
         } else {
-          console.log("🔄 Falling back to API send");
           await handleApiSend(message.trim());
         }
       }
@@ -643,7 +630,6 @@ Return only the JSON array, no other text.`;
       setMessage("");
       setInterimTranscript("");
     } catch (error) {
-      console.error("❌ Failed to send message:", error);
       setResponse(`Error: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setIsLoading(false);
