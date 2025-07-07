@@ -71,8 +71,9 @@ export function ProjectSelector({ onProjectCreated }: ProjectSelectorProps) {
 					}
 				}
 			} else if (typeof selectedKind === "object" && "Wsl" in selectedKind) {
-				// For WSL, use Windows path that allows access to WSL content
+				// For WSL, start with WSL UNC path - user can navigate to Windows paths if needed
 				defaultPath = `\\\\wsl$\\${selectedKind.Wsl}\\home`;
+				console.log(`Opening WSL file dialog with path: ${defaultPath}`);
 			}
 
 			// Open directory picker dialog
@@ -82,22 +83,26 @@ export function ProjectSelector({ onProjectCreated }: ProjectSelectorProps) {
 				defaultPath: defaultPath || undefined,
 			});
 
+			console.log(`File dialog returned: ${selectedDir}`);
+
 			if (selectedDir && typeof selectedDir === 'string') {
 				let convertedPath = selectedDir;
 
-				// Convert Windows path to WSL format if needed
+				// Convert path to WSL format if WSL is selected
 				if (typeof selectedKind === "object" && "Wsl" in selectedKind) {
 					// Handle \\wsl$\distribution\path format
 					if (selectedDir.startsWith(`\\\\wsl$\\${selectedKind.Wsl}\\`)) {
 						// Convert \\wsl$\distribution\path to /path
 						const pathAfterDistribution = selectedDir.substring(`\\\\wsl$\\${selectedKind.Wsl}\\`.length);
 						convertedPath = '/' + pathAfterDistribution.replace(/\\/g, '/');
+						console.log(`Converted WSL UNC path: ${selectedDir} -> ${convertedPath}`);
 					}
-					// Handle regular Windows drive paths (C:\ style)
+					// Handle regular Windows drive paths (C:\ style) - convert to /mnt/c
 					else if (selectedDir.match(/^[A-Za-z]:\\/)) {
 						const drive = selectedDir.charAt(0).toLowerCase();
 						const pathWithoutDrive = selectedDir.substring(3).replace(/\\/g, '/');
 						convertedPath = `/mnt/${drive}/${pathWithoutDrive}`;
+						console.log(`Converted Windows path to WSL: ${selectedDir} -> ${convertedPath}`);
 					}
 				}
 
@@ -105,6 +110,7 @@ export function ProjectSelector({ onProjectCreated }: ProjectSelectorProps) {
 			}
 		} catch (error) {
 			console.error("Failed to open directory picker:", error);
+			alert("Failed to open directory picker. Please try again.");
 		}
 	};
 
@@ -126,6 +132,7 @@ export function ProjectSelector({ onProjectCreated }: ProjectSelectorProps) {
 					}
 				}
 			} else if (typeof selectedKind === "object" && "Wsl" in selectedKind) {
+				// For WSL, start with WSL UNC path - user can navigate to Windows paths if needed
 				defaultPath = `\\\\wsl$\\${selectedKind.Wsl}\\home`;
 			}
 
@@ -146,7 +153,7 @@ export function ProjectSelector({ onProjectCreated }: ProjectSelectorProps) {
 				let convertedParentPath = parentDir;
 				let projectPath = "";
 
-				// Convert Windows path to WSL format if needed
+				// Convert path to WSL format if WSL is selected
 				if (typeof selectedKind === "object" && "Wsl" in selectedKind) {
 					// Handle \\wsl$\distribution\path format
 					if (parentDir.startsWith(`\\\\wsl$\\${selectedKind.Wsl}\\`)) {
@@ -154,7 +161,7 @@ export function ProjectSelector({ onProjectCreated }: ProjectSelectorProps) {
 						const pathAfterDistribution = parentDir.substring(`\\\\wsl$\\${selectedKind.Wsl}\\`.length);
 						convertedParentPath = '/' + pathAfterDistribution.replace(/\\/g, '/');
 					}
-					// Handle regular Windows drive paths (C:\ style)
+					// Handle regular Windows drive paths (C:\ style) - convert to /mnt/c
 					else if (parentDir.match(/^[A-Za-z]:\\/)) {
 						const drive = parentDir.charAt(0).toLowerCase();
 						const pathWithoutDrive = parentDir.substring(3).replace(/\\/g, '/');
@@ -200,7 +207,6 @@ export function ProjectSelector({ onProjectCreated }: ProjectSelectorProps) {
 			}
 		} catch (error) {
 			console.error("Failed to create new project:", error);
-			alert(`Failed to create new project: ${error}`);
 		}
 	};
 
