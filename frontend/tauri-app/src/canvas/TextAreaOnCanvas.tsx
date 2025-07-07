@@ -70,8 +70,8 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 	const [terminalId, setTerminalId] = useState<string | null>(null);
 	const [claudeAgent, setClaudeAgent] = useState<ClaudeCodeAgent | null>(null);
 	
-	// Track auto-launch state
-	const [hasAutoLaunched, setHasAutoLaunched] = useState(false);
+	// Track automatic Go button mode
+	const [autoGoRemaining, setAutoGoRemaining] = useState(0);
 	
 	// Get all tasks for display
 	const allTasks = taskManager?.getTasks() || [];
@@ -95,27 +95,28 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 		propOnDragEnd(element);
 	};
 
-	const handleGoClick = async () => {
+	// Shared task starting logic
+	const startTaskWithPrompt = async (prompt: string) => {
 		// Block task creation if canvas is locked
 		if (!canEdit) {
-			return;
+			return false;
 		}
 
-		if (currentInProgressTask || !currentPrompt.trim()) {
-			return;
+		if (currentInProgressTask || !prompt.trim()) {
+			return false;
 		}
 		
 		// Create task in TaskManager
 		let taskId: string;
 		if (currentPromptingTask) {
 			// Update existing prompting task
-			updateTaskPrompt(currentPromptingTask.id, currentPrompt.trim());
+			updateTaskPrompt(currentPromptingTask.id, prompt.trim());
 			taskId = currentPromptingTask.id;
 		} else {
 			// Create new task
-			taskId = createTask(currentPrompt.trim()) || '';
+			taskId = createTask(prompt.trim()) || '';
 			if (!taskId) {
-				return;
+				return false;
 			}
 		}
 
@@ -123,46 +124,48 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 			// Create Claude Code agent
 			const agent = new ClaudeCodeAgent();
 			setClaudeAgent(agent);
-
-			// Show terminal
 			setShowTerminal(true);
 
 			await agent.startTask(
-				textAreaOsSession || { Local: "." }, // Use textArea OS session (which is canvas-specific) or fallback
-				currentPrompt.trim(),
+				textAreaOsSession || { Local: "." },
+				prompt.trim(),
 				(newTerminalId: string) => {
 					setTerminalId(newTerminalId);
-					// Ensure terminal is visible when ID is set
 					setShowTerminal(true);
 					
 					// Register process with persistence system
 					const processId = crypto.randomUUID();
 					const processState: ProcessState = {
 						processId,
-						terminalId: newTerminalId, // Use the new terminal ID directly
+						terminalId: newTerminalId,
 						type: 'claude-code',
 						status: 'running',
 						startTime: Date.now(),
 						elementId,
-						prompt: currentPrompt.trim()
+						prompt: prompt.trim()
 					};
 					
 					// Register with global ProcessManager
 					ProcessManager.registerProcess(processId, agent);
 					ProcessManager.setTerminalConnection(elementId, newTerminalId);
-					
-					// Register with canvas process state
 					addProcess(processState);
-					
-					// Start the task in TaskManager
 					startTask(taskId, processId);
 				},
 			);
 
+			return true;
 		} catch (error) {
 			setShowTerminal(false);
 			setTerminalId(null);
-			// Keep the current prompt so user can try again
+			return false;
+		}
+	};
+
+	const handleGoClick = async () => {
+		const success = await startTaskWithPrompt(currentPrompt);
+		if (success && autoGoRemaining > 0) {
+			// Decrement counter when user manually presses Go while in auto mode
+			setAutoGoRemaining(prev => Math.max(0, prev - 1));
 		}
 	};
 
@@ -177,72 +180,32 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 			setText(currentPromptingTask.prompt);
 		} else if (!currentPrompt && text) {
 			setCurrentPrompt(text);
+			// If text was set programmatically (e.g., from agent creation), increment auto-go counter
+			if (text.trim()) {
+				setAutoGoRemaining(prev => prev + 1);
+			}
 		}
 	}, [text, currentPrompt, currentPromptingTask]);
 
-	// Auto-launch when TextArea is initialized with content (for new agents)
+	// Auto-press Go button when in automatic mode
 	useEffect(() => {
-		// Only auto-launch if:
-		// 1. We have initial text content
-		// 2. Haven't auto-launched yet
+		// Only auto-press Go if:
+		// 1. We have automatic presses remaining
+		// 2. We have text to process
 		// 3. No tasks are in progress
 		// 4. Canvas can be edited
-		if (text && text.trim() && !hasAutoLaunched && !currentInProgressTask && !currentPromptingTask && canEdit) {
-			setHasAutoLaunched(true);
-			setCurrentPrompt(text);
-			
-			const autoLaunch = () => {
-				if (!canEdit || currentInProgressTask || !text.trim()) {
-					return;
+		if (autoGoRemaining > 0 && currentPrompt.trim() && !currentInProgressTask && !currentPromptingTask && canEdit) {
+			const autoPress = async () => {
+				const success = await startTaskWithPrompt(currentPrompt);
+				if (success) {
+					// Decrement counter only if task started successfully
+					setAutoGoRemaining(prev => Math.max(0, prev - 1));
 				}
-
-				setCurrentPrompt(text.trim());
-				
-				const taskId = createTask(text.trim()) || '';
-				if (!taskId) {
-					return;
-				}
-
-				(async () => {
-					try {
-						const agent = new ClaudeCodeAgent();
-						setClaudeAgent(agent);
-						setShowTerminal(true);
-
-						await agent.startTask(
-							textAreaOsSession || { Local: "." },
-							text.trim(),
-							(newTerminalId: string) => {
-								setTerminalId(newTerminalId);
-								setShowTerminal(true);
-								
-								const processId = crypto.randomUUID();
-								const processState: ProcessState = {
-									processId,
-									terminalId: newTerminalId,
-									type: 'claude-code',
-									status: 'running',
-									startTime: Date.now(),
-									elementId,
-									prompt: text.trim()
-								};
-								
-								ProcessManager.registerProcess(processId, agent);
-								ProcessManager.setTerminalConnection(elementId, newTerminalId);
-								addProcess(processState);
-								startTask(taskId, processId);
-							},
-						);
-					} catch (error) {
-						setShowTerminal(false);
-						setTerminalId(null);
-					}
-				})();
 			};
 			
-			setTimeout(autoLaunch, 1500);
+			setTimeout(autoPress, 1500);
 		}
-	}, [text, hasAutoLaunched, currentInProgressTask, currentPromptingTask, canEdit, handleGoClick]);
+	}, [autoGoRemaining, currentPrompt, currentInProgressTask, currentPromptingTask, canEdit]);
 
 	// Hide terminal when no tasks are in progress
 	useEffect(() => {
@@ -591,6 +554,11 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 									if (!currentInProgressTask && canEdit) {
 										setCurrentPrompt(e.target.value);
 										setText(e.target.value);
+										
+										// When user starts typing, exit automatic mode
+										if (autoGoRemaining > 0) {
+											setAutoGoRemaining(0);
+										}
 										
 										// Update existing prompting task if it exists
 										if (currentPromptingTask) {
