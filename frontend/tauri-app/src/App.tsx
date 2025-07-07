@@ -393,11 +393,12 @@ function App() {
 												
 												return {
 													success: true,
-													message: `Agent "${agentName}" created successfully! New workspace canvas created with isolated Git branch.${initialPrompt ? ' Initial prompt has been pre-filled in the text area.' : ''}`,
+													message: `Agent "${agentName}" created successfully! New workspace canvas created with isolated Git branch.${initialPrompt ? ' Initial prompt will be auto-launched.' : ''}`,
 													data: {
 														agentName,
 														prompt,
 														promptPreFilled: !!initialPrompt,
+														autoLaunched: !!initialPrompt,
 														canvasId: result.canvasId,
 														timestamp: new Date().toISOString()
 													}

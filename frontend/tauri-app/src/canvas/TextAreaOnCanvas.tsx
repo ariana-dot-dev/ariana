@@ -78,6 +78,9 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 	const [terminalId, setTerminalId] = useState<string | null>(null);
 	const [claudeAgent, setClaudeAgent] = useState<ClaudeCodeAgent | null>(null);
 	
+	// Track auto-launch state
+	const [hasAutoLaunched, setHasAutoLaunched] = useState(false);
+	
 	// Get all tasks for display
 	const allTasks = taskManager?.getTasks() || [];
 	const currentPromptingTask = taskManager?.getCurrentPromptingTask();
@@ -231,6 +234,121 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 			setCurrentPrompt(text);
 		}
 	}, [text, currentPrompt, currentPromptingTask]);
+
+	// Auto-launch when TextArea is initialized with content (for new agents)
+	useEffect(() => {
+		console.log("[TextAreaOnCanvas] Auto-launch check:", {
+			text: !!text,
+			textContent: text,
+			hasAutoLaunched,
+			currentInProgressTask: !!currentInProgressTask,
+			currentPromptingTask: !!currentPromptingTask,
+			canEdit,
+			elementId
+		});
+
+		// Only auto-launch if:
+		// 1. We have initial text content
+		// 2. Haven't auto-launched yet
+		// 3. No tasks are in progress
+		// 4. Canvas can be edited
+		if (text && text.trim() && !hasAutoLaunched && !currentInProgressTask && !currentPromptingTask && canEdit) {
+			console.log("[TextAreaOnCanvas] CONDITIONS MET - Auto-launching initial prompt:", text);
+			
+			// Mark as auto-launched to prevent multiple attempts
+			setHasAutoLaunched(true);
+			
+			// Set the prompt first
+			setCurrentPrompt(text);
+			
+			// Auto-launch function that uses the text directly
+			const autoLaunch = () => {
+				console.log("[TextAreaOnCanvas] ✅ AUTO-LAUNCHING with text:", text);
+				
+				// Block task creation if canvas is locked
+				if (!canEdit) {
+					console.log("[TextAreaOnCanvas] Canvas is locked, cannot create tasks");
+					return;
+				}
+
+				if (currentInProgressTask || !text.trim()) {
+					console.log(
+						"[TextAreaOnCanvas]",
+						"Cannot start - hasInProgress:",
+						!!currentInProgressTask,
+						"hasText:",
+						!!text.trim(),
+					);
+					return;
+				}
+
+				console.log("[TextAreaOnCanvas]", "Auto-launching task with text:", text.trim());
+				
+				// Set current prompt to the text we're launching with
+				setCurrentPrompt(text.trim());
+				
+				// Create task directly with the text
+				const taskId = createTask(text.trim()) || '';
+				if (!taskId) {
+					console.error("[TextAreaOnCanvas]", "Failed to create task");
+					return;
+				}
+
+				// Now call the rest of handleGoClick logic
+				(async () => {
+					try {
+						// Create Claude Code agent
+						console.log("[TextAreaOnCanvas]", "Creating Claude Code agent...");
+						const agent = new ClaudeCodeAgent();
+						setClaudeAgent(agent);
+
+						// Show terminal
+						console.log("[TextAreaOnCanvas]", "Showing terminal...");
+						setShowTerminal(true);
+
+						await agent.startTask(
+							textAreaOsSession || { Local: "." },
+							text.trim(),
+							(newTerminalId: string) => {
+								console.log("[TextAreaOnCanvas]", "Terminal ready, ID:", newTerminalId);
+								setTerminalId(newTerminalId);
+								setShowTerminal(true);
+								
+								const processId = crypto.randomUUID();
+								const processState: ProcessState = {
+									processId,
+									terminalId: newTerminalId,
+									type: 'claude-code',
+									status: 'running',
+									startTime: Date.now(),
+									elementId,
+									prompt: text.trim()
+								};
+								
+								ProcessManager.registerProcess(processId, agent);
+								ProcessManager.setTerminalConnection(elementId, newTerminalId);
+								addProcess(processState);
+								startTask(taskId, processId);
+								
+								console.log("[TextAreaOnCanvas]", "Auto-launch process registered with ID:", processId);
+							},
+						);
+
+						console.log("[TextAreaOnCanvas]", "Auto-launch task started successfully");
+					} catch (error) {
+						console.error("[TextAreaOnCanvas]", "Failed to auto-launch task:", error);
+						setShowTerminal(false);
+						setTerminalId(null);
+					}
+				})();
+			};
+			
+			// Auto-launch after a brief delay
+			setTimeout(autoLaunch, 1500);
+		} else {
+			console.log("[TextAreaOnCanvas] Auto-launch conditions not met");
+		}
+	}, [text, hasAutoLaunched, currentInProgressTask, currentPromptingTask, canEdit, handleGoClick]);
 
 	// Hide terminal when no tasks are in progress
 	useEffect(() => {
