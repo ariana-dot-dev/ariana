@@ -28,6 +28,17 @@ interface StreamResponse {
   done: boolean;
 }
 
+interface ClaudeRequest {
+  prompt: string;
+}
+
+interface ClaudeResponse {
+  content: string;
+  tokens?: number;
+  elapsed: number;
+  model: string;
+}
+
 interface Provider {
   name: string;
   display_name: string;
@@ -153,6 +164,27 @@ export class CommunicationService {
       temperature: 0.7,
       max_tokens: 1000,
     };
+  }
+
+  async askClaude(prompt: string): Promise<ClaudeResponse> {
+    const request: ClaudeRequest = {
+      prompt,
+    };
+
+    const response = await fetch(`${this.baseUrl}/claude`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP error! status: ${response.status}`);
+    }
+
+    return await response.json();
   }
 }
 

@@ -522,6 +522,21 @@ export const CommunicationPalette: React.FC<CommunicationPaletteProps> = ({
     }
   }, [provider, model, apiKey, systemPrompt]);
 
+  const handleAskClaude = useCallback(async (messageText: string) => {
+    setIsLoading(true);
+    setResponse("");
+    
+    try {
+      const result = await communicationService.askClaude(messageText);
+      setResponse(result.content);
+    } catch (error) {
+      console.error("Failed to ask Claude:", error);
+      setResponse(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   const handleSend = async () => {
     if (!message.trim() || isLoading || isStreaming) return;
     
@@ -538,6 +553,18 @@ export const CommunicationPalette: React.FC<CommunicationPaletteProps> = ({
       console.error("Failed to send message:", error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleAsk = async () => {
+    if (!message.trim() || isLoading || isStreaming) return;
+    
+    try {
+      await handleAskClaude(message.trim());
+      setMessage("");
+      setInterimTranscript("");
+    } catch (error) {
+      console.error("Failed to ask Claude:", error);
     }
   };
 
@@ -639,7 +666,14 @@ export const CommunicationPalette: React.FC<CommunicationPaletteProps> = ({
 
           {response && (
             <div className="flex-1 overflow-auto">
-              <div className="text-sm text-[var(--base-600)] mb-2">Response:</div>
+              <div className="text-sm text-[var(--base-600)] mb-2">
+                Response:
+                {!apiKey && (
+                  <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                    Via Claude CLI
+                  </span>
+                )}
+              </div>
               <div className="p-3 rounded-md bg-[var(--base-200)] border border-[var(--acc-400)] overflow-auto max-h-64">
                 <pre className="whitespace-pre-wrap font-mono text-sm text-[var(--blackest)]">
                   {response}
@@ -686,6 +720,19 @@ export const CommunicationPalette: React.FC<CommunicationPaletteProps> = ({
                 className="px-4 py-2 rounded-md bg-[var(--base-400)] text-[var(--base-600)] hover:bg-[var(--base-500)] transition-colors"
               >
                 Cancel
+              </button>
+              <button
+                onClick={handleAsk}
+                disabled={!message.trim() || isLoading || isStreaming}
+                className={cn(
+                  "px-4 py-2 rounded-md transition-colors",
+                  !message.trim() || isLoading || isStreaming
+                    ? "bg-[var(--base-400)] text-[var(--base-600)] cursor-not-allowed"
+                    : "bg-blue-500 text-white hover:bg-blue-600"
+                )}
+                title="Ask Claude using local CLI (no API key required)"
+              >
+                {isLoading ? "Asking..." : "Ask"}
               </button>
               <button
                 onClick={handleSend}
