@@ -141,7 +141,7 @@ export class GitProject {
 	/**
 	 * Creates a new canvas that is a copy of the repository on another branch and location
 	 */
-	async addCanvasCopy(): Promise<{ success: boolean; canvasId?: string; error?: string }> {
+	async addCanvasCopy(canvas?: Partial<GitProjectCanvas>, initialPrompt?: string): Promise<{ success: boolean; canvasId?: string; error?: string }> {
 		try {
 			// Generate random ID for the new version
 			const randomId = CanvasService.generateRandomId();
@@ -204,7 +204,11 @@ export class GitProject {
 				name: `Canvas ${this.canvases.length + 1} (${branchName})`,
 				osSession: newOsSession,
 				taskManager: new TaskManager(),
-				// Don't override elements - let addCanvas create the default TextArea
+				elements: initialPrompt ? [
+					// Create TextArea with initial prompt if provided
+					TextArea.canvasElement(newOsSession, initialPrompt)
+				] : undefined, // Let addCanvas create the default TextArea if no prompt
+				...canvas
 			});
 
 			return { success: true, canvasId };
