@@ -33,6 +33,15 @@ impl CommandExecutor {
             cmd.current_dir(dir);
         }
 
+        #[cfg(target_os = "windows")]
+        let output = {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x08000000) // CREATE_NO_WINDOW
+                .output()
+                .map_err(|e| format!("Failed to execute command: {}", e))?
+        };
+        
+        #[cfg(not(target_os = "windows"))]
         let output = cmd
             .output()
             .map_err(|e| format!("Failed to execute command: {}", e))?;
@@ -60,10 +69,14 @@ impl CommandExecutor {
         wsl_args.push(command);
         wsl_args.extend_from_slice(args);
 
-        let output = Command::new("wsl")
-            .args(&wsl_args)
-            .output()
-            .map_err(|e| format!("Failed to execute WSL command: {}", e))?;
+        let output = {
+            use std::os::windows::process::CommandExt;
+            Command::new("wsl")
+                .args(&wsl_args)
+                .creation_flags(0x08000000) // CREATE_NO_WINDOW
+                .output()
+                .map_err(|e| format!("Failed to execute WSL command: {}", e))?
+        };
 
         if output.status.success() {
             Ok(String::from_utf8_lossy(&output.stdout).to_string())

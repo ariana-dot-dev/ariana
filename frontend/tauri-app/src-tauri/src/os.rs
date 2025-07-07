@@ -24,7 +24,12 @@ impl OsSessionKind {
 			use std::process::Command;
 
 			// Get WSL distributions
-			let output = Command::new("wsl").arg("--list").arg("--quiet").output()?;
+			use std::os::windows::process::CommandExt;
+			let output = Command::new("wsl")
+				.arg("--list")
+				.arg("--quiet")
+				.creation_flags(0x08000000) // CREATE_NO_WINDOW
+				.output()?;
 
 			if output.status.success() {
 				let distributions = String::from_utf8_lossy(&output.stdout);
@@ -172,6 +177,7 @@ impl OsSession {
 		let wsl_path = Self::convert_path_to_wsl(path);
 
 		// Use WSL to execute ls command and parse the output
+		use std::os::windows::process::CommandExt;
 		let output = Command::new("wsl")
 			.arg("-d")
 			.arg(distribution)
@@ -179,6 +185,7 @@ impl OsSession {
 			.arg("-la")
 			.arg("--color=never")
 			.arg(&wsl_path)
+			.creation_flags(0x08000000) // CREATE_NO_WINDOW
 			.output()?;
 
 		if !output.status.success() {
@@ -640,12 +647,14 @@ impl GitSearchManager {
 			root_path.replace("'", "'\"'\"'")
 		);
 
+		use std::os::windows::process::CommandExt;
 		let output = Command::new("wsl")
 			.arg("-d")
 			.arg(&distribution)
 			.arg("bash")
 			.arg("-c")
 			.arg(&find_command)
+			.creation_flags(0x08000000) // CREATE_NO_WINDOW
 			.output();
 
 		match output {

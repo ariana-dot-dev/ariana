@@ -7,6 +7,17 @@ pub struct SystemManager;
 
 impl SystemManager {
     pub fn execute_command(command: &str, args: &[&str]) -> Result<String, String> {
+        #[cfg(target_os = "windows")]
+        let output = {
+            use std::os::windows::process::CommandExt;
+            Command::new(command)
+                .args(args)
+                .creation_flags(0x08000000) // CREATE_NO_WINDOW
+                .output()
+                .map_err(|e| format!("Failed to execute command: {}", e))?
+        };
+        
+        #[cfg(not(target_os = "windows"))]
         let output = Command::new(command)
             .args(args)
             .output()
@@ -20,6 +31,18 @@ impl SystemManager {
     }
 
     pub fn execute_command_in_dir(command: &str, args: &[&str], directory: &str) -> Result<String, String> {
+        #[cfg(target_os = "windows")]
+        let output = {
+            use std::os::windows::process::CommandExt;
+            Command::new(command)
+                .args(args)
+                .current_dir(directory)
+                .creation_flags(0x08000000) // CREATE_NO_WINDOW
+                .output()
+                .map_err(|e| format!("Failed to execute command: {}", e))?
+        };
+        
+        #[cfg(not(target_os = "windows"))]
         let output = Command::new(command)
             .args(args)
             .current_dir(directory)
@@ -58,12 +81,14 @@ impl SystemManager {
             for session in available {
                 if let OsSessionKind::Wsl(dist_name) = session {
                     // Use WSL test command to check if directory exists
+                    use std::os::windows::process::CommandExt;
                     let output = Command::new("wsl")
                         .arg("-d")
                         .arg(&dist_name)
                         .arg("test")
                         .arg("-d")
                         .arg(path)
+                        .creation_flags(0x08000000) // CREATE_NO_WINDOW
                         .output();
                     
                     if let Ok(result) = output {
