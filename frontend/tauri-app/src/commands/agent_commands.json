@@ -1,0 +1,138 @@
+{
+  "commands": [
+    {
+      "id": "create_agent",
+      "name": "Create New Agent",
+      "description": "Creates a new AI agent with the specified name",
+      "pattern": [
+        "create new agent {agentName}",
+        "new agent {agentName}",
+        "create agent {agentName}",
+        "make agent {agentName}"
+      ],
+      "parameters": {
+        "agentName": {
+          "type": "string",
+          "required": true,
+          "description": "The name of the agent to create"
+        }
+      },
+      "action": {
+        "type": "agent_create",
+        "payload": {
+          "name": "{agentName}",
+          "status": "created",
+          "timestamp": "{now}"
+        }
+      }
+    },
+    {
+      "id": "prompt_agent",
+      "name": "Prompt Agent",
+      "description": "Sends a prompt to a specific agent",
+      "pattern": [
+        "{agentName} {prompt}",
+        "ask {agentName} {prompt}",
+        "tell {agentName} {prompt}",
+        "prompt {agentName} {prompt}"
+      ],
+      "parameters": {
+        "agentName": {
+          "type": "string",
+          "required": true,
+          "description": "The name of the agent to prompt"
+        },
+        "prompt": {
+          "type": "string",
+          "required": true,
+          "description": "The prompt text to send to the agent"
+        }
+      },
+      "action": {
+        "type": "agent_prompt",
+        "payload": {
+          "agentName": "{agentName}",
+          "prompt": "{prompt}",
+          "timestamp": "{now}"
+        }
+      }
+    },
+    {
+      "id": "merge_agent",
+      "name": "Merge Agent",
+      "description": "Merges an agent's work or output",
+      "pattern": [
+        "{agentName} merge",
+        "merge {agentName}",
+        "{agentName} merge results",
+        "merge output from {agentName}"
+      ],
+      "parameters": {
+        "agentName": {
+          "type": "string",
+          "required": true,
+          "description": "The name of the agent to merge"
+        }
+      },
+      "action": {
+        "type": "agent_merge",
+        "payload": {
+          "agentName": "{agentName}",
+          "timestamp": "{now}"
+        }
+      }
+    },
+    {
+      "id": "list_agents",
+      "name": "List Agents",
+      "description": "Lists all available agents",
+      "pattern": [
+        "list agents",
+        "show agents",
+        "what agents",
+        "agents list"
+      ],
+      "parameters": {},
+      "action": {
+        "type": "agent_list",
+        "payload": {
+          "timestamp": "{now}"
+        }
+      }
+    },
+    {
+      "id": "delete_agent",
+      "name": "Delete Agent",
+      "description": "Deletes a specific agent",
+      "pattern": [
+        "delete agent {agentName}",
+        "remove agent {agentName}",
+        "delete {agentName}",
+        "remove {agentName}"
+      ],
+      "parameters": {
+        "agentName": {
+          "type": "string",
+          "required": true,
+          "description": "The name of the agent to delete"
+        }
+      },
+      "action": {
+        "type": "agent_delete",
+        "payload": {
+          "agentName": "{agentName}",
+          "timestamp": "{now}"
+        }
+      }
+    }
+  ],
+  "fallback": {
+    "action": {
+      "type": "general_query",
+      "payload": {
+        "query": "{input}",
+        "timestamp": "{now}"
+      }
+    }
+  }
+}
