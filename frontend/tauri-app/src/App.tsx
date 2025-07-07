@@ -367,6 +367,70 @@ function App() {
 						provider="anthropic"
 						model="claude-3-5-sonnet-20241022"
 						systemPrompt="You are a helpful coding assistant integrated into the Ariana IDE."
+						onAgentCreate={async (agentName: string, prompt: string) => {
+							// Get the current project
+							if (selectedGitProjectId) {
+								const selectedProject = store.getGitProject(selectedGitProjectId);
+								if (selectedProject) {
+									try {
+										// Create a new canvas copy (agent workspace)
+										const result = await selectedProject.addCanvasCopy();
+										
+										if (result.success && result.canvasId) {
+											// Rename the canvas to the agent name
+											const renamed = selectedProject.renameCanvas(result.canvasId, agentName);
+											
+											if (renamed) {
+												// Set the new canvas as the current one
+												const canvasIndex = selectedProject.canvases.findIndex(c => c.id === result.canvasId);
+												if (canvasIndex !== -1) {
+													selectedProject.setCurrentCanvasIndex(canvasIndex);
+												}
+												
+												// Trigger store update to refresh UI
+												store.updateGitProject(selectedProject);
+												
+												return {
+													success: true,
+													message: `Agent "${agentName}" created successfully! New workspace canvas created with isolated Git branch.`,
+													data: {
+														agentName,
+														prompt,
+														canvasId: result.canvasId,
+														timestamp: new Date().toISOString()
+													}
+												};
+											} else {
+												return {
+													success: false,
+													message: `Agent workspace created but failed to rename canvas. Canvas ID: ${result.canvasId}`
+												};
+											}
+										} else {
+											return {
+												success: false,
+												message: `Failed to create agent workspace: ${result.error || 'Unknown error'}`
+											};
+										}
+									} catch (error) {
+										return {
+											success: false,
+											message: `Error creating agent: ${error instanceof Error ? error.message : String(error)}`
+										};
+									}
+								} else {
+									return {
+										success: false,
+										message: "Selected project not found"
+									};
+								}
+							} else {
+								return {
+									success: false,
+									message: "No project selected. Please select a project first."
+								};
+							}
+						}}
 					/>
 
 					<div className="absolute hover:opacity-100 opacity-0 bottom-0 left-2 flex rounded-t-4 pb-2 justify-center gap-1 z-50">
