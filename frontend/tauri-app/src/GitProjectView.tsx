@@ -8,7 +8,11 @@ import { BackgroundAgentsList } from "./components/BackgroundAgentsList";
 import { BackgroundAgentTerminalView } from "./components/BackgroundAgentTerminalView";
 import { CanvasesList } from "./components/CanvasesList";
 
-const GitProjectView: React.FC<{}> = ({ }) => {
+interface GitProjectViewProps {
+	onGoHome?: () => void;
+}
+
+const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 	const { 
 		selectedGitProject, 
 		currentCanvas, 
@@ -217,11 +221,24 @@ const GitProjectView: React.FC<{}> = ({ }) => {
 					"group flex flex-col gap-1.5 transition-all outline-0 rounded-md select-none relative z-50 border-[var(--acc-400-50)]",
 					showCanvases
 						? "w-64"
-						: "w-1 my-0 hover:w-3 not-hover:bg-[var(--base-400-20)] hover:border-2",
+						: "w-1 my-0 hover:w-3 not-hover:bg-[var(--base-400-20)] hover:border-(length:--border)",
 				)}
 			>
 				{showCanvases && (
 					<>
+						{/* Back to Projects Button */}
+						{onGoHome && (
+							<div className="w-full pl-3 pt-2 pb-1">
+								<button 
+									onClick={onGoHome}
+									className="flex items-center gap-2 text-xs text-[var(--base-600)] hover:text-[var(--base-800)] transition-colors cursor-pointer"
+								>
+									<span>←</span>
+									<span>Projects</span>
+								</button>
+							</div>
+						)}
+						
 						{/* Project Directory Header */}
 						<div className="w-full pl-3 py-2">
 							<div className="text-sm text-[var(--base-500-50)]">
@@ -230,7 +247,7 @@ const GitProjectView: React.FC<{}> = ({ }) => {
 						</div>
 						
 						<div className="flex flex-col h-full w-full overflow-y-auto">
-							<div className="flex flex-col">
+							<div className="flex flex-col w-full">
 								<CanvasesList
 									canvases={selectedGitProject.canvases}
 									currentCanvasId={currentCanvas?.id || null}

@@ -400,6 +400,14 @@ impl GitSearchManager {
 			let mut found_dirs = Vec::new();
 
 			for root_dir in root_dirs {
+				// Check if search was cancelled before processing each root
+				{
+					let searches = searches_clone.lock().unwrap();
+					if !searches.contains_key(&search_id_clone) {
+						return; // Search was cancelled, exit thread
+					}
+				}
+				
 				Self::search_git_directories(
 					&root_dir,
 					&mut found_dirs,
@@ -409,7 +417,7 @@ impl GitSearchManager {
 				);
 			}
 
-			// Mark search as complete
+			// Mark search as complete only if it wasn't cancelled
 			let mut searches = searches_clone.lock().unwrap();
 			if let Some(result) = searches.get_mut(&search_id_clone) {
 				result.is_complete = true;
@@ -422,6 +430,11 @@ impl GitSearchManager {
 	pub fn get_results(&self, search_id: &str) -> Option<GitSearchResult> {
 		let searches = self.searches.lock().unwrap();
 		searches.get(search_id).cloned()
+	}
+
+	pub fn cancel_search(&self, search_id: &str) {
+		let mut searches = self.searches.lock().unwrap();
+		searches.remove(search_id);
 	}
 
 	fn get_root_directories(os_session_kind: &OsSessionKind) -> Vec<String> {
@@ -507,14 +520,7 @@ impl GitSearchManager {
 					}
 				}
 				
-				// Also search Windows user directories via WSL mount (optional)
-				for drive in ['c'] {
-					let user_dirs = ["Documents", "Desktop", "Downloads", "Projects", "Source", "Code"];
-					for dir in user_dirs {
-						let path = format!("/mnt/{}/Users/*/{}", drive, dir);
-						roots.push(path);
-					}
-				}
+				// Note: Removed Windows mount search to avoid duplicate results when both Local and WSL are available
 				
 				roots
 			}
@@ -581,10 +587,13 @@ impl GitSearchManager {
 									parent.to_string_lossy().replace('\\', "/");
 								found_dirs.push(git_repo_path.clone());
 
-								// Update the search results
+								// Update the search results (only if search wasn't cancelled)
 								let mut searches_lock = searches.lock().unwrap();
 								if let Some(result) = searches_lock.get_mut(search_id) {
 									result.directories.push(git_repo_path);
+								} else {
+									// Search was cancelled, stop searching
+									return;
 								}
 							}
 						}
@@ -654,10 +663,13 @@ impl GitSearchManager {
 
 							found_dirs.push(normalized_path.clone());
 
-							// Update the search results
+							// Update the search results (only if search wasn't cancelled)
 							let mut searches_lock = searches.lock().unwrap();
 							if let Some(result) = searches_lock.get_mut(search_id) {
 								result.directories.push(normalized_path);
+							} else {
+								// Search was cancelled, stop processing
+								return;
 							}
 						}
 					}

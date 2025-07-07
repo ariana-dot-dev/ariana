@@ -68,6 +68,7 @@ pub fn run() {
 			// Git search commands
 			start_git_directories_search,
 			get_found_git_directories_so_far,
+			cancel_git_directories_search,
 			list_available_os_session_kinds,
 			// Canvas management commands
 			copy_files,
@@ -332,4 +333,13 @@ async fn get_found_git_directories_so_far(
 #[tauri::command]
 async fn list_available_os_session_kinds() -> Result<Vec<OsSessionKind>, String> {
 	OsSessionKind::list_available().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn cancel_git_directories_search(
+	search_id: String,
+	git_search_manager: State<'_, Arc<GitSearchManager>>,
+) -> Result<(), String> {
+	git_search_manager.cancel_search(&search_id);
+	Ok(())
 }

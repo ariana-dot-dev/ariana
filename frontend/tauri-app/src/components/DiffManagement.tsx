@@ -789,7 +789,7 @@ export default function DiffManagement({ onClose, initialState, onStateChange, m
     return (
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[var(--acc-500)] mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-[var(--border)] border-[var(--acc-500)] mx-auto mb-4"></div>
           <p className="text-[var(--base-600)]">Loading diff data...</p>
         </div>
       </div>
@@ -1981,7 +1981,7 @@ function BranchSelectionPage({
         {loading && (
           <div className="flex items-center justify-center h-64">
             <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[var(--acc-500)] mx-auto mb-4"></div>
+              <div className="animate-spin rounded-full h-12 w-12 border-b-[var(--border)] border-[var(--acc-500)] mx-auto mb-4"></div>
               <p className="text-[var(--base-600)]">Loading branches...</p>
             </div>
           </div>
@@ -2135,7 +2135,7 @@ function BranchSelectionPage({
               >
                 {isComparing ? (
                   <div className="flex items-center justify-center space-x-2">
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-[var(--border)] border-white"></div>
                     <span>Comparing...</span>
                   </div>
                 ) : (

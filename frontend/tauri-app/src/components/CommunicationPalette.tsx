@@ -42,7 +42,7 @@ const MicrophoneButton: React.FC<{
       className={cn(
         "w-12 h-12 relative rounded-full transition-all duration-300 focus:outline-none",
         "flex items-center justify-center p-2",
-        "bg-black border-2 border-gray-400",
+        "bg-black border-(length:--border) border-gray-400",
         "hover:border-gray-300 hover:shadow-md",
         "shadow-sm",
         "disabled:opacity-50 disabled:cursor-not-allowed",
@@ -76,7 +76,7 @@ const MicrophoneButton: React.FC<{
       )}
 
       {isRecording && (
-        <div className="absolute inset-0 rounded-full border-2 border-red-400 animate-pulse" />
+        <div className="absolute inset-0 rounded-full border-(length:--border) border-red-400 animate-pulse" />
       )}
     </button>
   );

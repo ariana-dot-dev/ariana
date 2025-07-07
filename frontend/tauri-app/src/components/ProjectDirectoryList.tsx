@@ -36,12 +36,15 @@ export function ProjectDirectoryList({
 	const { removeGitProject } = useStore();
 
 	useEffect(() => {
+		let currentSearchId: string | null = null;
+
 		const startSearch = async () => {
 			try {
 				setLoading(true);
 				const id = await invoke<string>("start_git_directories_search", {
 					osSessionKind,
 				});
+				currentSearchId = id;
 				setSearchId(id);
 			} catch (error) {
 				console.error("Failed to start git directories search:", error);
@@ -49,11 +52,19 @@ export function ProjectDirectoryList({
 			}
 		};
 
-		startSearch();
-
 		// Reset state when osSessionKind changes
 		setDirectories([]);
 		setIsComplete(false);
+		startSearch();
+
+		// Cleanup function to cancel the current search
+		return () => {
+			if (currentSearchId) {
+				invoke("cancel_git_directories_search", { searchId: currentSearchId }).catch(error => {
+					console.error("Failed to cancel git directories search:", error);
+				});
+			}
+		};
 	}, [osSessionKind]);
 
 	useEffect(() => {
@@ -271,7 +282,7 @@ export function ProjectDirectoryList({
 					Repositories
 				</h3>
 				{!isComplete && (
-					<div className="w-4 h-4 border-2 border-[var(--acc-400)] border-t-transparent rounded-full animate-spin"></div>
+					<div className="w-4 h-4 border-(length:--border) border-[var(--acc-400)] border-t-transparent rounded-full animate-spin"></div>
 				)}
 			</div>
 

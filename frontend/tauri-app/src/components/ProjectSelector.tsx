@@ -279,56 +279,46 @@ export function ProjectSelector({ onProjectCreated }: ProjectSelectorProps) {
 	};
 
 	return (
-		<div className="flex gap-6 w-full max-w-full h-fit max-h-full px-6 overflow-hidden">
-			{/* Recent Projects Section - appears at the top */}
-			<RecentProjectsList 
-				projects={store.gitProjects} 
-				onProjectSelect={onProjectCreated}
-			/>
-
-			<div className="min-h-96 h-full w-[3px] rounded-full bg-[var(--base-400-10)]">
-			</div>
-			
+		<div className="flex gap-16 w-full max-w-full h-fit max-h-full px-6 justify-center overflow-hidden">
 			<div className="flex flex-wrap w-fit items-start gap-8">
 				{/* OS Session Kind Selector */}
 				<div className="flex-shrink-0 flex flex-col gap-4">
-					<div className="">
-						<h3 className="text-lg text-[var(--base-700)]">Start from a local repository</h3>
-					</div>
-					<div className="flex gap-4">
+					{/* <div className="">
+						<h3 className="text-lg text-[var(--base-700)]">Open existing project</h3>
+					</div> */}
+					<div className="flex flex-col gap-4">
 						<OsSessionKindSelector
 							onSelect={handleKindSelect}
 							selectedKind={selectedKind}
 						/>
-						{/* Filesystem picker buttons - only show when OS kind is selected */}
+						
+						{/* Action buttons - always show when selectedKind is available */}
 						{selectedKind && (
-							<>
 							<div className="flex flex-col gap-1">
 								<button
 									onClick={handleSelectFromFilesystem}
-									className="px-4 w-64 py-2 bg-[var(--base-200-30)] hover:bg-[var(--base-200-70)] text-[var(--blackest)] rounded-xl text-left cursor-pointer border-2 border-[var(--base-400-50)] transition-colors text-sm"
+									className="px-4 w-64 py-2 bg-[var(--base-200-30)] hover:bg-[var(--base-200-70)] text-[var(--blackest)] rounded-xl text-left cursor-pointer border-(length:--border) border-[var(--base-400-50)] transition-colors text-sm"
 								>
-									Open from Filesystem
+									Open existing Project
 								</button>
 								<button
 									onClick={handleCreateNewProject}
-									className="px-4 w-64 py-2 bg-[var(--positive-200-30)] hover:bg-[var(--positive-200-70)] text-[var(--positive-800)] rounded-xl text-left cursor-pointer border-2 border-[var(--positive-400)] transition-colors text-sm"
+									className="px-4 w-64 py-2 bg-[var(--positive-200-30)] hover:bg-[var(--positive-200-70)] text-[var(--positive-800)] rounded-xl text-left cursor-pointer border-(length:--border) border-[var(--positive-400)] transition-colors text-sm"
 								>
-									+ Create New Repository
+									+ Create new Project
 								</button>
 							</div>
-							</>
 						)}
 					</div>
 					{/* Project Directory List - only show when kind is selected */}
-					{selectedKind && (
+					{/* {selectedKind && (
 						<ProjectDirectoryList
 							osSessionKind={selectedKind}
 							onSelect={handlePathSelect}
 							selectedPath={selectedPath}
 							existingProjects={store.gitProjects}
 						/>
-					)}
+					)} */}
 				</div>
 
 				{/* Selected Path Display and Open Button */}
@@ -346,6 +336,12 @@ export function ProjectSelector({ onProjectCreated }: ProjectSelectorProps) {
 					</div>
 				)}
 			</div>
+
+			{/* Recent Projects Section - appears at the top */}
+			<RecentProjectsList 
+				projects={store.gitProjects} 
+				onProjectSelect={onProjectCreated}
+			/>
 		</div>
 	);
 }

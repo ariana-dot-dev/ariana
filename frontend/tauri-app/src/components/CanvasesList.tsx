@@ -73,6 +73,8 @@ export const CanvasesList: React.FC<CanvasesListProps> = ({
 	return (
 		<>
 			<SingleChoiceList
+                className='!w-full'
+                buttonProps={{ className: 'w-full' }}
 				items={canvases}
 				selectedItemId={currentCanvasId}
 				onSelectItem={(canvasId) => {
@@ -160,7 +162,7 @@ export const CanvasesList: React.FC<CanvasesListProps> = ({
 			{/* New Canvas Button */}
 			<button 
 				className={cn(
-					"w-full px-4 py-2 border-2 border-dashed bg-[var(--positive-300-10)] hover:bg-[var(--positive-300-20)] border-[var(--positive-500-50)] text-[var(--positive-500-70)] hover:text-[var(--positive-500)] hover:border-solid hover:border-[var(--positive-500)] text-sm text-center rounded-xl mt-2 transition-all",
+					"w-full px-4 py-2 border-(length:--border) border-dashed bg-[var(--positive-300-10)] hover:bg-[var(--positive-300-20)] border-[var(--positive-500-50)] text-[var(--positive-500-70)] hover:text-[var(--positive-500)] hover:border-solid hover:border-[var(--positive-500)] text-sm text-center rounded-xl mt-2 transition-all",
 					isCreatingCanvas 
 						? "opacity-50 cursor-not-allowed" 
 						: "cursor-pointer"

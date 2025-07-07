@@ -84,7 +84,7 @@ export const BackgroundAgentTerminalView: React.FC<BackgroundAgentTerminalViewPr
 							{agent.type} Agent
 						</span>
 						{agent.status === 'running' && (
-							<div className="w-4 h-4 border-2 border-[var(--acc-400)] border-t-transparent rounded-full animate-spin"></div>
+							<div className="w-4 h-4 border-(length:--border) border-[var(--acc-400)] border-t-transparent rounded-full animate-spin"></div>
 						)}
 					</div>
 					<div className={`text-sm ${getStatusColor()}`}>

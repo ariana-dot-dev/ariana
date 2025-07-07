@@ -209,7 +209,7 @@ function App() {
 							"flex w-full items-center outline-0 justify-center rounded-md select-none relative z-50  transition-[height] border-[var(--acc-400-50)]",
 							showTitlebar
 								? "h-fit py-1"
-								: "h-[3px] hover:h-3 not-hover:bg-[var(--base-400-20)] hover:border-2",
+								: "h-[3px] hover:h-3 not-hover:bg-[var(--base-400-20)] hover:border-(length:--border)",
 						)}
 					>
 						{showTitlebar && (
@@ -353,7 +353,7 @@ function App() {
 								</div>
 							)}
 							
-							<GitProjectView/>
+							<GitProjectView onGoHome={() => setSelectedGitProjectId(null)} />
 							<Repl />
 						</GitProjectProvider>
 					)}
