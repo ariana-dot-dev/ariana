@@ -373,8 +373,9 @@ function App() {
 								const selectedProject = store.getGitProject(selectedGitProjectId);
 								if (selectedProject) {
 									try {
-										// Create a new canvas copy (agent workspace)
-										const result = await selectedProject.addCanvasCopy();
+										// Create a new canvas copy (agent workspace) with initial prompt
+										const initialPrompt = prompt && prompt.trim() !== 'general assistance' ? prompt.trim() : '';
+										const result = await selectedProject.addCanvasCopy(undefined, initialPrompt);
 										
 										if (result.success && result.canvasId) {
 											// Rename the canvas to the agent name
@@ -392,10 +393,11 @@ function App() {
 												
 												return {
 													success: true,
-													message: `Agent "${agentName}" created successfully! New workspace canvas created with isolated Git branch.`,
+													message: `Agent "${agentName}" created successfully! New workspace canvas created with isolated Git branch.${initialPrompt ? ' Initial prompt has been pre-filled in the text area.' : ''}`,
 													data: {
 														agentName,
 														prompt,
+														promptPreFilled: !!initialPrompt,
 														canvasId: result.canvasId,
 														timestamp: new Date().toISOString()
 													}
