@@ -495,7 +495,7 @@ impl GitSearchManager {
 		os_session_kind: &OsSessionKind,
 	) {
 		// Check if this is a WSL path (starts with /mnt/ or /home)
-		if root_path.starts_with("/mnt/") || root_path.starts_with("/home") {
+		if root_path.starts_with("/mnt/") || (root_path.starts_with("/home") && cfg!(target_os = "windows")) {
 			Self::search_git_directories_wsl(
 				root_path,
 				found_dirs,
