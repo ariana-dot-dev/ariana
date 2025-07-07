@@ -1,9 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState, useRef } from "react";
 import { OsSessionKind } from "../bindings/os";
-import { cn } from "../utils";
 import { GitProject } from "../types/GitProject";
 import { useStore } from "../state";
+import { SingleChoiceList } from './ChoiceList';
 
 interface GitSearchResult {
 	directories: string[];
@@ -265,9 +265,9 @@ export function ProjectDirectoryList({
 	};
 
 	return (
-		<div className="flex flex-col gap-2 p-4 h-fit max-h-full">
-			<div className="flex items-center gap-2">
-				<h3 className="text-lg  text-[var(--blackest)]">
+		<div className="flex flex-col h-fit max-h-full w-full">
+			<div className="flex items-center gap-2 mb-4">
+				<h3 className="text-lg text-[var(--base-700)]">
 					Repositories
 				</h3>
 				{!isComplete && (
@@ -288,34 +288,36 @@ export function ProjectDirectoryList({
 					</span>
 				</div>
 			) : (
-				<div className="flex flex-col gap-1 h-fit max-h-full overflow-y-auto overflow-x-hidden p-1">
-					{filteredDirectories.map((path, index) => (
-						<button
-							key={index}
-							onClick={() => onSelect(path)}
-							onContextMenu={(e) => handleContextMenu(e, path)}
-							className={cn(
-								"p-3 rounded-md text-left transition-colors relative",
-								"border-2 border-[var(--base-400-50)]",
-								selectedPath === path
-									? "bg-[var(--acc-400-50)] text-[var(--acc-900)] border-[var(--acc-500-50)]"
-									: "bg-[var(--base-200-50)] hover:bg-[var(--base-300-50)] text-[var(--blackest)] cursor-pointer",
-							)}
-						>
-							<div className="mb-0.5">{getDirectoryName(path)}</div>
-							<div className="font-mono text-sm opacity-20">{path}</div>
-						</button>
-					))}
-				</div>
-			)}
-
-			{isComplete && (
-				<div className="text-sm text-[var(--base-500)] mt-2">
-					Search complete • Found {directories.length} project
-					{directories.length !== 1 ? "s" : ""} 
-					{filteredDirectories.length !== directories.length && 
-						`• ${directories.length - filteredDirectories.length} already open`}
-				</div>
+				<SingleChoiceList
+					items={filteredDirectories}
+					selectedItemId={selectedPath}
+					onSelectItem={(path) => {
+						if (path) {
+							onSelect(path);
+						}
+					}}
+					getItemId={(path) => path}
+					onContextMenu={handleContextMenu}
+					renderItem={(path, isSelected) => (
+						<>
+							<div className="flex w-80 max-w-full items-center justify-between">
+								<div className="flex-1 min-w-0">
+									<div className="font-medium text-[var(--base-800)] truncate">
+										{getDirectoryName(path)}
+									</div>
+									<div className="text-sm text-[var(--base-600)] font-mono truncate">
+										{path}
+									</div>
+								</div>
+								<div className="flex-shrink-0 text-right">
+									<div className="text-xs bg-[var(--base-200)] text-[var(--base-700)] px-2 py-1 rounded">
+										{typeof osSessionKind === 'string' ? osSessionKind : `WSL: ${osSessionKind.Wsl}`}
+									</div>
+								</div>
+							</div>
+						</>
+					)}
+				/>
 			)}
 
 			{/* Context Menu */}

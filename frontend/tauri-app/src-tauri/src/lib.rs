@@ -226,8 +226,8 @@ async fn execute_command_with_os_session(
 // ===== GIT OPERATIONS =====
 
 #[tauri::command]
-async fn check_git_repository(directory: String) -> Result<bool, String> {
-	git::GitManager::check_repository(&directory)
+async fn check_git_repository(directory: String, os_session: OsSession) -> Result<bool, String> {
+	git::GitManager::check_repository(&directory, &os_session)
 }
 
 #[tauri::command]

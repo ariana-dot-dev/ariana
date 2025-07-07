@@ -109,6 +109,10 @@ export interface MergeAgentContext {
 	canvasBranchName: string; // The canvas's branch name
 }
 
+export type MergeResult = 
+  | { success: true; agentId: string }
+  | { success: false; error: string };
+
 export class MergeBackgroundAgent extends BackgroundAgent<MergeAgentContext> {
 	public readonly type: BackgroundAgentType = 'merge';
 

@@ -1,88 +1,84 @@
-import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { OsSessionKind } from "../bindings/os";
-import { cn } from "../utils";
+import { SingleChoiceList } from './ChoiceList';
 
 interface OsSessionKindSelectorProps {
 	onSelect: (kind: OsSessionKind) => void;
 	selectedKind?: OsSessionKind;
 }
 
-export function OsSessionKindSelector({
-	onSelect,
-	selectedKind,
-}: OsSessionKindSelectorProps) {
-	const [availableKinds, setAvailableKinds] = useState<OsSessionKind[]>([]);
-	const [loading, setLoading] = useState(true);
+interface OsKindOption {
+	id: string;
+	kind: OsSessionKind;
+	label: string;
+	description: string;
+}
 
-	useEffect(() => {
-		const loadAvailableKinds = async () => {
-			try {
-				const kinds = await invoke<OsSessionKind[]>(
-					"list_available_os_session_kinds",
-				);
-				setAvailableKinds(kinds);
-			} catch (error) {
-				console.error("Failed to load available OS session kinds:", error);
-			} finally {
-				setLoading(false);
-			}
-		};
-
-		loadAvailableKinds();
-	}, []);
-
-	const getKindLabel = (kind: OsSessionKind): string => {
-		if (kind === "Local") {
-			return "Local";
+export function OsSessionKindSelector({ onSelect, selectedKind }: OsSessionKindSelectorProps) {
+	// Available OS session kinds (you might want to dynamically detect WSL distributions)
+	// Detect the OS using Tauri's API or fallback to navigator if running in web
+	const getLocalLabel = () => {
+		if (navigator.userAgent.indexOf("Windows") !== -1) {
+			return "Local: Windows";
+		} else if (navigator.userAgent.indexOf("Mac") !== -1) {
+			return "Local: macOS";
+		} else if (navigator.userAgent.indexOf("Linux") !== -1) {
+			return "Local: Linux";
 		}
-		if (typeof kind === "object" && "Wsl" in kind) {
-			return `WSL: ${kind.Wsl}`;
-		}
-		return "Unknown";
+		return "Local";
 	};
 
-	const isSelected = (kind: OsSessionKind): boolean => {
-		if (!selectedKind) return false;
-		if (kind === "Local" && selectedKind === "Local") return true;
-		if (
-			typeof kind === "object" &&
-			typeof selectedKind === "object" &&
-			"Wsl" in kind &&
-			"Wsl" in selectedKind
-		) {
-			return kind.Wsl === selectedKind.Wsl;
-		}
-		return false;
-	};
+	const osKindOptions: OsKindOption[] = [
+		{
+			id: 'local',
+			kind: 'Local',
+			label: getLocalLabel(),
+			description: 'Use local filesystem'
+		},
+		{
+			id: 'wsl-ubuntu',
+			kind: { Wsl: 'Ubuntu' },
+			label: 'WSL: Ubuntu',
+			description: 'Windows Subsystem for Linux'
+		},
+	];
 
-	if (loading) {
-		return (
-			<div className="flex justify-center p-4">
-				<span className="text-[var(--base-500)]">Loading...</span>
-			</div>
-		);
-	}
+	const getSelectedId = (): string | null => {
+		if (!selectedKind) return null;
+		
+		if (selectedKind === 'Local') return 'local';
+		if (typeof selectedKind === 'object' && 'Wsl' in selectedKind) {
+			return `wsl-${selectedKind.Wsl.toLowerCase()}`;
+		}
+		return null;
+	};
 
 	return (
-		<div className="flex flex-col gap-2 p-4">
-			<div className="flex flex-col gap-1">
-				{availableKinds.map((kind, index) => (
-					<button
-						key={index}
-						onClick={() => onSelect(kind)}
-						className={cn(
-							"p-3 rounded-md text-left transition-colors",
-							"border-2 border-[var(--base-400-50)]",
-							isSelected(kind)
-								? "bg-[var(--acc-400-50)] text-[var(--acc-900)] border-[var(--acc-500-50)]"
-								: "bg-[var(--base-200-50)] hover:bg-[var(--base-300-50)] text-[var(--blackest)] cursor-pointer",
-						)}
-					>
-						{getKindLabel(kind)}
-					</button>
-				))}
-			</div>
+		<div className="w-fit max-w-full">
+			<SingleChoiceList
+				items={osKindOptions}
+				selectedItemId={getSelectedId()}
+				onSelectItem={(id) => {
+					if (id) {
+						const option = osKindOptions.find(opt => opt.id === id);
+						if (option) {
+							onSelect(option.kind);
+						}
+					}
+				}}
+				getItemId={(option) => option.id}
+				renderItem={(option, isSelected) => (
+					<>
+						<div className="flex w-56 items-center justify-between">
+							<div className="flex-1 min-w-0">
+								<div className="font-medium text-[var(--base-800)]">
+									{option.label}
+								</div>
+							</div>
+						</div>
+					</>
+				)}
+			/>
 		</div>
 	);
 }

@@ -56,6 +56,7 @@ export class GitProject {
 		this.backgroundAgents = [];
 		this.createdAt = Date.now();
 		this.lastModified = Date.now();
+		this.mergedCanvases = [];
 
 		console.log(this.canvases)
 	}
@@ -493,6 +494,7 @@ export class GitProject {
 			taskManager: new TaskManager(),
 			createdAt: Date.now(),
 			lastModified: Date.now(),
+			lockState: 'normal'
 		};
 	}
 

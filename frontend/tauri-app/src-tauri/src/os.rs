@@ -481,29 +481,29 @@ impl GitSearchManager {
 				}
 			}
 			OsSessionKind::Wsl(distribution) => {
-				// WSL: search specific WSL user directories only
+				// WSL: search actual user directories
 				let mut roots = Vec::new();
 				
-				// Get WSL home directory using WSL command
-				let wsl_home = Self::get_wsl_home_directory(distribution);
-				if let Some(home_dir) = wsl_home {
-					let user_dirs = ["Documents", "Desktop", "Downloads", "Projects", "Source", "Code", "git", "repos"];
-					for dir in user_dirs {
-						let path = format!("{}/{}", home_dir, dir);
-						roots.push(path);
-					}
-					// Also search home directory root
-					roots.push(home_dir);
-				} else {
-					// Fallback: search common WSL home paths
-					let fallback_homes = ["/home", "/root"];
-					for home_base in fallback_homes {
-						let user_dirs = ["Documents", "Desktop", "Downloads", "Projects", "Source", "Code", "git", "repos"];
-						for dir in user_dirs {
-							let path = format!("{}/{}", home_base, dir);
-							roots.push(path);
+				// First, add the root directories themselves
+				roots.push("/home".to_string());
+				roots.push("/root".to_string());
+				
+				// Find actual users in /home and search their subdirectories
+				if let Ok(entries) = std::fs::read_dir("/home") {
+					for entry in entries.flatten() {
+						if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+							let user_home = entry.path().to_string_lossy().to_string();
+							
+							// Add the user home directory itself
+							roots.push(user_home.clone());
+							
+							// Add common project subdirectories
+							let user_dirs = ["Documents", "Desktop", "Downloads", "Projects", "Source", "Code", "git", "repos"];
+							for dir in user_dirs {
+								let path = format!("{}/{}", user_home, dir);
+								roots.push(path);
+							}
 						}
-						roots.push(home_base.to_string());
 					}
 				}
 				
@@ -521,33 +521,6 @@ impl GitSearchManager {
 		};
 		
 		roots
-	}
-
-	#[cfg(target_os = "windows")]
-	fn get_wsl_home_directory(distribution: &str) -> Option<String> {
-		// Get WSL home directory using WSL command
-		let output = Command::new("wsl")
-			.arg("-d")
-			.arg(distribution)
-			.arg("pwd")
-			.output();
-		
-		match output {
-			Ok(output) if output.status.success() => {
-				let home_dir = String::from_utf8_lossy(&output.stdout).trim().to_string();
-				if !home_dir.is_empty() {
-					Some(home_dir)
-				} else {
-					None
-				}
-			}
-			_ => None,
-		}
-	}
-
-	#[cfg(not(target_os = "windows"))]
-	fn get_wsl_home_directory(_distribution: &str) -> Option<String> {
-		None
 	}
 
 	fn search_git_directories(

@@ -12,29 +12,17 @@ impl GitManager {
             .map(|_| ())
     }
 
-    pub fn check_repository(directory: &str) -> Result<bool, String> {
-        let path = Path::new(directory);
-        
-        // Check if the directory exists
-        if !path.exists() {
-            return Ok(false);
-        }
-        
-        // Check if .git directory exists
-        let git_dir = path.join(".git");
-        if git_dir.exists() {
-            return Ok(true);
-        }
-        
-        // Alternatively, try using git command to check if it's a repository
-        let output = Command::new("git")
-            .arg("rev-parse")
-            .arg("--git-dir")
-            .current_dir(directory)
-            .output();
+    pub fn check_repository(directory: &str, os_session: &OsSession) -> Result<bool, String> {
+        // Use git command to check if it's a repository through the appropriate OS session
+        let result = CommandExecutor::execute_with_os_session(
+            "git", 
+            &["rev-parse", "--git-dir"], 
+            Some(directory), 
+            os_session
+        );
             
-        match output {
-            Ok(result) => Ok(result.status.success()),
+        match result {
+            Ok(_) => Ok(true),
             Err(_) => Ok(false),
         }
     }

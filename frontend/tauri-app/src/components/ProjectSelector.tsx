@@ -5,6 +5,7 @@ import { OsSession, OsSessionKind } from "../bindings/os";
 import { useStore } from "../state";
 import { OsSessionKindSelector } from "./OsSessionKindSelector";
 import { ProjectDirectoryList } from "./ProjectDirectoryList";
+import { RecentProjectsList } from "./RecentProjectsList";
 import { GitProject } from "../types/GitProject";
 
 interface ProjectSelectorProps {
@@ -46,7 +47,6 @@ export function ProjectSelector({ onProjectCreated }: ProjectSelectorProps) {
 		}) || null;
 	};
 
-
 	const handleSelectFromFilesystem = async () => {
 		if (!selectedKind) return;
 
@@ -72,7 +72,7 @@ export function ProjectSelector({ onProjectCreated }: ProjectSelectorProps) {
 				}
 			} else if (typeof selectedKind === "object" && "Wsl" in selectedKind) {
 				// For WSL, use Windows path that allows access to WSL content
-				defaultPath = `\\\\wsl$\\${selectedKind.Wsl}`;
+				defaultPath = `\\\\wsl$\\${selectedKind.Wsl}\\home`;
 			}
 
 			// Open directory picker dialog
@@ -126,7 +126,7 @@ export function ProjectSelector({ onProjectCreated }: ProjectSelectorProps) {
 					}
 				}
 			} else if (typeof selectedKind === "object" && "Wsl" in selectedKind) {
-				defaultPath = `\\\\wsl$\\${selectedKind.Wsl}`;
+				defaultPath = `\\\\wsl$\\${selectedKind.Wsl}\\home`;
 			}
 
 			// Open directory picker to select parent directory
@@ -208,28 +208,31 @@ export function ProjectSelector({ onProjectCreated }: ProjectSelectorProps) {
 		if (!selectedKind) return;
 
 		try {
+			// Create OsSession for git check
+			let osSession: OsSession;
+			if (selectedKind === "Local") {
+				osSession = { Local: path };
+			} else if (typeof selectedKind === "object" && "Wsl" in selectedKind) {
+				osSession = {
+					Wsl: {
+						distribution: selectedKind.Wsl,
+						working_directory: path,
+					},
+				};
+			} else {
+				console.error("Invalid OS session kind");
+				return;
+			}
+
 			// Check if it's already a git repository
-			const isGitRepo = await invoke<boolean>("check_git_repository", { directory: path });
+			const isGitRepo = await invoke<boolean>("check_git_repository", { 
+				directory: path, 
+				osSession 
+			});
 			
 			if (!isGitRepo) {
 				const shouldInit = confirm("This directory is not a git repository. Would you like to initialize git?");
 				if (shouldInit) {
-					// Create OsSession for git init
-					let osSession: OsSession;
-					if (selectedKind === "Local") {
-						osSession = { Local: path };
-					} else if (typeof selectedKind === "object" && "Wsl" in selectedKind) {
-						osSession = {
-							Wsl: {
-								distribution: selectedKind.Wsl,
-								working_directory: path,
-							},
-						};
-					} else {
-						console.error("Invalid OS session kind");
-						return;
-					}
-
 					await invoke("git_init_repository", { directory: path, osSession });
 				}
 			}
@@ -275,70 +278,74 @@ export function ProjectSelector({ onProjectCreated }: ProjectSelectorProps) {
 		onProjectCreated(projectIndex);
 	};
 
-	const canProceed = selectedKind && selectedPath;
-
 	return (
-		<div className="flex flex-col items-center justify-center w-full h-full max-h-full">
-			<div className="flex justify-center items-center gap-8 max-w-4xl w-full h-full max-h-full">
+		<div className="flex gap-6 w-full max-w-full h-fit max-h-full px-6 overflow-hidden">
+			{/* Recent Projects Section - appears at the top */}
+			<RecentProjectsList 
+				projects={store.gitProjects} 
+				onProjectSelect={onProjectCreated}
+			/>
+
+			<div className="min-h-96 h-full w-[3px] rounded-full bg-[var(--base-400-10)]">
+			</div>
+			
+			<div className="flex flex-wrap w-fit items-start gap-8">
 				{/* OS Session Kind Selector */}
-				<div
-					className="flex-shrink-0"
-					style={{ width: selectedKind ? "300px" : "400px" }}
-				>
-					<OsSessionKindSelector
-						onSelect={handleKindSelect}
-						selectedKind={selectedKind}
-					/>
-					
-					{/* Filesystem picker buttons - only show when OS kind is selected */}
-					{selectedKind && (
-						<div className="mt-4 p-4 border-t border-[var(--base-400-50)]">
-							<div className="flex flex-col gap-2">
+				<div className="flex-shrink-0 flex flex-col gap-4">
+					<div className="">
+						<h3 className="text-lg text-[var(--base-700)]">Start from a local repository</h3>
+					</div>
+					<div className="flex gap-4">
+						<OsSessionKindSelector
+							onSelect={handleKindSelect}
+							selectedKind={selectedKind}
+						/>
+						{/* Filesystem picker buttons - only show when OS kind is selected */}
+						{selectedKind && (
+							<>
+							<div className="flex flex-col gap-1">
 								<button
 									onClick={handleSelectFromFilesystem}
-									className="px-4 py-2 bg-[var(--base-200-50)] hover:bg-[var(--base-300-50)] text-[var(--blackest)] rounded-md border-2 border-[var(--base-400-50)] transition-colors text-sm"
+									className="px-4 w-64 py-2 bg-[var(--base-200-30)] hover:bg-[var(--base-200-70)] text-[var(--blackest)] rounded-xl text-left cursor-pointer border-2 border-[var(--base-400-50)] transition-colors text-sm"
 								>
-									📁 Select from Filesystem
+									Open from Filesystem
 								</button>
 								<button
 									onClick={handleCreateNewProject}
-									className="px-4 py-2 bg-[var(--positive-200)] hover:bg-[var(--positive-300)] text-[var(--positive-800)] rounded-md border-2 border-[var(--positive-400)] transition-colors text-sm"
+									className="px-4 w-64 py-2 bg-[var(--positive-200-30)] hover:bg-[var(--positive-200-70)] text-[var(--positive-800)] rounded-xl text-left cursor-pointer border-2 border-[var(--positive-400)] transition-colors text-sm"
 								>
-									➕ Create New Project
+									+ Create New Repository
 								</button>
 							</div>
-						</div>
-					)}
-				</div>
-
-				{/* Project Directory List - only show when kind is selected */}
-				{selectedKind && (
-					<div className="flex-1 h-full max-h-full">
+							</>
+						)}
+					</div>
+					{/* Project Directory List - only show when kind is selected */}
+					{selectedKind && (
 						<ProjectDirectoryList
 							osSessionKind={selectedKind}
 							onSelect={handlePathSelect}
 							selectedPath={selectedPath}
 							existingProjects={store.gitProjects}
 						/>
+					)}
+				</div>
+
+				{/* Selected Path Display and Open Button */}
+				{selectedPath && (
+					<div className="w-64 flex-shrink-0 flex flex-col items-center gap-3">
+						<div className="text-sm text-[var(--base-600)] w-full text-center">
+							<div className="font-medium mb-2">Selected: {selectedPath}</div>
+						</div>
+						<button
+							onClick={handleCreateSession}
+							className="px-6 py-3 bg-[var(--acc-400)] hover:bg-[var(--acc-500)] text-[var(--whitest)] rounded-md transition-colors"
+						>
+							Open Project
+						</button>
 					</div>
 				)}
 			</div>
-
-			{/* Selected Path Display and Open Button */}
-			{selectedPath && (
-				<div className="mt-6 flex flex-col items-center gap-3">
-					<div className="text-sm text-[var(--base-600)] max-w-2xl text-center">
-						<div className="font-medium">Selected:</div>
-						<div className="font-mono text-xs bg-[var(--base-100)] p-2 rounded border">{selectedPath}</div>
-					</div>
-					<button
-						onClick={handleCreateSession}
-						className="px-6 py-3 bg-[var(--acc-400)] hover:bg-[var(--acc-500)] text-[var(--whitest)] rounded-md transition-colors"
-					>
-						Open Project
-					</button>
-				</div>
-			)}
 		</div>
 	);
 }

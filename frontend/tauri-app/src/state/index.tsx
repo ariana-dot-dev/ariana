@@ -64,12 +64,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 					setCurrentInterpreterScriptState(savedState.currentInterpreterScript);
 					// Handle migration from old osSessions to new gitProjects structure
 					if (savedState.gitProjects) {
+						console.log('Store: Loading saved GitProjects:', savedState.gitProjects.length);
 						const projects = savedState.gitProjects.map((projectData: any) => 
 							GitProject.fromJSON(projectData)
 						).filter((p) => {
-							// Only filter out truly invalid projects (keep projects with empty canvases)
-							return p.canvases.length > 0;
+							// Keep all valid projects, including those with empty canvases
+							// Only filter out projects that are fundamentally invalid
+							return p && p.root && p.id;
 						});
+						console.log('Store: Loaded projects after filtering:', projects.length, projects);
 						setGitProjects(projects);
 					} else if ((savedState as any).osSessions) {
 						// Migration: convert old OsSessions to GitProjects
@@ -172,12 +175,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 		addGitProject: (project: GitProject) => {
 			let projectId = null;
 			setGitProjects((prev) => {
-				let identicalProject = prev.find(p => osSessionEquals(p.osSession, project.osSession));
+				let identicalProject = prev.find(p => osSessionEquals(p.root, project.root));
 				if (!identicalProject) {
 					projectId = project.id;
+					console.log('Store: Adding new GitProject:', project.name, project.id);
 					return [...prev, project]
 				}
 				projectId = identicalProject.id;
+				console.log('Store: Found existing GitProject:', identicalProject.name, identicalProject.id);
 				return prev
 			});
 			if (projectId == null) {
