@@ -109,6 +109,10 @@ export interface MergeAgentContext {
 	canvasBranchName: string; // The canvas's branch name
 }
 
+export type MergeResult = 
+  | { success: true; agentId: string }
+  | { success: false; error: string };
+
 export class MergeBackgroundAgent extends BackgroundAgent<MergeAgentContext> {
 	public readonly type: BackgroundAgentType = 'merge';
 
@@ -124,6 +128,17 @@ export class MergeBackgroundAgent extends BackgroundAgent<MergeAgentContext> {
 		const workingDir = osSessionGetWorkingDirectory(this.osSession);
 		const canvasDir = osSessionGetWorkingDirectory(this.context.canvasToMergeOsSession);
 
+		// Validate directories exist
+		if (!rootDir) {
+			throw new Error('Root directory is undefined');
+		}
+		if (!workingDir) {
+			throw new Error('Working directory is undefined');
+		}
+		if (!canvasDir) {
+			throw new Error('Canvas directory is undefined');
+		}
+
 		console.log(`Agent setup: Validating canvas directory ${canvasDir}`);
 		// Validate that the canvas directory exists before proceeding
 		try {
@@ -138,7 +153,10 @@ export class MergeBackgroundAgent extends BackgroundAgent<MergeAgentContext> {
 		}
 
 		console.log(`Agent setup: Copying ROOT from ${rootDir} to ${workingDir}`);
-		await CanvasService.copyDirectory(rootDir, workingDir, this.context.rootOsSession);
+		const copyResult = await CanvasService.copyDirectory(rootDir, workingDir, this.context.rootOsSession);
+		if (!copyResult.success) {
+			throw new Error(`Failed to copy root directory: ${copyResult.error}`);
+		}
 
 		// Step 2: Check what branch we're actually on in the working directory
 		let currentBranch: string;
@@ -182,12 +200,10 @@ export class MergeBackgroundAgent extends BackgroundAgent<MergeAgentContext> {
 		// Step 4: Copy canvas files over the working directory (excluding .git)
 		// This applies the canvas changes to the canvas-changes branch
 		console.log(`Agent setup: Applying canvas changes from ${canvasDir}`);
-		await invoke('copy_files_with_os_session', {
-			source: canvasDir,
-			destination: workingDir,
-			osSession: this.osSession,
-			excludeGit: true
-		});
+		const canvasCopyResult = await CanvasService.copyDirectory(canvasDir, workingDir, this.osSession, true);
+		if (!canvasCopyResult.success) {
+			throw new Error(`Failed to copy canvas changes: ${canvasCopyResult.error}`);
+		}
 
 		// Step 5: Commit the canvas changes 
 		try {
@@ -239,6 +255,9 @@ export class MergeBackgroundAgent extends BackgroundAgent<MergeAgentContext> {
 	async checkCompletion(): Promise<CompletionCheckResult> {
 		try {
 			const workingDir = osSessionGetWorkingDirectory(this.osSession);
+			if (!workingDir) {
+				throw new Error('Working directory is undefined');
+			}
 			console.log(`Agent checkCompletion: Starting in directory ${workingDir}`);
 
 			// Try to perform the git merge first
@@ -328,6 +347,14 @@ Attempt ${this.context.mergeAttempts + 1} of ${this.context.maxAttempts}.
 		const workingDir = osSessionGetWorkingDirectory(this.osSession);
 		const rootDir = osSessionGetWorkingDirectory(this.context.rootOsSession);
 		
+		// Validate directories exist
+		if (!workingDir) {
+			throw new Error('Working directory is undefined');
+		}
+		if (!rootDir) {
+			throw new Error('Root directory is undefined');
+		}
+		
 		try {
 			// The merge should already be completed by checkCompletion()
 			// But if there were conflicts that Claude resolved, we need to commit them
@@ -345,12 +372,10 @@ Attempt ${this.context.mergeAttempts + 1} of ${this.context.maxAttempts}.
 
 			// Step 2: Only after successful merge, sync back to the real root
 			console.log(`Agent finalize: Syncing merged result back to real root ${rootDir}`);
-			await invoke('copy_files_with_os_session', {
-				source: workingDir,
-				destination: rootDir,
-				osSession: this.context.rootOsSession,
-				excludeGit: true
-			});
+			const finalCopyResult = await CanvasService.copyDirectory(workingDir, rootDir, this.context.rootOsSession, true);
+			if (!finalCopyResult.success) {
+				throw new Error(`Failed to sync result back to root: ${finalCopyResult.error}`);
+			}
 
 			this.updateStatus('completed', 'Merge completed successfully');
 		} catch (error) {

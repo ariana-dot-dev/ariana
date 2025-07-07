@@ -183,8 +183,7 @@ function App() {
 					className="fixed w-full h-full opacity-40 -z-10"
 					style={{ background: 'url("assets/noise.png")' }}
 				></div>
-				<div className="w-full h-full max-h-full flex flex-col gap-1.5 p-2">
-
+				<div className="w-full h-full max-h-full flex flex-col justify-between gap-1.5 p-2">
 					{/* Custom Titlebar */}
 					<div
 						onMouseEnter={() => {
@@ -207,10 +206,10 @@ function App() {
 							}, 1000);
 						}}
 						className={cn(
-							"flex items-center outline-0 justify-center rounded-md select-none relative z-50  transition-[height] border-[var(--acc-400-50)]",
+							"flex w-full items-center outline-0 justify-center rounded-md select-none relative z-50  transition-[height] border-[var(--acc-400-50)]",
 							showTitlebar
 								? "h-fit py-1"
-								: "h-[3px] mx-2 hover:h-3 not-hover:bg-[var(--base-400-20)] hover:border-2",
+								: "h-[3px] hover:h-3 not-hover:bg-[var(--base-400-20)] hover:border-(length:--border)",
 						)}
 					>
 						{showTitlebar && (
@@ -323,16 +322,16 @@ function App() {
 
 					{/* Show ProjectSelector if no selected project, otherwise show CanvasView */}
 					{selectedGitProjectId === null ? (
-						<div className="z-10 justify-self-center h-full w-full max-h-full flex flex-col items-center justify-center">
-							<div className="flex flex-col items-center h-fit gap-3 opacity-50 text-[var(--acc-700)]">
-								<div className="w-32">
-									<Logo className="" />
+						<div className="z-10 h-fit w-full max-h-full flex flex-col overflow-hidden gap-12">
+							<div className="flex flex-col items-center flex-shrink-0 gap-3 opacity-50 text-[var(--acc-700)]">
+								<div className="w-24">
+									<Logo className="hover:scale-[108%] cursor-crosshair transition-all" />
 								</div>
-								<h1 className="text-2xl ">
+								<h1 className="text-lg">
 									Welcome to the Ariana IDE
 								</h1>
 							</div>
-							<div className="h-fit max-h-[50%] w-full">
+							<div className="flex w-full overflow-hidden">
 								<ProjectSelector onProjectCreated={(projectId: string) => {
 								setSelectedGitProjectId(projectId);
 							}} />
@@ -354,10 +353,12 @@ function App() {
 								</div>
 							)}
 							
-							<GitProjectView/>
+							<GitProjectView onGoHome={() => setSelectedGitProjectId(null)} />
 							<Repl />
 						</GitProjectProvider>
 					)}
+
+					<div></div>
 
 					{/* Communication Palette - Available globally */}
 					<CommunicationPalette

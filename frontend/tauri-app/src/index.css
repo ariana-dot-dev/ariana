@@ -161,6 +161,7 @@
 
 * {
 	box-sizing: border-box;
+	--border: 1.5px;
 }
 
 body {

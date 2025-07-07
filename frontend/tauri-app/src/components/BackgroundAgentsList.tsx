@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { BackgroundAgent, BackgroundAgentStatus } from '../types/BackgroundAgent';
+import { SingleChoiceList } from './ChoiceList';
 
 interface BackgroundAgentsListProps {
 	agents: BackgroundAgent[];
@@ -95,19 +96,15 @@ export const BackgroundAgentsList: React.FC<BackgroundAgentsListProps> = ({
 			<div className="px-3 mb-2">
 				<span className="text-sm text-[var(--base-500-50)]">Background Agents</span>
 			</div>
-			<div className="flex flex-col">
-				{agents.map((agent, index) => (
-					<button
-						key={agent.id}
-						onClick={() => onSelectAgent?.(agent.id)}
-						onContextMenu={(e) => handleContextMenu(e, agent.id)}
-						className={`group relative w-full flex flex-col text-left px-4 py-3 text-sm first:rounded-t-xl last:rounded-b-xl transition-colors border-[var(--base-300)] border-2 not-last:border-b-transparent not-first:border-t-transparent ${
-							selectedAgentId === agent.id
-								? "bg-[var(--acc-200-20)] opacity-100"
-								: "even:bg-[var(--base-100-40)] odd:bg-[var(--base-100-80)] cursor-pointer hover:border-solid border-dashed opacity-50 hover:opacity-100 hover:bg-[var(--acc-200-50)]"
-						}`}
-					>
-						{/* Remove button */}
+			
+			<SingleChoiceList
+				items={agents}
+				selectedItemId={selectedAgentId}
+				onSelectItem={onSelectAgent}
+				getItemId={(a) => a.id}
+				onContextMenu={handleContextMenu}
+				renderItem={(agent, isSelected) => (
+					<>
 						{(agent.status === 'completed' || agent.status === 'failed') && onRemoveAgent && (
 							<button
 								onClick={(e) => {
@@ -120,22 +117,18 @@ export const BackgroundAgentsList: React.FC<BackgroundAgentsListProps> = ({
 								✕
 							</button>
 						)}
+
 						<div className="flex flex-col gap-1">
 							<div className="text-[var(--base-600)]">
 								{agent.type} Agent
 							</div>
 							<div className="flex items-center gap-2">
 								<StatusIndicator status={agent.status} />
-								{/* Progress indicator as badge */}
 								{agent.status === 'completed' && (
-									<span className="text-[var(--positive-600)] rounded-full text-xs">
-										✓
-									</span>
+									<span className="text-[var(--positive-600)] rounded-full text-xs">✓</span>
 								)}
 								{agent.status === 'failed' && (
-									<span className="text-[var(--negative-600)] rounded-sm text-xs">
-										✗
-									</span>
+									<span className="text-[var(--negative-600)] rounded-sm text-xs">✗</span>
 								)}
 							</div>
 						</div>
@@ -151,9 +144,10 @@ export const BackgroundAgentsList: React.FC<BackgroundAgentsListProps> = ({
 								Error: {agent.errorMessage}
 							</div>
 						)}
-					</button>
-				))}
-			</div>
+					</>
+				)}
+			/>
+
 
 			{/* Context Menu */}
 			{contextMenu && (
