@@ -3,7 +3,7 @@ import Foundation
 class BackendService {
     static let shared = BackendService()
     
-    private let baseURL = "https://your-backend-api.com/api"
+    private let baseURL = "http://localhost:8000/api"
     private var currentRequestId: String?
     
     private init() {}

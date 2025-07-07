@@ -8,7 +8,21 @@ struct PromptInputView: View {
     
     var body: some View {
         VStack(spacing: 12) {
+            HStack {
+                TextField("make me build something...", text: $text, axis: .vertical)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .lineLimit(1...6)
+                    .onSubmit {
+                        if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            onSubmit()
+                        }
+                    }
+            }
+            .padding(.horizontal)
+            
             HStack(spacing: 8) {
+                Spacer()
+                
                 Button(action: onVoiceInput) {
                     Image(systemName: isRecording ? "mic.fill" : "mic.fill")
                         .font(.system(size: 20))
@@ -31,18 +45,6 @@ struct PromptInputView: View {
                 .padding(.horizontal, 12)
                 .background((text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.gray : Color.blue).opacity(0.1))
                 .cornerRadius(8)
-            }
-            .padding(.horizontal)
-            
-            HStack {
-                TextField("Type your message...", text: $text, axis: .vertical)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .lineLimit(1...6)
-                    .onSubmit {
-                        if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            onSubmit()
-                        }
-                    }
             }
             .padding(.horizontal)
         }

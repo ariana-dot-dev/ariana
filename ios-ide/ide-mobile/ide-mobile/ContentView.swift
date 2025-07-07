@@ -14,10 +14,37 @@ struct ContentView: View {
     @State private var isLoading = false
     @State private var showingTasks = false
     @StateObject private var voiceInputManager = VoiceInputManager()
+    @State private var showingMenu = false
+    @State private var selectedChat = "Chat 1"
+    @State private var chats = ["Chat 1", "Chat 2", "Chat 3"]
     
     var body: some View {
         NavigationView {
-            VStack(spacing: 0) {
+            ZStack {
+                VStack(spacing: 0) {
+                    HStack {
+                        Button(action: {
+                            showingMenu = true
+                        }) {
+                            Image(systemName: "line.horizontal.3")
+                                .font(.system(size: 20))
+                                .foregroundColor(.primary)
+                                .padding(12)
+                        }
+                        
+                        Spacer()
+                        
+                        Text(selectedChat)
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                        
+                        Spacer()
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.top, 8)
+                    .background(Color(UIColor.systemBackground))
+                    .shadow(color: .black.opacity(0.1), radius: 1, x: 0, y: 1)
+                
                 if let request = currentRequest {
                     VStack {
                         Text(request)
@@ -35,9 +62,17 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     Spacer()
-                    Text("What can I help you with?")
-                        .font(.title2)
-                        .foregroundColor(.gray)
+                    VStack(spacing: 16) {
+                        Image("app-icon")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 80, height: 80)
+                            .opacity(0.5)
+                        
+                        Text("What do we vibecode today?")
+                            .font(.title2)
+                            .foregroundColor(.gray)
+                    }
                     Spacer()
                 }
                 
@@ -47,6 +82,17 @@ struct ContentView: View {
                     onVoiceInput: handleVoiceInput,
                     isRecording: voiceInputManager.isRecording
                 )
+                }
+                
+                if showingMenu {
+                    ChatMenuView(
+                        isPresented: $showingMenu,
+                        selectedChat: $selectedChat,
+                        chats: chats
+                    )
+                    .transition(.move(edge: .leading))
+                    .animation(.easeInOut(duration: 0.3), value: showingMenu)
+                }
             }
             .navigationBarHidden(true)
         }
