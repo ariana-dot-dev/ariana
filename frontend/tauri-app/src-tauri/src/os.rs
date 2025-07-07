@@ -396,13 +396,10 @@ impl GitSearchManager {
 		let search_id_clone = search_id.clone();
 
 		thread::spawn(move || {
-			println!("Git Search - Starting search with OS session kind: {:?}", os_session_kind);
 			let root_dirs = Self::get_root_directories(&os_session_kind);
-			println!("Git Search - Root directories to search: {:?}", root_dirs);
 			let mut found_dirs = Vec::new();
 
 			for root_dir in root_dirs {
-				println!("Git Search - Searching in root directory: {}", root_dir);
 				Self::search_git_directories(
 					&root_dir,
 					&mut found_dirs,
@@ -412,7 +409,6 @@ impl GitSearchManager {
 				);
 			}
 
-			println!("Git Search - Search complete. Total found: {}", found_dirs.len());
 			// Mark search as complete
 			let mut searches = searches_clone.lock().unwrap();
 			if let Some(result) = searches.get_mut(&search_id_clone) {
@@ -433,58 +429,125 @@ impl GitSearchManager {
 			OsSessionKind::Local => {
 				#[cfg(target_os = "windows")]
 				{
-					// On Windows, search common drives
+					// On Windows, search specific user directories only
 					let mut roots = Vec::new();
-					for drive in ['C', 'D', 'E', 'F', 'G', 'H'] {
-						let path = format!("{}:\\Users", drive);
-						if Path::new(&path).exists() {
-							roots.push(path);
+					if let Ok(user_profile) = std::env::var("USERPROFILE") {
+						// Search only in specific folders to avoid system directories
+						let user_dirs = ["Documents", "Desktop", "Downloads", "Projects", "Source", "Code"];
+						for dir in user_dirs {
+							let path = format!("{}\\{}", user_profile, dir);
+							if Path::new(&path).exists() {
+								roots.push(path);
+							}
 						}
 					}
 					roots
 				}
 				#[cfg(target_os = "linux")]
 				{
-					// Linux/WSL: search user home directory
-					let home_dir = std::env::var("HOME").unwrap_or_else(|_| "/home".to_string());
-					vec![home_dir]
+					// Linux: search specific user directories only
+					let mut roots = Vec::new();
+					if let Ok(home_dir) = std::env::var("HOME") {
+						// Search only in specific folders to avoid system directories
+						let user_dirs = ["Documents", "Desktop", "Downloads", "Projects", "Source", "Code", "git", "repos"];
+						for dir in user_dirs {
+							let path = format!("{}/{}", home_dir, dir);
+							if Path::new(&path).exists() {
+								roots.push(path);
+							}
+						}
+						// Also search home directory root for projects
+						roots.push(home_dir);
+					}
+					roots
 				}
 				#[cfg(target_os = "macos")]
 				{
 					// macOS: search user-specific directories to avoid permission prompts
 					let mut roots = Vec::new();
-					let home_dir = std::env::var("HOME").unwrap_or_else(|_| "/Users".to_string());
-					
-					// Add home directory first to catch projects in the root
-					roots.push(home_dir.clone());
-					
-					// Add Documents, Desktop, Downloads in priority order
-					let user_dirs = ["Documents", "Desktop", "Downloads"];
-					for dir in user_dirs {
-						let path = format!("{}/{}", home_dir, dir);
-						if Path::new(&path).exists() {
-							roots.push(path);
+					if let Ok(home_dir) = std::env::var("HOME") {
+						// Search only in specific folders
+						let user_dirs = ["Documents", "Desktop", "Downloads", "Projects", "Source", "Code"];
+						for dir in user_dirs {
+							let path = format!("{}/{}", home_dir, dir);
+							if Path::new(&path).exists() {
+								roots.push(path);
+							}
 						}
+						// Also search home directory root for projects
+						roots.push(home_dir);
 					}
-					
 					roots
 				}
 			}
-			OsSessionKind::Wsl(_) => {
-				// WSL: search both Linux home and mounted Windows drives
-				let mut roots = vec!["/home".to_string()];
-				for drive in ['c', 'd', 'e', 'f', 'g', 'h'] {
-					let path = format!("/mnt/{}/Users", drive);
-					// We can't easily check if path exists in WSL context here,
-					// so we'll add them all and let the search handle non-existent paths
-					roots.push(path);
+			OsSessionKind::Wsl(distribution) => {
+				// WSL: search specific WSL user directories only
+				let mut roots = Vec::new();
+				
+				// Get WSL home directory using WSL command
+				let wsl_home = Self::get_wsl_home_directory(distribution);
+				if let Some(home_dir) = wsl_home {
+					let user_dirs = ["Documents", "Desktop", "Downloads", "Projects", "Source", "Code", "git", "repos"];
+					for dir in user_dirs {
+						let path = format!("{}/{}", home_dir, dir);
+						roots.push(path);
+					}
+					// Also search home directory root
+					roots.push(home_dir);
+				} else {
+					// Fallback: search common WSL home paths
+					let fallback_homes = ["/home", "/root"];
+					for home_base in fallback_homes {
+						let user_dirs = ["Documents", "Desktop", "Downloads", "Projects", "Source", "Code", "git", "repos"];
+						for dir in user_dirs {
+							let path = format!("{}/{}", home_base, dir);
+							roots.push(path);
+						}
+						roots.push(home_base.to_string());
+					}
 				}
+				
+				// Also search Windows user directories via WSL mount (optional)
+				for drive in ['c'] {
+					let user_dirs = ["Documents", "Desktop", "Downloads", "Projects", "Source", "Code"];
+					for dir in user_dirs {
+						let path = format!("/mnt/{}/Users/*/{}", drive, dir);
+						roots.push(path);
+					}
+				}
+				
 				roots
 			}
 		};
 		
-		println!("Git Search - Root directories determined: {:?}", roots);
 		roots
+	}
+
+	#[cfg(target_os = "windows")]
+	fn get_wsl_home_directory(distribution: &str) -> Option<String> {
+		// Get WSL home directory using WSL command
+		let output = Command::new("wsl")
+			.arg("-d")
+			.arg(distribution)
+			.arg("pwd")
+			.output();
+		
+		match output {
+			Ok(output) if output.status.success() => {
+				let home_dir = String::from_utf8_lossy(&output.stdout).trim().to_string();
+				if !home_dir.is_empty() {
+					Some(home_dir)
+				} else {
+					None
+				}
+			}
+			_ => None,
+		}
+	}
+
+	#[cfg(not(target_os = "windows"))]
+	fn get_wsl_home_directory(_distribution: &str) -> Option<String> {
+		None
 	}
 
 	fn search_git_directories(
@@ -504,7 +567,6 @@ impl GitSearchManager {
 				os_session_kind,
 			);
 		} else {
-			println!("Git Search - Searching in local directory: {}", root_path);
 			Self::search_git_directories_local(
 				root_path, found_dirs, searches, search_id,
 			);
@@ -519,12 +581,16 @@ impl GitSearchManager {
 	) {
 		let walker = WalkDir::new(root_path)
 			.follow_links(false)
-			.max_depth(3) // Limit search depth to 3 levels
+			.max_depth(4) // Limit search depth to 4 levels
 			.into_iter()
 			.filter_entry(|e| {
-				// Skip hidden directories except .git
+				// Skip hidden directories except .git, and skip common non-project directories
 				if let Some(name) = e.file_name().to_str() {
 					if name.starts_with('.') && name != ".git" {
+						return false;
+					}
+					// Skip common non-project directories that slow down search
+					if matches!(name, "node_modules" | "target" | "dist" | "build" | "out" | "bin" | "obj" | ".next" | ".nuxt" | "__pycache__" | ".vscode" | ".idea" | "Trash" | "Library" | "Applications" | "System" | "Windows" | "Program Files" | "Program Files (x86)") {
 						return false;
 					}
 				}
@@ -585,18 +651,12 @@ impl GitSearchManager {
 			}
 		};
 
-		println!("WSL Search - Root path: {}, Distribution: {}", root_path, distribution);
-
-		// Skip path existence check - let find handle non-existent paths
-
 		// Use WSL find command to search for .git directories
-		// Limit depth to 3 levels
+		// Limit depth to 4 levels and exclude common non-project directories
 		let find_command = format!(
-			"find '{}' -maxdepth 3 -name '.git' -type d 2>/dev/null",
+			"find '{}' -maxdepth 4 -name '.git' -type d -not -path '*/node_modules/*' -not -path '*/target/*' -not -path '*/dist/*' -not -path '*/build/*' -not -path '*/.next/*' -not -path '*/__pycache__/*' 2>/dev/null",
 			root_path.replace("'", "'\"'\"'")
 		);
-
-		println!("WSL Search - Executing command: wsl -d {} bash -c '{}'", distribution, find_command);
 
 		let output = Command::new("wsl")
 			.arg("-d")
@@ -608,23 +668,16 @@ impl GitSearchManager {
 
 		match output {
 			Ok(output) => {
-				println!("WSL Search - Command exit status: {}", output.status);
-				println!("WSL Search - Stdout: {}", String::from_utf8_lossy(&output.stdout));
-				println!("WSL Search - Stderr: {}", String::from_utf8_lossy(&output.stderr));
-
 				if output.status.success() {
 					let output_str = String::from_utf8_lossy(&output.stdout);
 					let lines: Vec<&str> = output_str.lines().collect();
-					println!("WSL Search - Found {} lines of output", lines.len());
 
 					for line in lines {
 						let git_path = line.trim();
-						println!("WSL Search - Processing line: '{}'", git_path);
 						if !git_path.is_empty() && git_path.ends_with("/.git") {
 							// Get the parent directory (remove /.git)
 							let repo_path = &git_path[..git_path.len() - 5];
 							let normalized_path = repo_path.replace('\\', "/");
-							println!("WSL Search - Found git repo: {}", normalized_path);
 
 							found_dirs.push(normalized_path.clone());
 
@@ -635,12 +688,10 @@ impl GitSearchManager {
 							}
 						}
 					}
-				} else {
-					println!("WSL Search - Command failed with status: {}", output.status);
 				}
 			}
-			Err(e) => {
-				println!("WSL Search - Failed to execute command: {}", e);
+			Err(_) => {
+				// Silently handle command execution errors
 			}
 		}
 	}

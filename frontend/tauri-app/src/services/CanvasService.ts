@@ -13,13 +13,15 @@ export class CanvasService {
 	static async copyDirectory(
 		source: string,
 		destination: string,
-		osSession: OsSession
+		osSession: OsSession,
+		excludeGit?: boolean
 	): Promise<CanvasOperationResult> {
 		try {
-			await invoke("copy_directory", {
+			await invoke("copy_files", {
 				source,
 				destination,
-				osSession
+				osSession,
+				excludeGit
 			});
 			return { success: true };
 		} catch (error) {

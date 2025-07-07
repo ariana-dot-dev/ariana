@@ -181,7 +181,7 @@ export function ProjectDirectoryList({
 				// Convert WSL path to Windows explorer path
 				// Format: \\wsl$\<distribution>\path
 				const distribution = osSessionKind.Wsl;
-				explorerPath = `\\\\wsl$\\${distribution}${path.replace(/\//g, '\\')}`;
+				explorerPath = `\\\\wsl$\\${distribution}${path.replace(/\//g, '\\')}\\home`;
 			}
 
 			// Open in system file explorer
