@@ -304,7 +304,8 @@ impl FileSystemManager {
                 args.push("--exclude=.git");
             }
             
-            args.push(&format!("{}/", source));
+            let source_with_slash = format!("{}/", source);
+            args.push(&source_with_slash);
             args.push(destination);
             
             SystemManager::execute_command("rsync", &args).or_else(|_| {
