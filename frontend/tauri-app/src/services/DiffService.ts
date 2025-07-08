@@ -1,137 +1,158 @@
 import { invoke } from "@tauri-apps/api/core";
 import { GitDiffFile, GitDiffHunk, GitDiffLine, DiffSummary, MainLogicChange, DiffChange, SubLogicPath, GitBranch, GitCommit, BranchComparison } from "../types/diff";
+import { OsSession } from "../bindings/os";
 
 export class DiffService {
   private workingDirectory: string | null = null;
+  private osSession: OsSession | null = null;
 
   setWorkingDirectory(directory: string) {
     this.workingDirectory = directory;
+  }
+
+  setOsSession(osSession: OsSession) {
+    this.osSession = osSession;
   }
 
   getWorkingDirectory(): string | null {
     return this.workingDirectory;
   }
 
+  getOsSession(): OsSession | null {
+    return this.osSession;
+  }
+
   private async executeGitCommand(args: string[]): Promise<string> {
-    console.log("[FRONTEND] executeGitCommand called with args:", args);
-    console.log("[FRONTEND] workingDirectory:", this.workingDirectory);
-    
     try {
       let result: string;
-      if (this.workingDirectory) {
-        console.log("[FRONTEND] Calling execute_command_in_dir via invoke...");
-        result = await invoke<string>("execute_command_in_dir", {
+      if (this.workingDirectory && this.osSession) {
+        result = await invoke<string>("execute_command_with_os_session", {
           command: "git",
           args,
-          directory: this.workingDirectory
+          directory: this.workingDirectory,
+          osSession: this.osSession
         });
-        console.log("[FRONTEND] execute_command_in_dir completed, result type:", typeof result);
-        console.log("[FRONTEND] execute_command_in_dir result length:", result?.length || 0);
       } else {
-        console.log("[FRONTEND] Calling execute_command via invoke...");
+        console.log("[FRONTEND] Missing working directory or OS session, falling back to execute_command");
         result = await invoke<string>("execute_command", {
           command: "git",
           args
         });
-        console.log("[FRONTEND] execute_command completed, result type:", typeof result);
-        console.log("[FRONTEND] execute_command result length:", result?.length || 0);
       }
       
-      console.log("[FRONTEND] executeGitCommand returning result");
       return result;
     } catch (error) {
-      console.error("[FRONTEND] executeGitCommand error:", error);
-      console.error("[FRONTEND] Error type:", typeof error);
-      console.error("[FRONTEND] Error details:", JSON.stringify(error, null, 2));
+      console.error("[FRONTEND] Git command failed:", error);
+      
+      // Provide helpful context for git repository errors
+      if (typeof error === 'string' && error.includes('not a git repository')) {
+        console.error("[FRONTEND] Git command failed - not a git repository");
+        console.error("[FRONTEND] Directory:", this.workingDirectory);
+        console.error("[FRONTEND] Command: git", args.join(' '));
+      }
+      
       throw error;
     }
   }
 
-  async checkGitRepository(directory: string): Promise<boolean> {
+  async checkGitRepository(directory: string, osSession?: OsSession): Promise<boolean> {
     try {
-      console.log("[FRONTEND] checkGitRepository called with directory:", directory);
-      console.log("[FRONTEND] About to call check_git_repository invoke...");
+      const sessionToUse = osSession || this.osSession;
+      if (!sessionToUse) {
+        console.error("[FRONTEND] No OS session available for git repository check");
+        return false;
+      }
+      
       const isGitRepo = await invoke<boolean>("check_git_repository", {
-        directory
+        directory,
+        osSession: sessionToUse
       });
-      console.log("[FRONTEND] check_git_repository invoke completed");
-      console.log("[FRONTEND] checkGitRepository result:", isGitRepo);
-      console.log("[FRONTEND] checkGitRepository result type:", typeof isGitRepo);
+      
       return isGitRepo;
     } catch (error) {
       console.error("[FRONTEND] Failed to check git repository:", error);
-      console.error("[FRONTEND] Error details:", JSON.stringify(error, null, 2));
       return false;
+    }
+  }
+
+  // Test method to verify basic command execution in working directory
+  async testWorkingDirectory(): Promise<string> {
+    try {
+      if (!this.workingDirectory || !this.osSession) {
+        throw new Error("No working directory or OS session configured");
+      }
+      
+      const result = await invoke<string>("execute_command_with_os_session", {
+        command: "pwd",
+        args: [],
+        directory: this.workingDirectory,
+        osSession: this.osSession
+      });
+      console.log("[FRONTEND] Working directory test successful:", result);
+      return result;
+    } catch (error) {
+      console.error("[FRONTEND] Working directory test failed:", error);
+      throw error;
     }
   }
 
   // Test method to verify Tauri invoke is working
   async testInvoke(): Promise<string> {
     try {
-      console.log("[FRONTEND] Testing basic invoke...");
-      const currentDir = await invoke<string>("get_current_dir");
-      console.log("[FRONTEND] Basic invoke test successful:", currentDir);
+      if (!this.osSession) {
+        throw new Error("No OS session available for test invoke");
+      }
+      const currentDir = await invoke<string>("get_current_dir", {
+        osSession: this.osSession
+      });
+      console.log("[FRONTEND] Test invoke successful:", currentDir);
       return currentDir;
     } catch (error) {
-      console.error("[FRONTEND] Basic invoke test failed:", error);
+      console.error("[FRONTEND] Test invoke failed:", error);
       throw error;
     }
   }
 
   async getGitBranches(): Promise<GitBranch[]> {
-    console.log("[FRONTEND] getGitBranches method entry");
     try {
-      console.log("[FRONTEND] getGitBranches called, workingDirectory:", this.workingDirectory);
+      console.log("[FRONTEND] Getting git branches...");
       
-      // First check if we're in a git repository using safer method
+      // First check if we're in a git repository
       const isGitRepo = this.workingDirectory 
-        ? await this.checkGitRepository(this.workingDirectory)
-        : true; // If no working directory set, try anyway
-        
-      console.log("[FRONTEND] isGitRepo check result:", isGitRepo);
+        ? await this.checkGitRepository(this.workingDirectory, this.osSession || undefined)
+        : true;
         
       if (!isGitRepo) {
-        console.log("[FRONTEND] Not a git repository, throwing error");
         throw new Error("Directory is not a git repository. Please select a directory with .git or .github folder.");
       }
 
       // Get local branches with error handling
-      console.log("[FRONTEND] Getting local branches...");
       let localBranchesOutput = "";
       try {
-        console.log("[FRONTEND] About to call executeGitCommand for local branches...");
         localBranchesOutput = await this.executeGitCommand([
           "branch", "--format=%(refname:short)|%(HEAD)|%(objectname:short)|%(contents:subject)"
         ]);
-        console.log("[FRONTEND] Local branches (formatted) call completed successfully");
-        console.log("[FRONTEND] Local branches raw result type:", typeof localBranchesOutput);
-        console.log("[FRONTEND] Local branches (formatted) successful, length:", localBranchesOutput.length);
-        console.log("[FRONTEND] Local branches first 100 chars:", localBranchesOutput.substring(0, 100));
       } catch (error) {
-        console.log("[FRONTEND] Formatted local branches failed, trying simple:", error);
+        console.log("[FRONTEND] Formatted local branches failed, trying simple format:", error);
         // Fallback to simpler branch listing
         try {
           localBranchesOutput = await this.executeGitCommand(["branch"]);
-          console.log("[FRONTEND] Local branches (simple) successful, length:", localBranchesOutput.length);
         } catch (fallbackError) {
           console.warn("[FRONTEND] Failed to get local branches:", fallbackError);
         }
       }
 
       // Get remote branches with error handling
-      console.log("[FRONTEND] Getting remote branches...");
       let remoteBranchesOutput = "";
       try {
         remoteBranchesOutput = await this.executeGitCommand([
           "branch", "-r", "--format=%(refname:short)|%(HEAD)|%(objectname:short)|%(contents:subject)"
         ]);
-        console.log("[FRONTEND] Remote branches (formatted) successful, length:", remoteBranchesOutput.length);
       } catch (error) {
         console.log("[FRONTEND] Formatted remote branches failed, trying simple:", error);
         // Fallback to simpler remote branch listing
         try {
           remoteBranchesOutput = await this.executeGitCommand(["branch", "-r"]);
-          console.log("[FRONTEND] Remote branches (simple) successful, length:", remoteBranchesOutput.length);
         } catch (fallbackError) {
           console.warn("[FRONTEND] Failed to get remote branches:", fallbackError);
         }
@@ -139,139 +160,95 @@ export class DiffService {
 
       const branches: GitBranch[] = [];
 
-      console.log("[FRONTEND] Starting to parse branch outputs...");
-      console.log("[FRONTEND] Local branches raw output:", JSON.stringify(localBranchesOutput));
-      console.log("[FRONTEND] Remote branches raw output:", JSON.stringify(remoteBranchesOutput));
-
       // Parse local branches
       if (localBranchesOutput.trim()) {
-        console.log("[FRONTEND] Parsing local branches...");
-        try {
-          localBranchesOutput.split('\n').forEach((line, index) => {
-            console.log(`[FRONTEND] Processing local branch line ${index}:`, JSON.stringify(line));
-            try {
-              if (line.trim()) {
-                if (line.includes('|')) {
-                  // Format output parsing
-                  console.log(`[FRONTEND] Parsing formatted local branch: ${line}`);
-                  const parts = line.split('|');
-                  const [name, head, commit, message] = parts;
-                  const branch = {
-                    name: name?.trim() || '',
-                    isCurrentBranch: head?.trim() === '*',
-                    isRemote: false,
-                    lastCommit: commit?.trim(),
-                    lastCommitMessage: message?.trim()
-                  };
-                  console.log(`[FRONTEND] Created local branch object:`, branch);
-                  branches.push(branch);
-                } else {
-                  // Simple branch output parsing
-                  console.log(`[FRONTEND] Parsing simple local branch: ${line}`);
-                  const trimmedLine = line.trim();
-                  const isCurrentBranch = trimmedLine.startsWith('*');
-                  const branchName = trimmedLine.replace(/^\*\s*/, '').trim();
-                  if (branchName) {
-                    const branch = {
-                      name: branchName,
-                      isCurrentBranch,
-                      isRemote: false,
-                      lastCommit: undefined,
-                      lastCommitMessage: undefined
-                    };
-                    console.log(`[FRONTEND] Created simple local branch object:`, branch);
-                    branches.push(branch);
-                  }
-                }
+        localBranchesOutput.split('\n').forEach((line, index) => {
+          if (line.trim()) {
+            if (line.includes('|')) {
+              // Format output parsing
+              const parts = line.split('|');
+              const [name, head, commit, message] = parts;
+              const branch = {
+                name: name?.trim() || '',
+                isCurrentBranch: head?.trim() === '*',
+                isRemote: false,
+                lastCommit: commit?.trim(),
+                lastCommitMessage: message?.trim()
+              };
+              branches.push(branch);
+            } else {
+              // Simple branch output parsing
+              const trimmedLine = line.trim();
+              const isCurrentBranch = trimmedLine.startsWith('*');
+              const branchName = trimmedLine.replace(/^\*\s*/, '').trim();
+              if (branchName) {
+                const branch = {
+                  name: branchName,
+                  isCurrentBranch,
+                  isRemote: false,
+                  lastCommit: undefined,
+                  lastCommitMessage: undefined
+                };
+                branches.push(branch);
               }
-            } catch (lineError) {
-              console.error(`[FRONTEND] Error parsing local branch line ${index}:`, lineError);
-              console.error(`[FRONTEND] Problematic line:`, JSON.stringify(line));
             }
-          });
-        } catch (localParseError) {
-          console.error("[FRONTEND] Error parsing local branches:", localParseError);
-        }
+          }
+        });
       }
 
       // Parse remote branches
       if (remoteBranchesOutput.trim()) {
-        console.log("[FRONTEND] Parsing remote branches...");
-        try {
-          remoteBranchesOutput.split('\n').forEach((line, index) => {
-            console.log(`[FRONTEND] Processing remote branch line ${index}:`, JSON.stringify(line));
-            try {
-              if (line.trim() && !line.includes('HEAD ->')) {
-                if (line.includes('|')) {
-                  // Format output parsing
-                  console.log(`[FRONTEND] Parsing formatted remote branch: ${line}`);
-                  const parts = line.split('|');
-                  const [name, head, commit, message] = parts;
-                  const cleanName = name?.trim().replace(/^origin\//, '') || '';
-                  
-                  // Only add if not already present as local branch
-                  if (cleanName && !branches.some(b => b.name === cleanName)) {
-                    const branch = {
-                      name: cleanName,
-                      isCurrentBranch: false,
-                      isRemote: true,
-                      lastCommit: commit?.trim(),
-                      lastCommitMessage: message?.trim()
-                    };
-                    console.log(`[FRONTEND] Created remote branch object:`, branch);
-                    branches.push(branch);
-                  }
-                } else {
-                  // Simple remote branch output parsing
-                  console.log(`[FRONTEND] Parsing simple remote branch: ${line}`);
-                  const trimmedLine = line.trim();
-                  const cleanName = trimmedLine.replace(/^origin\//, '').replace(/^\*\s*/, '');
-                  
-                  // Only add if not already present as local branch
-                  if (cleanName && !branches.some(b => b.name === cleanName)) {
-                    const branch = {
-                      name: cleanName,
-                      isCurrentBranch: false,
-                      isRemote: true,
-                      lastCommit: undefined,
-                      lastCommitMessage: undefined
-                    };
-                    console.log(`[FRONTEND] Created simple remote branch object:`, branch);
-                    branches.push(branch);
-                  }
-                }
+        remoteBranchesOutput.split('\n').forEach((line, index) => {
+          if (line.trim() && !line.includes('HEAD ->')) {
+            if (line.includes('|')) {
+              // Format output parsing
+              const parts = line.split('|');
+              const [name, head, commit, message] = parts;
+              const cleanName = name?.trim().replace(/^origin\//, '') || '';
+              
+              // Only add if not already present as local branch
+              if (cleanName && !branches.some(b => b.name === cleanName)) {
+                const branch = {
+                  name: cleanName,
+                  isCurrentBranch: false,
+                  isRemote: true,
+                  lastCommit: commit?.trim(),
+                  lastCommitMessage: message?.trim()
+                };
+                branches.push(branch);
               }
-            } catch (lineError) {
-              console.error(`[FRONTEND] Error parsing remote branch line ${index}:`, lineError);
-              console.error(`[FRONTEND] Problematic line:`, JSON.stringify(line));
+            } else {
+              // Simple remote branch output parsing
+              const trimmedLine = line.trim();
+              const cleanName = trimmedLine.replace(/^origin\//, '').replace(/^\*\s*/, '');
+              
+              // Only add if not already present as local branch
+              if (cleanName && !branches.some(b => b.name === cleanName)) {
+                const branch = {
+                  name: cleanName,
+                  isCurrentBranch: false,
+                  isRemote: true,
+                  lastCommit: undefined,
+                  lastCommitMessage: undefined
+                };
+                branches.push(branch);
+              }
             }
-          });
-        } catch (remoteParseError) {
-          console.error("[FRONTEND] Error parsing remote branches:", remoteParseError);
-        }
-      }
-
-      console.log("[FRONTEND] Final branches array before sorting:", branches);
-      console.log("[FRONTEND] Total branches found:", branches.length);
-      
-      try {
-        const sortedBranches = branches.sort((a, b) => {
-          // Current branch first, then local branches, then remote branches
-          if (a.isCurrentBranch) return -1;
-          if (b.isCurrentBranch) return 1;
-          if (!a.isRemote && b.isRemote) return -1;
-          if (a.isRemote && !b.isRemote) return 1;
-          return a.name.localeCompare(b.name);
+          }
         });
-        console.log("[FRONTEND] Branches sorted successfully");
-        console.log("[FRONTEND] Returning sorted branches:", sortedBranches);
-        return sortedBranches;
-      } catch (sortError) {
-        console.error("[FRONTEND] Error sorting branches:", sortError);
-        console.error("[FRONTEND] Returning unsorted branches");
-        return branches;
       }
 
+      // Sort branches
+      const sortedBranches = branches.sort((a, b) => {
+        // Current branch first, then local branches, then remote branches
+        if (a.isCurrentBranch) return -1;
+        if (b.isCurrentBranch) return 1;
+        if (!a.isRemote && b.isRemote) return -1;
+        if (a.isRemote && !b.isRemote) return 1;
+        return a.name.localeCompare(b.name);
+      });
+      
+      return sortedBranches;
     } catch (error) {
       console.error("Failed to get git branches:", error);
       const errorStr = String(error);

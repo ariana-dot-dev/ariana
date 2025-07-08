@@ -151,7 +151,9 @@ impl TerminalState {
 			self.parser.process(valid);
 		}
 
-		self.build_screen_events(false)
+		// TEMPORARY MAC FIX: Force full screen updates instead of incremental
+		// This ensures screen content events are generated for pattern detection
+		self.build_screen_events(true)
 	}
 
 	/// Used by the scroll wheel handlers.  We simply re-emit the current
@@ -447,12 +449,15 @@ impl CustomTerminalConnection {
 			let mut buf = [0u8; 4096];
 			loop {
 				match reader.read(&mut buf) {
-					Ok(0) => break, // EOF
+					Ok(0) => {
+						break; // EOF
+					}
 					Ok(n) => {
 						let events = {
 							let mut s = state.lock().unwrap();
 							s.process_input(&buf[..n])
 						};
+						
 						if !events.is_empty() {
 							if let Err(e) = event_tx.send(events) {
 								eprintln!("Failed to send events to channel: {}", e);

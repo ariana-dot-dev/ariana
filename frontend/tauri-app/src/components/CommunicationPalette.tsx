@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { cn } from "../utils";
 import { communicationService } from "../services/CommunicationService";
+import { AgentCommandService } from "../services/AgentCommandService";
+import { commandDispatcher, Command } from "../services/CommandDispatcher";
 
 // Extend Window interface for Speech Recognition
 declare global {
@@ -21,6 +23,7 @@ interface CommunicationPaletteProps {
   model?: string;
   apiKey?: string;
   systemPrompt?: string;
+  onAgentCreate?: (agentName: string, prompt: string) => {success: boolean, message: string, data?: any};
 }
 
 // Check if we're running in Tauri
@@ -92,13 +95,22 @@ export const CommunicationPalette: React.FC<CommunicationPaletteProps> = ({
   model = "claude-3-5-sonnet-20241022",
   apiKey = "",
   systemPrompt = "You are a helpful assistant.",
+  onAgentCreate,
 }) => {
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [audioTimeout, setAudioTimeout] = useState<NodeJS.Timeout | null>(null);
   const [response, setResponse] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
+  const [agentCommandService] = useState(() => new AgentCommandService());
   const [audioEnabledState, setAudioEnabledState] = useState(isAudioEnabled);
+  
+  // Set the agent creation callback on the command dispatcher
+  useEffect(() => {
+    if (onAgentCreate) {
+      commandDispatcher.setAgentCreateCallback(onAgentCreate);
+    }
+  }, [onAgentCreate]);
   
   // Speech recognition state
   const [isRecording, setIsRecording] = useState(false);
@@ -541,16 +553,84 @@ export const CommunicationPalette: React.FC<CommunicationPaletteProps> = ({
     if (!message.trim() || isLoading || isStreaming) return;
     
     setIsLoading(true);
+    setResponse("");
+    
     try {
-      if (onSend) {
-        await onSend(message.trim());
+      // First, use LLM to parse natural language into JSON commands
+      const systemPrompt = `You are an intelligent command parser for an AI development environment. Parse the following natural language input into structured JSON commands.
+
+Available Commands:
+- create_agent: Creates a new AI agent
+- prompt_agent: Sends a prompt to a specific agent  
+- merge_agent: Merges agent work/output
+- list_agents: Lists all available agents
+- delete_agent: Deletes a specific agent
+
+Instructions:
+1. Identify the user's intent from the natural language input
+2. Map the intent to appropriate command(s) from the available commands
+3. Extract relevant parameters and arguments from the input
+4. For agent creation with tasks, generate a suitable agent name and include the task as a "prompt" argument
+5. Be flexible with pattern matching and understand variations in wording
+6. Handle compound commands (multiple actions in one input)
+
+Input: "${message.trim()}"
+
+Expected output format (return ONLY the JSON array, no other text):
+[
+  {"command": "command_id", "args": {"param1": "value1", "param2": "value2"}}
+]
+
+Examples:
+- "create agent that writes hello world" -> [{"command": "create_agent", "args": {"agentName": "HelloWorldWriter", "prompt": "write hello world"}}]
+- "create an agent that parses a file into multiple files" -> [{"command": "create_agent", "args": {"agentName": "FileParser", "prompt": "parse a file into multiple files"}}]
+- "ask MyAgent to fix bugs" -> [{"command": "prompt_agent", "args": {"agentName": "MyAgent", "prompt": "fix bugs"}}]
+- "list all agents" -> [{"command": "list_agents", "args": {}}]
+- "delete agent TestAgent" -> [{"command": "delete_agent", "args": {"agentName": "TestAgent"}}]
+
+Return only the JSON array, no other text.`;
+
+      const parseResponse = await communicationService.askClaude(systemPrompt);
+      
+      // Try to parse the response as JSON
+      const responseText = parseResponse.content.trim();
+      
+      const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+      
+      if (jsonMatch) {
+        const parsedCommands: Command[] = JSON.parse(jsonMatch[0]);
+        
+        // Execute the parsed commands
+        const results = await commandDispatcher.executeCommands(parsedCommands);
+        
+        // Format the results for display
+        const resultMessages = results.map((result, index) => {
+          const cmd = parsedCommands[index];
+          const status = result.success ? "✅ SUCCESS" : "❌ FAILED";
+          let message = `${status}: ${cmd.command}\n`;
+          message += `Message: ${result.message}\n`;
+          
+          if (result.data) {
+            message += `Data: ${JSON.stringify(result.data, null, 2)}\n`;
+          }
+          
+          return message;
+        });
+        
+        setResponse(resultMessages.join('\n---\n'));
       } else {
-        await handleApiSend(message.trim());
+        // Fallback: if no commands detected, handle as regular message
+        if (onSend) {
+          await onSend(message.trim());
+        } else {
+          await handleApiSend(message.trim());
+        }
       }
+      
       setMessage("");
       setInterimTranscript("");
     } catch (error) {
-      console.error("Failed to send message:", error);
+      setResponse(`Error: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setIsLoading(false);
     }
@@ -567,6 +647,7 @@ export const CommunicationPalette: React.FC<CommunicationPaletteProps> = ({
       console.error("Failed to ask Claude:", error);
     }
   };
+
 
   const handleStop = () => {
     if (abortControllerRef.current) {
@@ -736,15 +817,16 @@ export const CommunicationPalette: React.FC<CommunicationPaletteProps> = ({
               </button>
               <button
                 onClick={handleSend}
-                disabled={!message.trim() || isLoading || isStreaming || !apiKey}
+                disabled={!message.trim() || isLoading || isStreaming}
                 className={cn(
                   "px-4 py-2 rounded-md transition-colors",
-                  !message.trim() || isLoading || isStreaming || !apiKey
+                  !message.trim() || isLoading || isStreaming
                     ? "bg-[var(--base-400)] text-[var(--base-600)] cursor-not-allowed"
                     : "bg-[var(--acc-500)] text-white hover:bg-[var(--acc-600)]"
                 )}
+                title="Parse natural language and execute commands or send regular message"
               >
-                {isLoading ? "Sending..." : isStreaming ? "Streaming..." : "Send"}
+                {isLoading ? "Processing..." : isStreaming ? "Streaming..." : "Send"}
               </button>
             </div>
           </div>

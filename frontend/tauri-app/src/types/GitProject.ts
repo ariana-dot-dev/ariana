@@ -144,7 +144,7 @@ export class GitProject {
 	/**
 	 * Creates a new canvas immediately in loading state, then populates it asynchronously
 	 */
-	addCanvasCopy(onProgress?: (progress: CopyProgress) => void): { success: boolean; canvasId?: string; error?: string } {
+	addCanvasCopy(onProgress?: (progress: CopyProgress) => void, canvas?: Partial<GitProjectCanvas>, initialPrompt?: string): { success: boolean; canvasId?: string; error?: string } {
 		try {
 			// Get the root working directory
 			const rootDirectory = osSessionGetWorkingDirectory(this.root);
@@ -157,7 +157,8 @@ export class GitProject {
 				name: `Canvas ${this.canvases.length + 1} (Loading...)`,
 				osSession: this.root, // Temporary, will be replaced when copy is ready
 				taskManager: new TaskManager(),
-				lockState: 'loading'
+				lockState: 'loading',
+				...canvas
 			});
 
 			// Start the copy process asynchronously

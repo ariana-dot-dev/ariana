@@ -6,6 +6,9 @@ class BackendService {
     private let baseURL = "http://localhost:8000/api"
     private var currentRequestId: String?
     
+    // Hard-coded default user ID
+    static let currentUserId = 1
+    
     private init() {}
     
     func submitRequest(_ request: String, completion: @escaping (Result<Void, Error>) -> Void) {
@@ -119,6 +122,43 @@ class BackendService {
             }
         }.resume()
     }
+    
+    func fetchProjects(completion: @escaping (Result<[Project], Error>) -> Void) {
+        guard let url = URL(string: "\(baseURL)/projects?user_id=\(BackendService.currentUserId)") else {
+            completion(.failure(ServiceError.invalidURL))
+            return
+        }
+        
+        URLSession.shared.dataTask(with: url) { data, response, error in
+            if let error = error {
+                completion(.failure(error))
+                return
+            }
+            
+            guard let httpResponse = response as? HTTPURLResponse,
+                  httpResponse.statusCode == 200 else {
+                completion(.failure(ServiceError.invalidResponse))
+                return
+            }
+            
+            if let data = data {
+                do {
+                    let decoder = JSONDecoder()
+                    let formatter = DateFormatter()
+                    formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"
+                    formatter.timeZone = TimeZone(abbreviation: "UTC")
+                    decoder.dateDecodingStrategy = .formatted(formatter)
+                    
+                    let projects = try decoder.decode([Project].self, from: data)
+                    completion(.success(projects))
+                } catch {
+                    completion(.failure(error))
+                }
+            } else {
+                completion(.failure(ServiceError.invalidResponse))
+            }
+        }.resume()
+    }
 }
 
 enum ServiceError: Error {
@@ -142,6 +182,22 @@ struct Task: Codable, Identifiable {
         case inProgress = "in_progress"
         case completed = "completed"
         case failed = "failed"
+    }
+}
+
+struct Project: Codable, Identifiable {
+    let id: Int
+    let name: String
+    let description: String?
+    let user_owner_id: Int
+    let created_at: Date
+    let updated_at: Date
+    
+    var emoji: String {
+        // Generate consistent emoji based on project name
+        let emojis = ["📱", "💻", "🌐", "🚀", "⚡", "🔧", "🎯", "💡", "🌟", "🔥"]
+        let index = abs(name.hash) % emojis.count
+        return emojis[index]
     }
 }
 

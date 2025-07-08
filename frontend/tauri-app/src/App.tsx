@@ -324,7 +324,7 @@ function App() {
 					{selectedGitProjectId === null ? (
 						<div className="z-10 h-fit w-full max-h-full flex flex-col overflow-hidden gap-12">
 							<div className="flex flex-col items-center flex-shrink-0 gap-3 opacity-50 text-[var(--acc-700)]">
-								<div className="w-24">
+								<div className="w-28 p-2">
 									<Logo className="hover:scale-[108%] cursor-crosshair transition-all" />
 								</div>
 								<h1 className="text-lg">
@@ -341,7 +341,7 @@ function App() {
 						<GitProjectProvider gitProject={store.getGitProject(selectedGitProjectId) || null}>
 							{/* Diff Management Modal */}
 							{showDiffManagement && (
-								<div className="fixed inset-0 bg-transparent flex items-center justify-center z-50">
+								<div className="fixed inset-0 bg-[var(--base-100)] flex items-center justify-center z-[100]">
 									<div className="bg-[var(--base-100)] rounded-lg w-full h-full flex flex-col">
 										<DiffManagement 
 											onClose={() => setShowDiffManagement(false)}
@@ -368,6 +368,73 @@ function App() {
 						provider="anthropic"
 						model="claude-3-5-sonnet-20241022"
 						systemPrompt="You are a helpful coding assistant integrated into the Ariana IDE."
+						onAgentCreate={(agentName: string, prompt: string) => {
+							// Get the current project
+							if (selectedGitProjectId) {
+								const selectedProject = store.getGitProject(selectedGitProjectId);
+								if (selectedProject) {
+									try {
+										// Create a new canvas copy (agent workspace) with initial prompt
+										const initialPrompt = prompt && prompt.trim() !== 'general assistance' ? prompt.trim() : '';
+										const result = selectedProject.addCanvasCopy(() => {}, undefined, initialPrompt);
+										
+										if (result.success && result.canvasId) {
+											// Rename the canvas to the agent name
+											const renamed = selectedProject.renameCanvas(result.canvasId, agentName);
+											
+											if (renamed) {
+												// Set the new canvas as the current one
+												const canvasIndex = selectedProject.canvases.findIndex(c => c.id === result.canvasId);
+												if (canvasIndex !== -1) {
+													selectedProject.setCurrentCanvasIndex(canvasIndex);
+												}
+												
+												// Trigger store update to refresh UI
+												store.updateGitProject(selectedProject.id);
+												
+												return {
+													success: true,
+													message: `Agent "${agentName}" created successfully! New workspace canvas created with isolated Git branch.${initialPrompt ? ' Initial prompt will be auto-launched.' : ''}`,
+													data: {
+														agentName,
+														prompt,
+														promptPreFilled: !!initialPrompt,
+														autoLaunched: !!initialPrompt,
+														canvasId: result.canvasId,
+														timestamp: new Date().toISOString()
+													}
+												};
+											} else {
+												return {
+													success: false,
+													message: `Agent workspace created but failed to rename canvas. Canvas ID: ${result.canvasId}`
+												};
+											}
+										} else {
+											return {
+												success: false,
+												message: `Failed to create agent workspace: ${result.error || 'Unknown error'}`
+											};
+										}
+									} catch (error) {
+										return {
+											success: false,
+											message: `Error creating agent: ${error instanceof Error ? error.message : String(error)}`
+										};
+									}
+								} else {
+									return {
+										success: false,
+										message: "Selected project not found"
+									};
+								}
+							} else {
+								return {
+									success: false,
+									message: "No project selected. Please select a project first."
+								};
+							}
+						}}
 					/>
 
 					<div className="absolute hover:opacity-100 opacity-0 bottom-0 left-2 flex rounded-t-4 pb-2 justify-center gap-1 z-50">
