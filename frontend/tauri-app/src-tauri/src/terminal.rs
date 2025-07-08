@@ -61,7 +61,6 @@ impl TerminalConnection {
 					Ok(0) => break, // EOF
 					Ok(n) => {
 						let data = String::from_utf8_lossy(&buffer[..n]).to_string();
-						println!("Backend received from PTY: {:?}", data);
 						if let Err(e) = app_handle
 							.emit(&format!("terminal-data-{}", connection_id), &data)
 						{
