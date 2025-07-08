@@ -80,8 +80,8 @@ export interface TerminalEvent {
 }
 
 export class CustomTerminalAPI {
-	protected eventListeners = new Map<string, UnlistenFn>();
-	protected disconnectListeners = new Map<string, UnlistenFn>();
+	protected eventListeners = new Map<string, UnlistenFn[]>();
+	protected disconnectListeners = new Map<string, UnlistenFn[]>();
 	protected terminalId: string | null = null;
 	protected isConnected: boolean = false;
 
@@ -106,16 +106,16 @@ export class CustomTerminalAPI {
 	 */
 	async killTerminal(id: string): Promise<void> {
 		try {
-			// Clean up event listeners
-			const eventListener = this.eventListeners.get(id);
-			if (eventListener) {
-				eventListener();
+			// Clean up all event listeners for this terminal
+			const eventListeners = this.eventListeners.get(id);
+			if (eventListeners) {
+				eventListeners.forEach(unlisten => unlisten());
 				this.eventListeners.delete(id);
 			}
 
-			const disconnectListener = this.disconnectListeners.get(id);
-			if (disconnectListener) {
-				disconnectListener();
+			const disconnectListeners = this.disconnectListeners.get(id);
+			if (disconnectListeners) {
+				disconnectListeners.forEach(unlisten => unlisten());
 				this.disconnectListeners.delete(id);
 			}
 
@@ -155,49 +155,59 @@ export class CustomTerminalAPI {
 
 	/**
 	 * Listen to terminal events (new lines, patches, cursor moves, scroll)
+	 * Now supports multiple listeners per terminal
 	 */
 	async onTerminalEvent(
 		id: string,
 		callback: (events: TerminalEvent[]) => void, // Expect an array of events
 	): Promise<void> {
 		try {
-			// Remove existing listener if any
-			const existingListener = this.eventListeners.get(id);
-			if (existingListener) {
-				existingListener();
-			}
+			// Get existing listeners array or create new one
+			let listeners = this.eventListeners.get(id) || [];
+			const listenerCount = listeners.length;
+			
+			console.log(`[CustomTerminalAPI] Adding event listener for terminal ${id} (current: ${listenerCount})`);
 
 			// Listen for an array of TerminalEvent
 			const unlisten = await listen<TerminalEvent[]>(
 				`custom-terminal-event-${id}`,
 				(event) => {
-					// The payload is now an array of events
-					callback(event.payload);
+					try {
+						// The payload is now an array of events
+						callback(event.payload);
+					} catch (error) {
+						console.error(`[CustomTerminalAPI] ❌ Callback execution failed for ${id}:`, error);
+					}
 				},
 			);
 
-			this.eventListeners.set(id, unlisten);
+			// Add the new listener to the array
+			listeners.push(unlisten);
+			this.eventListeners.set(id, listeners);
+			
+			console.log(`[CustomTerminalAPI] ✅ Event listener added for ${id} (total: ${listeners.length})`);
 		} catch (error) {
+			console.error(`[CustomTerminalAPI] ❌ Failed to add terminal event listener for ${id}:`, error);
 			throw new Error(`Failed to set up terminal event listener: ${error}`);
 		}
 	}
 
 	/**
 	 * Listen to terminal disconnect events
+	 * Now supports multiple listeners per terminal
 	 */
 	async onTerminalDisconnect(id: string, callback: () => void): Promise<void> {
 		try {
-			// Remove existing listener if any
-			const existingListener = this.disconnectListeners.get(id);
-			if (existingListener) {
-				existingListener();
-			}
+			// Get existing listeners array or create new one
+			let listeners = this.disconnectListeners.get(id) || [];
 
 			const unlisten = await listen(`custom-terminal-disconnect-${id}`, () => {
 				callback();
 			});
 
-			this.disconnectListeners.set(id, unlisten);
+			// Add the new listener to the array
+			listeners.push(unlisten);
+			this.disconnectListeners.set(id, listeners);
 		} catch (error) {
 			throw new Error(
 				`Failed to set up terminal disconnect listener: ${error}`,
@@ -264,11 +274,13 @@ export class CustomTerminalAPI {
 	 * Cleanup all event listeners
 	 */
 	cleanup(): void {
-		for (const unlisten of this.eventListeners.values()) {
-			unlisten();
+		// Clean up all event listeners
+		for (const listeners of this.eventListeners.values()) {
+			listeners.forEach(unlisten => unlisten());
 		}
-		for (const unlisten of this.disconnectListeners.values()) {
-			unlisten();
+		// Clean up all disconnect listeners
+		for (const listeners of this.disconnectListeners.values()) {
+			listeners.forEach(unlisten => unlisten());
 		}
 		this.eventListeners.clear();
 		this.disconnectListeners.clear();

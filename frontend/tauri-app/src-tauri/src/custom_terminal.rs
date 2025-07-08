@@ -151,7 +151,9 @@ impl TerminalState {
 			self.parser.process(valid);
 		}
 
-		self.build_screen_events(false)
+		// TEMPORARY MAC FIX: Force full screen updates instead of incremental
+		// This ensures screen content events are generated for pattern detection
+		self.build_screen_events(true)
 	}
 
 	/// Used by the scroll wheel handlers.  We simply re-emit the current
@@ -280,12 +282,19 @@ impl TerminalState {
 				metadata: None,
 			});
 		} else {
+			// Debug logging for Mac compatibility issue
+			println!("🐞 [MAC DEBUG] Building incremental events:");
+			println!("🐞   changed_lines: {}", changed_lines.len());
+			println!("🐞   added_lines: {}", added_lines.len());
+			println!("🐞   cursor: ({}, {})", cursor_line, cursor_col);
+			
 			events.push(TerminalEvent::CursorMove {
 				line: cursor_line,
 				col: cursor_col,
 				metadata: None,
 			});
 			for (line, items) in changed_lines {
+				println!("🐞   Patch event for line {}: {}", line, items.0);
 				events.push(TerminalEvent::Patch {
 					line,
 					items: items.1,
@@ -293,6 +302,12 @@ impl TerminalState {
 				});
 			}
 			if added_lines.len() > 0 {
+				println!("🐞   NewLines event with {} lines", added_lines.len());
+				for (i, line) in added_lines.iter().enumerate() {
+					if i < 3 {
+						println!("🐞     Line {}: {}", i, line.0);
+					}
+				}
 				events.push(TerminalEvent::NewLines {
 					lines: added_lines.into_iter().map(|(_, row)| row).collect(),
 					metadata: None,
@@ -447,12 +462,40 @@ impl CustomTerminalConnection {
 			let mut buf = [0u8; 4096];
 			loop {
 				match reader.read(&mut buf) {
-					Ok(0) => break, // EOF
+					Ok(0) => {
+						println!("🐞 [MAC DEBUG] PTY reader got EOF");
+						break; // EOF
+					}
 					Ok(n) => {
+						let data_str = String::from_utf8_lossy(&buf[..n]);
+						println!("🐞 [MAC DEBUG] PTY read {} bytes: {:?}", n, data_str);
+						
 						let events = {
 							let mut s = state.lock().unwrap();
 							s.process_input(&buf[..n])
 						};
+						
+						println!("🐞 [MAC DEBUG] Generated {} events", events.len());
+						for (i, event) in events.iter().enumerate() {
+							match event {
+								TerminalEvent::NewLines { lines, .. } => {
+									println!("🐞   Event {}: NewLines with {} lines", i, lines.len());
+								}
+								TerminalEvent::ScreenUpdate { screen, .. } => {
+									println!("🐞   Event {}: ScreenUpdate with {} lines", i, screen.len());
+								}
+								TerminalEvent::CursorMove { line, col, .. } => {
+									println!("🐞   Event {}: CursorMove to ({}, {})", i, line, col);
+								}
+								TerminalEvent::Patch { line, items, .. } => {
+									println!("🐞   Event {}: Patch line {} with {} items", i, line, items.len());
+								}
+								TerminalEvent::Scroll { direction, amount, .. } => {
+									println!("🐞   Event {}: Scroll {:?} by {}", i, direction, amount);
+								}
+							}
+						}
+						
 						if !events.is_empty() {
 							if let Err(e) = event_tx.send(events) {
 								eprintln!("Failed to send events to channel: {}", e);
