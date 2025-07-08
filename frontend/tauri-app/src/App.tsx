@@ -32,14 +32,11 @@ function App() {
 	const { userEmail, loading, error: _error, setUserEmail } = useUserConfig();
 	const [isMaximized, setIsMaximized] = useState(false);
 	const [interpreter, setInterpreter] = useState<Interpreter | null>(null);
-	const [showTitlebar, setShowTitlebar] = useState(false);
 	const [selectedGitProjectId, setSelectedGitProjectId] = useState<string | null>(null);
 	const [showDiffManagement, setShowDiffManagement] = useState(false);
 	const [diffManagementState, setDiffManagementState] = useState<any>(null);
 	const [showCommunicationPalette, setShowCommunicationPalette] = useState(false);
 	const { isLightTheme } = store;
-
-	const titleBarHoveredRef = useRef(false);
 
 	useEffect(() => {
 		const unlistenUserEmail = listen<string>(
@@ -186,127 +183,102 @@ function App() {
 				<div className="w-full h-full max-h-full flex flex-col justify-between gap-1.5 p-2">
 					{/* Custom Titlebar */}
 					<div
-						onMouseEnter={() => {
-							titleBarHoveredRef.current = true;
-
-							setTimeout(() => {
-								console.log("titleBarHovered", titleBarHoveredRef.current);
-								if (titleBarHoveredRef.current) {
-									setShowTitlebar(true);
-								}
-							}, 400);
-						}}
-						onMouseLeave={() => {
-							titleBarHoveredRef.current = false;
-
-							setTimeout(() => {
-								if (!titleBarHoveredRef.current) {
-									setShowTitlebar(false);
-								}
-							}, 1000);
-						}}
+						data-tauri-drag-region
 						className={cn(
-							"flex w-full items-center outline-0 justify-center rounded-md select-none relative z-50  transition-[height] border-[var(--acc-400-50)]",
-							showTitlebar
-								? "h-fit py-1"
-								: "h-[3px] hover:h-3 not-hover:bg-[var(--base-400-20)] hover:border-(length:--border)",
+							"flex w-full h-fit p-0 pl-1 items-center outline-0 justify-between rounded-md select-none relative z-50  transition-[height] border-[var(--acc-400-50)]",
 						)}
 					>
-						{showTitlebar && (
-							<>
-								<span
-									data-tauri-drag-region
-									className={cn(
-										"starting:opacity-0 text-[var(--base-500)] opacity-100 text-sm  font-sans w-full text-center",
-									)}
-								>
-									Ariana IDE
-								</span>
-								<div className="absolute flex right-0">
-									<button
-										type="button"
-										onClick={openFileTree}
-										className={cn(
-											"starting:opacity-0 opacity-90 px-1.5 py-1 text-xs bg-[var(--base-400-20)] hover:bg-[var(--acc-400-50)] rounded-l-md transition-colors cursor-pointer",
-										)}
-									>
-										📁
-									</button>
-									<button
-										type="button"
-										onClick={openNewTerminal}
-										className={cn(
-											"starting:opacity-0 opacity-90 px-1.5 py-1 text-xs bg-[var(--base-400-20)] hover:bg-[var(--acc-400-50)] transition-colors cursor-pointer",
-											"starting:opacity-0 opacity-90 px-1.5 py-1 text-xs bg-[var(--base-400-20)] hover:bg-[var(--acc-400-50)] transition-colors cursor-pointer",
-										)}
-									>
-										💻
-									</button>
-									<button
-										type="button"
-										onClick={handleResetSessions}
-										className={cn(
-											"starting:opacity-0 opacity-90 px-1.5 py-1 text-xs bg-[var(--base-400-20)] hover:bg-[var(--acc-400-50)] transition-colors cursor-pointer",
-										)}
-										title="Reset all sessions"
-									>
-										🔄
-									</button>
-									<button
-										type="button"
-										onClick={toggleDiffManagement}
-										className={cn(
-											"starting:opacity-0 opacity-90 px-1.5 py-1 text-xs bg-[var(--base-400-20)] hover:bg-[var(--acc-400-50)] transition-colors cursor-pointer",
-										)}
-									>
-										🔀
-									</button>
-									<button
-										type="button"
-										onClick={handleResetStore}
-										className={cn(
-											"starting:opacity-0 opacity-90 px-1.5 py-1 text-xs bg-[var(--base-400-20)] hover:bg-red-500 hover:text-white rounded-r-md transition-colors cursor-pointer",
-										)}
-										title="Reset Store - Delete all data"
-									>
-										🗑️
-									</button>
-									<button
-										type="button"
-										onClick={toggleCommunicationPalette}
-										className={cn(
-											"starting:opacity-0 opacity-90 px-1.5 py-1 text-xs bg-[var(--base-400-20)] hover:bg-[var(--acc-400-50)] rounded-r-md transition-colors cursor-pointer",
-										)}
-										title="Open Communication Palette"
-									>
-										💬
-									</button>
-								</div>
-								<div className={cn("absolute left-2 gap-2 flex items-center")}>
-									<button
-										type="button"
-										onClick={handleClose}
-										className={cn(
-											"starting:opacity-0 opacity-90 w-3 h-3 rounded-full bg-[var(--base-400-20)] hover:bg-red-400 hover:outline-2 outline-offset-2 outline-red-500/50 hover:opacity-100 transition-colors cursor-pointer",
-										)}
-									></button>
-									<button
-										type="button"
-										onClick={handleMinimize}
-										className={cn(
-											"starting:opacity-0 opacity-90 w-3 h-3 rounded-full bg-[var(--base-400-20)] hover:bg-yellow-400 hover:outline-2 outline-offset-2 outline-yellow-500/50 hover:opacity-100 transition-colors cursor-pointer",
-										)}
-									></button>
-									<button
-										type="button"
-										onClick={handleMaximize}
-										className={cn(
-											"starting:opacity-0 opacity-90 w-3 h-3 rounded-full  bg-[var(--base-400-20)] hover:bg-green-400 hover:outline-2 outline-offset-2 outline-green-500/50 hover:opacity-100 transition-colors cursor-pointer",
-										)}
-									></button>
-								</div>
-							</>
-						)}
+						<div className={cn("gap-2 flex items-center")}>
+							<button
+								type="button"
+								onClick={handleClose}
+								className={cn(
+									"starting:opacity-0 opacity-90 w-3 h-3 rounded-full bg-[var(--base-400-20)] hover:bg-red-400 hover:outline-2 outline-offset-2 outline-red-500/50 hover:opacity-100 transition-colors cursor-pointer",
+								)}
+							></button>
+							<button
+								type="button"
+								onClick={handleMinimize}
+								className={cn(
+									"starting:opacity-0 opacity-90 w-3 h-3 rounded-full bg-[var(--base-400-20)] hover:bg-yellow-400 hover:outline-2 outline-offset-2 outline-yellow-500/50 hover:opacity-100 transition-colors cursor-pointer",
+								)}
+							></button>
+							<button
+								type="button"
+								onClick={handleMaximize}
+								className={cn(
+									"starting:opacity-0 opacity-90 w-3 h-3 rounded-full  bg-[var(--base-400-20)] hover:bg-green-400 hover:outline-2 outline-offset-2 outline-green-500/50 hover:opacity-100 transition-colors cursor-pointer",
+								)}
+							></button>
+						</div>
+						{/* <span
+							data-tauri-drag-region
+							className={cn(
+								"starting:opacity-0 text-[var(--base-500)] opacity-100 text-sm  font-sans w-full text-center",
+							)}
+						>
+							Ariana IDE
+						</span> */}
+						<div className="group flex">
+							<button
+								type="button"
+								onClick={openFileTree}
+								className={cn(
+									"opacity-0 group-hover:opacity-90 px-1.5 py-1 text-xs bg-[var(--base-400-20)] hover:bg-[var(--acc-400-50)] rounded-l-md transition-colors cursor-pointer",
+								)}
+							>
+								📁
+							</button>
+							<button
+								type="button"
+								onClick={openNewTerminal}
+								className={cn(
+									"opacity-0 group-hover:opacity-90 px-1.5 py-1 text-xs bg-[var(--base-400-20)] hover:bg-[var(--acc-400-50)] transition-colors cursor-pointer",
+									"opacity-0 group-hover:opacity-90 px-1.5 py-1 text-xs bg-[var(--base-400-20)] hover:bg-[var(--acc-400-50)] transition-colors cursor-pointer",
+								)}
+							>
+								💻
+							</button>
+							<button
+								type="button"
+								onClick={handleResetSessions}
+								className={cn(
+									"opacity-0 group-hover:opacity-90 px-1.5 py-1 text-xs bg-[var(--base-400-20)] hover:bg-[var(--acc-400-50)] transition-colors cursor-pointer",
+								)}
+								title="Reset all sessions"
+							>
+								🔄
+							</button>
+							<button
+								type="button"
+								onClick={toggleDiffManagement}
+								className={cn(
+									"opacity-0 group-hover:opacity-90 px-1.5 py-1 text-xs bg-[var(--base-400-20)] hover:bg-[var(--acc-400-50)] transition-colors cursor-pointer",
+								)}
+							>
+								🔀
+							</button>
+							<button
+								type="button"
+								onClick={handleResetStore}
+								className={cn(
+									"opacity-0 group-hover:opacity-90 px-1.5 py-1 text-xs bg-[var(--base-400-20)] hover:bg-red-500 hover:text-white transition-colors cursor-pointer",
+								)}
+								title="Reset Store - Delete all data"
+							>
+								🗑️
+							</button>
+							<button
+								type="button"
+								onClick={toggleCommunicationPalette}
+								className={cn(
+									"opacity-0 group-hover:opacity-90 px-1.5 py-1 text-xs bg-[var(--base-400-20)] hover:bg-[var(--acc-400-50)] rounded-r-md transition-colors cursor-pointer",
+								)}
+								title="Open Communication Palette"
+							>
+								💬
+							</button>
+						</div>
 					</div>
 
 					{/* Show interpreter loading status */}
@@ -347,7 +319,7 @@ function App() {
 											onClose={() => setShowDiffManagement(false)}
 											initialState={diffManagementState}
 											onStateChange={setDiffManagementState}
-											mainTitlebarVisible={showTitlebar}
+											mainTitlebarVisible={true}
 										/>
 									</div>
 								</div>
