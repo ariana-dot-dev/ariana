@@ -250,11 +250,49 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	// Private methods
 
 	private setupTerminalListeners(): void {
-		if (!this.terminalId) return;
+		if (!this.terminalId) {
+			console.error(this.logPrefix, "❌ No terminalId available for setting up listeners");
+			return;
+		}
 
-		this.onTerminalEvent(this.terminalId, (events: TerminalEvent[]) => {
-			this.queueEventBatch(events);
-		});
+		console.log(this.logPrefix, "🔧 Setting up terminal event listener for terminal:", this.terminalId);
+		
+		try {
+			this.onTerminalEvent(this.terminalId, (events: TerminalEvent[]) => {
+				console.log(this.logPrefix, "🎭 ClaudeCodeAgent received events:", events.length);
+				
+				// Log event types and content for debugging
+				events.forEach((event, i) => {
+					console.log(this.logPrefix, `📋 Event ${i}: type="${event.type}"`);
+					if (event.type === 'screenUpdate' && event.screen) {
+						console.log(this.logPrefix, `📺 Screen has ${event.screen.length} lines`);
+						event.screen.slice(0, 3).forEach((line, lineIdx) => {
+							const lineText = line.map(item => item.lexeme).join('');
+							if (lineText.trim()) {
+								console.log(this.logPrefix, `📺   Screen line ${lineIdx}: "${lineText}"`);
+							}
+						});
+					}
+					if (event.type === 'newLines' && event.lines) {
+						console.log(this.logPrefix, `📝 New lines: ${event.lines.length}`);
+						event.lines.slice(0, 3).forEach((line, lineIdx) => {
+							const lineText = line.map(item => item.lexeme).join('');
+							if (lineText.trim()) {
+								console.log(this.logPrefix, `📝   New line ${lineIdx}: "${lineText}"`);
+							}
+						});
+					}
+					if (event.type === 'cursorMove') {
+						console.log(this.logPrefix, `🖱️ Cursor moved to line=${event.line}, col=${event.col}`);
+					}
+				});
+				
+				this.queueEventBatch(events);
+			});
+			console.log(this.logPrefix, "✅ ClaudeCodeAgent event listener setup completed");
+		} catch (error) {
+			console.error(this.logPrefix, "❌ Error setting up ClaudeCodeAgent event listener:", error);
+		}
 	}
 
 	private queueEventBatch(events: TerminalEvent[]): void {
