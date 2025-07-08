@@ -624,7 +624,7 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 											"group rounded-lg rounded-br-2xl transition-all p-0.5 bg-[var(--base-200)]",
 											currentPrompt.trim() && canEdit
 												? "cursor-pointer hover:rounded-3xl hover:bg-[var(--acc-200)] opacity-50 hover:opacity-100"
-												: "opacity-0 pointer-events-none",
+												: "opacity-30 pointer-events-auto cursor-not-allowed",
 										)}
 									>
 										<div className="flex overflow-hidden relative p-0.5 bg-[var(--whitest)] rounded-lg group-hover:rounded-3xl rounded-br-2xl transition-all">
