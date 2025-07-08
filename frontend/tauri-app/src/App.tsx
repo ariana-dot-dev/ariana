@@ -324,7 +324,7 @@ function App() {
 					{selectedGitProjectId === null ? (
 						<div className="z-10 h-fit w-full max-h-full flex flex-col overflow-hidden gap-12">
 							<div className="flex flex-col items-center flex-shrink-0 gap-3 opacity-50 text-[var(--acc-700)]">
-								<div className="w-24">
+								<div className="w-28 p-2">
 									<Logo className="hover:scale-[108%] cursor-crosshair transition-all" />
 								</div>
 								<h1 className="text-lg">
@@ -390,7 +390,7 @@ function App() {
 												}
 												
 												// Trigger store update to refresh UI
-												store.updateGitProject(selectedProject);
+												store.updateGitProject(selectedProject.id);
 												
 												return {
 													success: true,
