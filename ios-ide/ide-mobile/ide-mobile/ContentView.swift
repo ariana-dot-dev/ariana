@@ -102,7 +102,12 @@ struct ContentView: View {
                         selectedChatId: $selectedChatId,
                         chats: chats,
                         isLoadingChats: false,
-                        onBackToProjects: nil
+                        onBackToProjects: nil,
+                        onNewChat: {
+                            // Legacy ContentView doesn't support new chat creation
+                            print("New chat not supported in legacy view")
+                        },
+                        project: nil
                     )
                     .transition(.move(edge: .leading))
                     .animation(.easeInOut(duration: 0.3), value: showingMenu)

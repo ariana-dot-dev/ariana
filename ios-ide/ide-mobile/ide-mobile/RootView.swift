@@ -41,13 +41,26 @@ struct ChatView: View {
     @State private var selectedChatId: Int?
     @State private var chats: [AgentChat] = []
     @State private var isLoadingChats = true
+    @State private var draftChat: AgentChat?
+    @State private var isDraftMode = false
     
     private var selectedChatName: String {
+        if isDraftMode, let draftChat = draftChat {
+            return draftChat.name
+        }
         if let selectedChatId = selectedChatId,
            let chat = chats.first(where: { $0.id == selectedChatId }) {
             return chat.name
         }
         return chats.first?.name ?? "No Chat"
+    }
+    
+    private var allChats: [AgentChat] {
+        var allChats = chats
+        if let draftChat = draftChat {
+            allChats.insert(draftChat, at: 0) // Add draft at the beginning
+        }
+        return allChats
     }
     
     var body: some View {
@@ -133,9 +146,11 @@ struct ChatView: View {
                     ChatMenuView(
                         isPresented: $showingMenu,
                         selectedChatId: $selectedChatId,
-                        chats: chats,
+                        chats: allChats,
                         isLoadingChats: isLoadingChats,
-                        onBackToProjects: onBackToProjects
+                        onBackToProjects: onBackToProjects,
+                        onNewChat: createNewDraftChat,
+                        project: project
                     )
                     .transition(.move(edge: .leading))
                     .animation(.easeInOut(duration: 0.3), value: showingMenu)
@@ -175,9 +190,36 @@ struct ChatView: View {
         }
     }
     
+    private func createNewDraftChat() {
+        // Create a draft chat with negative ID (local only)
+        let draftChatId = -Int.random(in: 1...1000000)
+        let newDraftChat = AgentChat(
+            id: draftChatId,
+            name: "New Chat",
+            project_id: project.id,
+            user_id: BackendService.currentUserId,
+            status_id: 1,
+            created_at: Date(),
+            updated_at: Date()
+        )
+        
+        draftChat = newDraftChat
+        selectedChatId = draftChatId
+        isDraftMode = true
+        
+        print("📝 Created draft chat: \(newDraftChat.name) with ID: \(draftChatId)")
+    }
+    
     private func handleSubmit() {
         guard !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         
+        // If we're in draft mode, create the chat in the database first
+        if isDraftMode, let draftChat = draftChat {
+            createChatInDatabase(draftChat: draftChat, firstMessage: inputText)
+            return
+        }
+        
+        // Normal message submission
         currentRequest = inputText
         isLoading = true
         showingTasks = false
@@ -195,6 +237,49 @@ struct ChatView: View {
         }
         
         inputText = ""
+    }
+    
+    private func createChatInDatabase(draftChat: AgentChat, firstMessage: String) {
+        print("💾 Creating chat in database: \(draftChat.name)")
+        
+        BackendService.shared.createChat(name: draftChat.name, projectId: project.id) { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let createdChat):
+                    print("✅ Chat created in database with ID: \(createdChat.id)")
+                    
+                    // Replace draft with real chat
+                    self.chats.append(createdChat)
+                    self.selectedChatId = createdChat.id
+                    self.draftChat = nil
+                    self.isDraftMode = false
+                    
+                    // Now submit the first message
+                    self.currentRequest = firstMessage
+                    self.isLoading = true
+                    self.showingTasks = false
+                    
+                    BackendService.shared.submitRequest(firstMessage) { messageResult in
+                        DispatchQueue.main.async {
+                            switch messageResult {
+                            case .success:
+                                self.pollForCompletion()
+                            case .failure(let error):
+                                print("Error submitting first message: \(error)")
+                                self.isLoading = false
+                            }
+                        }
+                    }
+                    
+                case .failure(let error):
+                    print("❌ Error creating chat: \(error)")
+                    // Keep in draft mode, show error to user
+                    // TODO: Show error alert
+                }
+                
+                self.inputText = ""
+            }
+        }
     }
     
     private func pollForCompletion() {
