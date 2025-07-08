@@ -144,14 +144,38 @@ class BackendService {
             if let data = data {
                 do {
                     let decoder = JSONDecoder()
-                    let formatter = DateFormatter()
-                    formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"
-                    formatter.timeZone = TimeZone(abbreviation: "UTC")
-                    decoder.dateDecodingStrategy = .formatted(formatter)
+                    
+                    // Use ISO8601 date decoder which handles various formats
+                    let formatter = ISO8601DateFormatter()
+                    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                    decoder.dateDecodingStrategy = .custom { decoder in
+                        let container = try decoder.singleValueContainer()
+                        let dateString = try container.decode(String.self)
+                        
+                        // Try ISO8601 first
+                        if let date = formatter.date(from: dateString) {
+                            return date
+                        }
+                        
+                        // Fallback to custom format
+                        let fallbackFormatter = DateFormatter()
+                        fallbackFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'"
+                        fallbackFormatter.timeZone = TimeZone(abbreviation: "UTC")
+                        
+                        if let date = fallbackFormatter.date(from: dateString) {
+                            return date
+                        }
+                        
+                        throw DecodingError.dataCorruptedError(in: container, debugDescription: "Cannot parse date: \(dateString)")
+                    }
                     
                     let projects = try decoder.decode([Project].self, from: data)
                     completion(.success(projects))
                 } catch {
+                    print("🔍 JSON Decoding Error: \(error)")
+                    if let jsonString = String(data: data, encoding: .utf8) {
+                        print("📄 Raw JSON Response: \(jsonString)")
+                    }
                     completion(.failure(error))
                 }
             } else {

@@ -88,7 +88,8 @@ struct ContentView: View {
                     ChatMenuView(
                         isPresented: $showingMenu,
                         selectedChat: $selectedChat,
-                        chats: chats
+                        chats: chats,
+                        onBackToProjects: nil
                     )
                     .transition(.move(edge: .leading))
                     .animation(.easeInOut(duration: 0.3), value: showingMenu)

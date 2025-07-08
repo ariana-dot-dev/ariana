@@ -4,6 +4,7 @@ struct ChatMenuView: View {
     @Binding var isPresented: Bool
     @Binding var selectedChat: String
     let chats: [String]
+    let onBackToProjects: (() -> Void)?
     
     var body: some View {
         HStack(spacing: 0) {
@@ -14,6 +15,27 @@ struct ChatMenuView: View {
                         .fontWeight(.bold)
                         .padding(.horizontal, 20)
                         .padding(.top, 20)
+                    
+                    // Back to Projects button
+                    if let onBackToProjects = onBackToProjects {
+                        Button(action: {
+                            onBackToProjects()
+                            isPresented = false
+                        }) {
+                            HStack {
+                                Image(systemName: "arrow.left.circle.fill")
+                                    .foregroundColor(.orange)
+                                Text("Back to Projects")
+                                    .foregroundColor(.primary)
+                                Spacer()
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 12)
+                            .background(Color.orange.opacity(0.1))
+                            .cornerRadius(8)
+                        }
+                        .padding(.horizontal, 20)
+                    }
                     
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(chats, id: \.self) { chat in
@@ -75,6 +97,9 @@ struct ChatMenuView: View {
     ChatMenuView(
         isPresented: .constant(true),
         selectedChat: .constant("Chat 1"),
-        chats: ["Chat 1", "Chat 2", "Chat 3"]
+        chats: ["Chat 1", "Chat 2", "Chat 3"],
+        onBackToProjects: {
+            print("Back to projects tapped")
+        }
     )
 }

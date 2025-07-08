@@ -46,13 +46,6 @@ struct ChatView: View {
             ZStack {
                 VStack(spacing: 0) {
                     HStack {
-                        Button(action: onBackToProjects) {
-                            Image(systemName: "arrow.left")
-                                .font(.system(size: 20))
-                                .foregroundColor(.primary)
-                                .padding(12)
-                        }
-                        
                         Button(action: {
                             showingMenu = true
                         }) {
@@ -73,6 +66,15 @@ struct ChatView: View {
                         }
                         
                         Spacer()
+                        
+                        // Invisible placeholder to balance the left menu button
+                        Button(action: {}) {
+                            Image(systemName: "line.horizontal.3")
+                                .font(.system(size: 20))
+                                .foregroundColor(.clear)
+                                .padding(12)
+                        }
+                        .disabled(true)
                     }
                     .padding(.horizontal, 8)
                     .padding(.top, 8)
@@ -123,7 +125,8 @@ struct ChatView: View {
                     ChatMenuView(
                         isPresented: $showingMenu,
                         selectedChat: $selectedChat,
-                        chats: chats
+                        chats: chats,
+                        onBackToProjects: onBackToProjects
                     )
                     .transition(.move(edge: .leading))
                     .animation(.easeInOut(duration: 0.3), value: showingMenu)
