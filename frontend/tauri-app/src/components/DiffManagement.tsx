@@ -14,14 +14,11 @@ interface DiffManagementProps {
 }
 
 export default function DiffManagement({ onClose, initialState, onStateChange, mainTitlebarVisible }: DiffManagementProps) {
-  console.log("[DIFFMANAGEMENT] Component rendering...");
-  
+  // Component rendering
   let { selectedGitProject } = useGitProject();
-  console.log("[DIFFMANAGEMENT] Selected git project:", selectedGitProject);
   
   // Add safety check for git project
   if (!selectedGitProject) {
-    console.warn("[DIFFMANAGEMENT] No git project available");
     return (
       <div className="flex-1 flex flex-col h-full bg-[var(--base-100)] p-8">
         <h1 className="text-2xl text-[var(--acc-600)] mb-4">No Git Project</h1>
@@ -83,35 +80,29 @@ export default function DiffManagement({ onClose, initialState, onStateChange, m
 
   // Initialize diff service with current git project directory
   useEffect(() => {
-    console.log("[COMPONENT] Git project:", selectedGitProject);
     if (selectedGitProject?.root) {
       const workingDirectory = osSessionGetWorkingDirectory(selectedGitProject.root);
       if (workingDirectory) {
-        console.log("[COMPONENT] Setting diff service working directory to:", workingDirectory);
         diffService.setWorkingDirectory(workingDirectory);
+        diffService.setOsSession(selectedGitProject.root);
         // Auto-load branches when git project is available
         loadBranches();
       } else {
-        console.warn("[COMPONENT] Could not extract working directory from git project");
-        setBranchesError("Could not extract working directory from git project.");
+        console.warn("Could not extract working directory from git project");
       }
-    } else {
-      console.warn("[COMPONENT] No git project available");
-      setBranchesError("No git project selected. Please select a git repository first.");
     }
   }, [selectedGitProject]);
 
-  // Log state restoration for debugging
+  // Initialize with saved state
   useEffect(() => {
     if (initialState) {
-      console.log("DiffManagement initialized with saved state:", initialState);
+      // State restoration handled in component initialization
     }
   }, []);
 
   // Load commits when base branch changes
   useEffect(() => {
     if (selectedBaseBranch) {
-      console.log(`Loading commits for base branch: ${selectedBaseBranch}`);
       loadBranchCommits(selectedBaseBranch, true);
     }
   }, [selectedBaseBranch]);
@@ -119,7 +110,6 @@ export default function DiffManagement({ onClose, initialState, onStateChange, m
   // Load commits when target branch changes
   useEffect(() => {
     if (selectedTargetBranch) {
-      console.log(`Loading commits for target branch: ${selectedTargetBranch}`);
       loadBranchCommits(selectedTargetBranch, false);
     }
   }, [selectedTargetBranch]);
@@ -172,47 +162,19 @@ export default function DiffManagement({ onClose, initialState, onStateChange, m
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // Load branches
   const loadBranches = async () => {
-    console.log("[COMPONENT] loadBranches method entry");
     try {
-      console.log("[COMPONENT] loadBranches called for git project:", selectedGitProject?.root);
-      setBranchesLoading(true);
-      setBranchesError(null);
+      setLoading(true);
+      setError(null);
       
-      console.log("[COMPONENT] About to call getGitBranches...");
-      const gitBranches = await diffService.getGitBranches();
-      console.log("[COMPONENT] getGitBranches returned successfully");
-      console.log("[COMPONENT] Got branches:", gitBranches.length);
-      console.log("[COMPONENT] Branch data:", gitBranches);
-      
-      console.log("[COMPONENT] Setting branches state...");
-      setBranches(gitBranches);
-      console.log("[COMPONENT] Branches state set successfully");
-      
-      // Set default selections - main/master as base, current branch as target
-      console.log("[COMPONENT] Finding default branch selections...");
-      const mainBranch = gitBranches.find(b => b.name === 'main' || b.name === 'master');
-      const currentBranch = gitBranches.find(b => b.isCurrentBranch);
-      console.log("[COMPONENT] Main branch found:", mainBranch?.name);
-      console.log("[COMPONENT] Current branch found:", currentBranch?.name);
-      
-      if (mainBranch && currentBranch && mainBranch.name !== currentBranch.name) {
-        console.log("[COMPONENT] Setting main as base, current as target");
-        setSelectedBaseBranch(mainBranch.name);
-        setSelectedTargetBranch(currentBranch.name);
-      } else if (gitBranches.length >= 2) {
-        console.log("[COMPONENT] Setting first two branches as defaults");
-        setSelectedBaseBranch(gitBranches[0].name);
-        setSelectedTargetBranch(gitBranches[1].name);
-      }
-      console.log("[COMPONENT] Default selections complete");
-    } catch (err) {
-      console.error("[COMPONENT] Error in loadBranches:", err);
-      console.error("[COMPONENT] Error stack:", err instanceof Error ? err.stack : "No stack");
-      setBranchesError(err instanceof Error ? err.message : "Failed to load branches");
+      const branches = await diffService.getGitBranches();
+      setBranches(branches);
+    } catch (error) {
+      console.error("Error in loadBranches:", error);
+      setError(error instanceof Error ? error.message : String(error));
     } finally {
-      console.log("[COMPONENT] loadBranches finally block");
-      setBranchesLoading(false);
+      setLoading(false);
     }
   };
 
