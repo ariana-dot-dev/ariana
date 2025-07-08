@@ -608,7 +608,7 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 							)}
 
 							{/* Action Button */}
-							{!currentInProgressTask && (
+							{!currentInProgressTask && currentPrompt.trim().length > 0 && (
 								<motion.div
 									className="absolute left-0 flex justify-end"
 									animate={{

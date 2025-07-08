@@ -185,18 +185,24 @@ export function ProjectDirectoryList({
 	// Show in explorer functionality
 	const showInExplorer = async (path: string) => {
 		try {
-			let explorerPath = path;
-			
-			// Handle WSL paths
+			// Create proper osSession from osSessionKind and path
+			let osSession;
 			if (typeof osSessionKind === "object" && "Wsl" in osSessionKind) {
-				// Convert WSL path to Windows explorer path
-				// Format: \\wsl$\<distribution>\path
-				const distribution = osSessionKind.Wsl;
-				explorerPath = `\\\\wsl$\\${distribution}${path.replace(/\//g, '\\')}\\home`;
+				osSession = {
+					Wsl: {
+						distribution: osSessionKind.Wsl,
+						working_directory: path
+					}
+				};
+			} else {
+				osSession = { Local: path };
 			}
 
-			// Open in system file explorer
-			await invoke("open_path_in_explorer", { path: explorerPath });
+			// Use the new function that properly handles osSession
+			await invoke("open_path_in_explorer_with_os_session", { 
+				path: path, 
+				osSession: osSession 
+			});
 		} catch (error) {
 			console.error("Failed to open in explorer:", error);
 		}

@@ -172,29 +172,46 @@ export const CanvasesList: React.FC<CanvasesListProps> = ({
 			</button>
 
 			{/* Context Menu */}
-			{contextMenu && (
-				<div
-					ref={contextMenuRef}
-					className="fixed z-50 bg-[var(--base-100)] border border-[var(--acc-600)]/20 rounded-md shadow-lg py-1 w-fit flex flex-col"
-					style={{
-						left: contextMenu.x,
-						top: contextMenu.y,
-					}}
-				>
-					<button
-						onClick={() => handleShowInExplorer(contextMenu.canvasId)}
-						className="w-fit min-w-full cursor-pointer px-3 py-2 text-left text-sm hover:bg-[var(--base-200)] text-[var(--blackest)] transition-colors"
+			{contextMenu && (() => {
+				const canvas = canvases.find(c => c.id === contextMenu.canvasId);
+				const isOsSessionReady = canvas?.osSession !== null;
+				
+				return (
+					<div
+						ref={contextMenuRef}
+						className="fixed z-50 bg-[var(--base-100)] border border-[var(--acc-600)]/20 rounded-md shadow-lg py-1 w-fit flex flex-col"
+						style={{
+							left: contextMenu.x,
+							top: contextMenu.y,
+						}}
 					>
-						📁 Show in Explorer
-					</button>
-					<button
-						onClick={() => handleDeleteWorkspace(contextMenu.canvasId)}
-						className="w-fit min-w-full cursor-pointer px-3 py-2 text-left text-sm hover:bg-[var(--negative-200)] text-[var(--negative-800)] transition-colors"
-					>
-						🗑️ Delete agent & its work
-					</button>
-				</div>
-			)}
+						<button
+							onClick={() => isOsSessionReady && handleShowInExplorer(contextMenu.canvasId)}
+							disabled={!isOsSessionReady}
+							className={`w-fit min-w-full px-3 py-2 text-left text-sm transition-colors ${
+								isOsSessionReady 
+									? "cursor-pointer hover:bg-[var(--base-200)] text-[var(--blackest)]" 
+									: "cursor-not-allowed opacity-50 text-[var(--blackest-50)]"
+							}`}
+							title={!isOsSessionReady ? "Agent is still loading, please wait..." : ""}
+						>
+							📁 Show in Explorer
+						</button>
+						<button
+							onClick={() => isOsSessionReady && handleDeleteWorkspace(contextMenu.canvasId)}
+							disabled={!isOsSessionReady}
+							className={`w-fit min-w-full px-3 py-2 text-left text-sm transition-colors ${
+								isOsSessionReady 
+									? "cursor-pointer hover:bg-[var(--negative-200)] text-[var(--negative-800)]" 
+									: "cursor-not-allowed opacity-50 text-[var(--negative-800-50)]"
+							}`}
+							title={!isOsSessionReady ? "Agent is still loading, please wait..." : ""}
+						>
+							🗑️ Delete agent & its work
+						</button>
+					</div>
+				);
+			})()}
 		</>
 	);
 };

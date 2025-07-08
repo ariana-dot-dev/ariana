@@ -122,19 +122,21 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 		
 		try {
 			const canvas = selectedGitProject.canvases.find(c => c.id === canvasId);
-			if (!canvas?.osSession) return;
-
-			let explorerPath = "";
-			if ('Local' in canvas.osSession) {
-				explorerPath = canvas.osSession.Local;
-			} else if ('Wsl' in canvas.osSession) {
-				// Convert WSL path to Windows explorer path
-				explorerPath = `\\\\wsl$\\${canvas.osSession.Wsl.distribution}${canvas.osSession.Wsl.working_directory.replace(/\//g, '\\')}`;
+			if (!canvas?.osSession) {
+				console.warn("Canvas osSession is not ready yet. Cannot open in explorer.");
+				return;
 			}
 
-			if (explorerPath) {
-				await invoke("open_path_in_explorer", { path: explorerPath });
-			}
+			// Get the working directory path for this canvas
+			const workingDir = 'Local' in canvas.osSession 
+				? canvas.osSession.Local 
+				: canvas.osSession.Wsl.working_directory;
+
+			// Use the new function that properly handles osSession
+			await invoke("open_path_in_explorer_with_os_session", { 
+				path: workingDir,
+				osSession: canvas.osSession 
+			});
 		} catch (error) {
 			console.error("Failed to open workspace in explorer:", error);
 		}
@@ -146,7 +148,10 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 		
 		try {
 			const canvas = selectedGitProject.canvases.find(c => c.id === canvasId);
-			if (!canvas?.osSession) return;
+			if (!canvas?.osSession) {
+				console.warn("Canvas osSession is not ready yet. Cannot delete workspace.");
+				return;
+			}
 
 			let deletePath = "";
 			if ('Local' in canvas.osSession) {

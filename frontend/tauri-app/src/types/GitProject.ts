@@ -24,7 +24,7 @@ export interface GitProjectCanvas {
 	id: string;
 	name: string;
 	elements: CanvasElement[];
-	osSession: OsSession; // Each canvas has its own OS session (branch)
+	osSession: OsSession | null; // Each canvas has its own OS session (branch), null until copy is ready
 	taskManager: TaskManager; // Domain model for task management
 	runningProcesses?: ProcessState[]; // Track processes running in this canvas
 	createdAt: number;
@@ -108,14 +108,14 @@ export class GitProject {
 	}
 
 	addCanvas(canvas?: Partial<GitProjectCanvas>): string {
-		const canvasOsSession = canvas?.osSession || this.root; // Fallback to root session
+		const canvasOsSession = canvas?.osSession !== undefined ? canvas.osSession : this.root; // Use provided osSession or fallback to root
 		
 		const newCanvas: GitProjectCanvas = {
 			id: crypto.randomUUID(),
 			name: canvas?.name || "", // No automatic naming
 			elements: canvas?.elements || [
 				// Automatically add a TextArea element for new canvases
-				TextArea.canvasElement(canvasOsSession, "")
+				TextArea.canvasElement(canvasOsSession || this.root, "")
 			],
 			osSession: canvasOsSession,
 			taskManager: canvas?.taskManager || new TaskManager(),
@@ -152,10 +152,10 @@ export class GitProject {
 				return { success: false, error: "Could not determine root directory" };
 			}
 
-			// Create the canvas immediately in loading state with temporary osSession
+			// Create the canvas immediately in loading state with null osSession
 			const canvasId = this.addCanvas({
 				name: `Canvas ${this.canvases.length + 1} (Loading...)`,
-				osSession: this.root, // Temporary, will be replaced when copy is ready
+				osSession: null, // Will be set when copy is ready
 				taskManager: new TaskManager(),
 				lockState: 'loading',
 				...canvas
@@ -202,6 +202,14 @@ export class GitProject {
 			// Update the canvas with the real copy data
 			canvas.name = `Canvas ${this.canvases.indexOf(canvas) + 1} (${copyEntry.branchName})`;
 			canvas.osSession = copyEntry.osSession;
+			
+			// Update all TextArea elements to use the new osSession
+			canvas.elements.forEach(element => {
+				if (element.kind && 'textArea' in element.kind) {
+					element.kind.textArea.osSession = copyEntry.osSession;
+				}
+			});
+			
 			canvas.lockState = 'normal';
 			canvas.copyProgress = undefined;
 			this.lastModified = Date.now();

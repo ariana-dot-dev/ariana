@@ -81,6 +81,7 @@ pub fn run() {
 			execute_command_with_os_session,
 			// System integration commands
 			open_path_in_explorer,
+			open_path_in_explorer_with_os_session,
 			delete_path,
 			delete_path_with_os_session,
 			// Git repository commands
@@ -213,6 +214,11 @@ async fn get_git_hash(
 #[tauri::command]
 async fn open_path_in_explorer(path: String) -> Result<(), String> {
 	filesystem::FileSystemManager::open_in_explorer(&path)
+}
+
+#[tauri::command]
+async fn open_path_in_explorer_with_os_session(path: String, os_session: OsSession) -> Result<(), String> {
+	filesystem::FileSystemManager::open_in_explorer_with_os_session(&path, &os_session)
 }
 
 #[tauri::command]

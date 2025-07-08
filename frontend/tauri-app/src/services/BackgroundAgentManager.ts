@@ -23,6 +23,9 @@ export class BackgroundAgentManager {
 		
 		// Create working directory for the agent with proper path handling
 		const rootDir = osSessionGetWorkingDirectory(rootOsSession);
+		if (!rootDir) {
+			throw new Error("Could not determine root directory");
+		}
 		const randomId = CanvasService.generateRandomId();
 		
 		let agentOsSession: OsSession;
