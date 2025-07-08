@@ -15,7 +15,6 @@ interface ProjectSelectorProps {
 export function ProjectSelector({ onProjectCreated }: ProjectSelectorProps) {
 	const store = useStore();
 	const [selectedKind, setSelectedKind] = useState<OsSessionKind | undefined>();
-	const [selectedPath, setSelectedPath] = useState<string | undefined>();
 	
 	// Create project flow state
 	const [isCreatingProject, setIsCreatingProject] = useState(false);
@@ -26,11 +25,6 @@ export function ProjectSelector({ onProjectCreated }: ProjectSelectorProps) {
 
 	const handleKindSelect = (kind: OsSessionKind) => {
 		setSelectedKind(kind);
-		setSelectedPath(undefined); // Reset path when kind changes
-	};
-
-	const handlePathSelect = (path: string) => {
-		setSelectedPath(path);
 	};
 
 	const findExistingProjectForPath = (path: string): GitProject | null => {
@@ -113,11 +107,54 @@ export function ProjectSelector({ onProjectCreated }: ProjectSelectorProps) {
 					}
 				}
 
-				setSelectedPath(convertedPath);
+				// Automatically open the project after path selection
+				await openProjectAtPath(convertedPath);
 			}
 		} catch (error) {
 			console.error("Failed to open directory picker:", error);
 			alert("Failed to open directory picker. Please try again.");
+		}
+	};
+
+	const openProjectAtPath = async (projectPath: string) => {
+		if (!selectedKind) return;
+
+		try {
+			// Check if git init is needed before creating session
+			await handleGitInitIfNeeded(projectPath);
+
+			// First, check if there's an existing project that covers this path
+			const existingProject = findExistingProjectForPath(projectPath);
+			if (existingProject) {
+				console.log("Found existing project for path:", projectPath, existingProject);
+				onProjectCreated(existingProject.id);
+				return;
+			}
+
+			// Create OsSession based on selected kind and path
+			let osSession: OsSession;
+			if (selectedKind === "Local") {
+				osSession = { Local: projectPath };
+			} else if (typeof selectedKind === "object" && "Wsl" in selectedKind) {
+				osSession = {
+					Wsl: {
+						distribution: selectedKind.Wsl,
+						working_directory: projectPath,
+					},
+				};
+			} else {
+				console.error("Invalid OS session kind");
+				return;
+			}
+
+			// Create GitProject with the OsSession as root
+			const gitProject = new GitProject(osSession);
+			const projectIndex = store.addGitProject(gitProject);
+
+			onProjectCreated(projectIndex);
+		} catch (error) {
+			console.error("Failed to open project:", error);
+			alert("Failed to open project. Please try again.");
 		}
 	};
 
@@ -293,42 +330,7 @@ export function ProjectSelector({ onProjectCreated }: ProjectSelectorProps) {
 		}
 	};
 
-	const handleCreateSession = async () => {
-		if (!selectedKind || !selectedPath) return;
 
-		// Check if git init is needed before creating session
-		await handleGitInitIfNeeded(selectedPath);
-
-		// First, check if there's an existing project that covers this path
-		const existingProject = findExistingProjectForPath(selectedPath);
-		if (existingProject) {
-			console.log("Found existing project for path:", selectedPath, existingProject);
-			onProjectCreated(existingProject.id);
-			return;
-		}
-
-		// Create OsSession based on selected kind and path
-		let osSession: OsSession;
-		if (selectedKind === "Local") {
-			osSession = { Local: selectedPath };
-		} else if (typeof selectedKind === "object" && "Wsl" in selectedKind) {
-			osSession = {
-				Wsl: {
-					distribution: selectedKind.Wsl,
-					working_directory: selectedPath,
-				},
-			};
-		} else {
-			console.error("Invalid OS session kind");
-			return;
-		}
-
-		// Create GitProject with the OsSession as root
-		const gitProject = new GitProject(osSession);
-		const projectIndex = store.addGitProject(gitProject);
-
-		onProjectCreated(projectIndex);
-	};
 
 	return (
 		<div className="flex gap-16 w-full max-w-full h-fit max-h-full px-6 justify-center overflow-hidden">
@@ -458,23 +460,7 @@ export function ProjectSelector({ onProjectCreated }: ProjectSelectorProps) {
 						</div>
 					</div>
 
-					{/* Selected Path Display and Open Button */}
-					{selectedPath && (
-						<div className="w-64 flex-shrink-0 flex flex-col items-center gap-3">
-							<div className="text-sm text-[var(--base-600)] w-full text-center">
-								<div className="font-medium mb-2">Selected: {selectedPath}</div>
-							</div>
-							<button
-								onClick={handleCreateSession}
-								className="px-6 py-3 bg-[var(--acc-400)] hover:bg-[var(--acc-500)] text-[var(--whitest)] rounded-md transition-colors flex items-center justify-center gap-2"
-							>
-								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="bi bi-folder" viewBox="0 0 16 16">
-									<path d="M.54 3.87.5 3a2 2 0 0 1 2-2h3.672a2 2 0 0 1 1.414.586l.828.828A2 2 0 0 0 9.828 3h3.982a2 2 0 0 1 1.992 2.181l-.637 7A2 2 0 0 1 13.174 14H2.826a2 2 0 0 1-1.991-1.819l-.637-7a2 2 0 0 1 .342-1.31zM2.19 4a1 1 0 0 0-.996 1.09l.637 7a1 1 0 0 0 .995.91h10.348a1 1 0 0 0 .995-.91l.637-7A1 1 0 0 0 13.81 4zm4.69-1.707A1 1 0 0 0 6.172 2H2.5a1 1 0 0 0-1 .981l.006.139q.323-.119.684-.12h5.396z"/>
-								</svg>
-								Open Project
-							</button>
-						</div>
-					)}
+
 				</div>
 			)}
 
