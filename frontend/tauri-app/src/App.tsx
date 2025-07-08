@@ -341,7 +341,7 @@ function App() {
 						<GitProjectProvider gitProject={store.getGitProject(selectedGitProjectId) || null}>
 							{/* Diff Management Modal */}
 							{showDiffManagement && (
-								<div className="fixed inset-0 bg-transparent flex items-center justify-center z-50">
+								<div className="fixed inset-0 bg-[var(--base-100)] flex items-center justify-center z-[100]">
 									<div className="bg-[var(--base-100)] rounded-lg w-full h-full flex flex-col">
 										<DiffManagement 
 											onClose={() => setShowDiffManagement(false)}
