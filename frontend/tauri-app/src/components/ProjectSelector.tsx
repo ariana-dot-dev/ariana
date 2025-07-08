@@ -289,9 +289,9 @@ export function ProjectSelector({ onProjectCreated }: ProjectSelectorProps) {
 			<div className="flex flex-wrap w-fit items-start gap-8">
 				{/* OS Session Kind Selector */}
 				<div className="flex-shrink-0 flex flex-col gap-4">
-					{/* <div className="">
-						<h3 className="text-lg text-[var(--base-700)]">Open existing project</h3>
-					</div> */}
+					<div className="flex items-center justify-between">
+						<h2 className="text-lg font-medium text-[var(--base-700)]">Start</h2>
+					</div>
 					<div className="flex flex-col gap-4">
 						<OsSessionKindSelector
 							onSelect={handleKindSelect}
