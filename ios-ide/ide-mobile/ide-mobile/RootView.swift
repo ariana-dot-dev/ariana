@@ -38,8 +38,17 @@ struct ChatView: View {
     @State private var showingTasks = false
     @StateObject private var voiceInputManager = VoiceInputManager()
     @State private var showingMenu = false
-    @State private var selectedChat = "Chat 1"
-    @State private var chats = ["Chat 1", "Chat 2", "Chat 3"]
+    @State private var selectedChatId: Int?
+    @State private var chats: [AgentChat] = []
+    @State private var isLoadingChats = true
+    
+    private var selectedChatName: String {
+        if let selectedChatId = selectedChatId,
+           let chat = chats.first(where: { $0.id == selectedChatId }) {
+            return chat.name
+        }
+        return chats.first?.name ?? "No Chat"
+    }
     
     var body: some View {
         NavigationView {
@@ -60,7 +69,7 @@ struct ChatView: View {
                         VStack(spacing: 2) {
                             Text(project.emoji)
                                 .font(.title3)
-                            Text(selectedChat)
+                            Text(selectedChatName)
                                 .font(.caption)
                                 .foregroundColor(.gray)
                         }
@@ -99,8 +108,11 @@ struct ChatView: View {
                 } else {
                     Spacer()
                     VStack(spacing: 16) {
-                        Text(project.emoji)
-                            .font(.system(size: 80))
+                        Image("app-icon")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 80, height: 80)
+                            .opacity(0.5)
                         
                         Text("What do we vibecode today?")
                             .font(.title2)
@@ -124,8 +136,9 @@ struct ChatView: View {
                 if showingMenu {
                     ChatMenuView(
                         isPresented: $showingMenu,
-                        selectedChat: $selectedChat,
+                        selectedChatId: $selectedChatId,
                         chats: chats,
+                        isLoadingChats: isLoadingChats,
                         onBackToProjects: onBackToProjects
                     )
                     .transition(.move(edge: .leading))
@@ -137,6 +150,31 @@ struct ChatView: View {
         .onReceive(voiceInputManager.$transcribedText) { text in
             if !text.isEmpty && !voiceInputManager.isRecording {
                 inputText = text
+            }
+        }
+        .onAppear {
+            loadChats()
+        }
+    }
+    
+    private func loadChats() {
+        isLoadingChats = true
+        
+        BackendService.shared.fetchChats(for: project.id) { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let fetchedChats):
+                    self.chats = fetchedChats
+                    // Select first chat by default if none selected
+                    if self.selectedChatId == nil && !fetchedChats.isEmpty {
+                        self.selectedChatId = fetchedChats.first?.id
+                    }
+                case .failure(let error):
+                    print("Error loading chats: \(error)")
+                    // Fallback to empty chats array
+                    self.chats = []
+                }
+                self.isLoadingChats = false
             }
         }
     }

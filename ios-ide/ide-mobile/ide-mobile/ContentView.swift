@@ -15,8 +15,20 @@ struct ContentView: View {
     @State private var showingTasks = false
     @StateObject private var voiceInputManager = VoiceInputManager()
     @State private var showingMenu = false
-    @State private var selectedChat = "Chat 1"
-    @State private var chats = ["Chat 1", "Chat 2", "Chat 3"]
+    @State private var selectedChatId: Int? = 1
+    @State private var chats: [AgentChat] = [
+        AgentChat(id: 1, name: "Chat 1", project_id: 1, user_id: 1, status_id: 1, created_at: Date(), updated_at: Date()),
+        AgentChat(id: 2, name: "Chat 2", project_id: 1, user_id: 1, status_id: 1, created_at: Date(), updated_at: Date()),
+        AgentChat(id: 3, name: "Chat 3", project_id: 1, user_id: 1, status_id: 1, created_at: Date(), updated_at: Date())
+    ]
+    
+    private var selectedChatName: String {
+        if let selectedChatId = selectedChatId,
+           let chat = chats.first(where: { $0.id == selectedChatId }) {
+            return chat.name
+        }
+        return chats.first?.name ?? "Chat 1"
+    }
     
     var body: some View {
         NavigationView {
@@ -34,7 +46,7 @@ struct ContentView: View {
                         
                         Spacer()
                         
-                        Text(selectedChat)
+                        Text(selectedChatName)
                             .font(.headline)
                             .foregroundColor(.primary)
                         
@@ -87,8 +99,9 @@ struct ContentView: View {
                 if showingMenu {
                     ChatMenuView(
                         isPresented: $showingMenu,
-                        selectedChat: $selectedChat,
+                        selectedChatId: $selectedChatId,
                         chats: chats,
+                        isLoadingChats: false,
                         onBackToProjects: nil
                     )
                     .transition(.move(edge: .leading))

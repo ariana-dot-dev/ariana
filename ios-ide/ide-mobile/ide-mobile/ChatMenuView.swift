@@ -2,8 +2,9 @@ import SwiftUI
 
 struct ChatMenuView: View {
     @Binding var isPresented: Bool
-    @Binding var selectedChat: String
-    let chats: [String]
+    @Binding var selectedChatId: Int?
+    let chats: [AgentChat]
+    let isLoadingChats: Bool
     let onBackToProjects: (() -> Void)?
     
     var body: some View {
@@ -38,25 +39,49 @@ struct ChatMenuView: View {
                     }
                     
                     VStack(alignment: .leading, spacing: 8) {
-                        ForEach(chats, id: \.self) { chat in
-                            Button(action: {
-                                selectedChat = chat
-                                isPresented = false
-                            }) {
-                                HStack {
-                                    Image(systemName: "message.circle.fill")
-                                        .foregroundColor(.blue)
-                                    Text(chat)
-                                        .foregroundColor(.primary)
-                                    Spacer()
-                                    if selectedChat == chat {
-                                        Image(systemName: "checkmark")
+                        if isLoadingChats {
+                            HStack {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                Text("Loading chats...")
+                                    .foregroundColor(.gray)
+                                    .font(.caption)
+                                Spacer()
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 12)
+                        } else if chats.isEmpty {
+                            HStack {
+                                Image(systemName: "message.circle")
+                                    .foregroundColor(.gray)
+                                Text("No chats available")
+                                    .foregroundColor(.gray)
+                                    .font(.caption)
+                                Spacer()
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 12)
+                        } else {
+                            ForEach(chats) { chat in
+                                Button(action: {
+                                    selectedChatId = chat.id
+                                    isPresented = false
+                                }) {
+                                    HStack {
+                                        Image(systemName: "message.circle.fill")
                                             .foregroundColor(.blue)
+                                        Text(chat.name)
+                                            .foregroundColor(.primary)
+                                        Spacer()
+                                        if selectedChatId == chat.id {
+                                            Image(systemName: "checkmark")
+                                                .foregroundColor(.blue)
+                                        }
                                     }
+                                    .padding(.horizontal, 20)
+                                    .padding(.vertical, 12)
+                                    .background(selectedChatId == chat.id ? Color.blue.opacity(0.1) : Color.clear)
                                 }
-                                .padding(.horizontal, 20)
-                                .padding(.vertical, 12)
-                                .background(selectedChat == chat ? Color.blue.opacity(0.1) : Color.clear)
                             }
                         }
                         
@@ -96,8 +121,13 @@ struct ChatMenuView: View {
 #Preview {
     ChatMenuView(
         isPresented: .constant(true),
-        selectedChat: .constant("Chat 1"),
-        chats: ["Chat 1", "Chat 2", "Chat 3"],
+        selectedChatId: .constant(1),
+        chats: [
+            AgentChat(id: 1, name: "Development Chat", project_id: 1, user_id: 1, status_id: 1, created_at: Date(), updated_at: Date()),
+            AgentChat(id: 2, name: "Bug Fixes", project_id: 1, user_id: 1, status_id: 1, created_at: Date(), updated_at: Date()),
+            AgentChat(id: 3, name: "Feature Planning", project_id: 1, user_id: 1, status_id: 1, created_at: Date(), updated_at: Date())
+        ],
+        isLoadingChats: false,
         onBackToProjects: {
             print("Back to projects tapped")
         }

@@ -392,7 +392,9 @@ async def create_chat(chat: AgentChatCreate, db: Session = Depends(get_db)):
 
 
 @app.get("/api/chats", response_model=List[AgentChatResponse])
-async def get_chats(db: Session = Depends(get_db)):
+async def get_chats(project_id: Optional[int] = None, db: Session = Depends(get_db)):
+    if project_id:
+        return db.query(AgentChat).filter(AgentChat.project_id == project_id).all()
     return db.query(AgentChat).all()
 
 

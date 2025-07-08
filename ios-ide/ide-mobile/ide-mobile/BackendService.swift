@@ -183,6 +183,65 @@ class BackendService {
             }
         }.resume()
     }
+    
+    func fetchChats(for projectId: Int, completion: @escaping (Result<[AgentChat], Error>) -> Void) {
+        guard let url = URL(string: "\(baseURL)/chats?project_id=\(projectId)") else {
+            completion(.failure(ServiceError.invalidURL))
+            return
+        }
+        
+        URLSession.shared.dataTask(with: url) { data, response, error in
+            if let error = error {
+                completion(.failure(error))
+                return
+            }
+            
+            guard let httpResponse = response as? HTTPURLResponse,
+                  httpResponse.statusCode == 200 else {
+                completion(.failure(ServiceError.invalidResponse))
+                return
+            }
+            
+            if let data = data {
+                do {
+                    let decoder = JSONDecoder()
+                    
+                    // Use the same date decoding strategy as projects
+                    let formatter = ISO8601DateFormatter()
+                    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                    decoder.dateDecodingStrategy = .custom { decoder in
+                        let container = try decoder.singleValueContainer()
+                        let dateString = try container.decode(String.self)
+                        
+                        if let date = formatter.date(from: dateString) {
+                            return date
+                        }
+                        
+                        let fallbackFormatter = DateFormatter()
+                        fallbackFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'"
+                        fallbackFormatter.timeZone = TimeZone(abbreviation: "UTC")
+                        
+                        if let date = fallbackFormatter.date(from: dateString) {
+                            return date
+                        }
+                        
+                        throw DecodingError.dataCorruptedError(in: container, debugDescription: "Cannot parse date: \(dateString)")
+                    }
+                    
+                    let chats = try decoder.decode([AgentChat].self, from: data)
+                    completion(.success(chats))
+                } catch {
+                    print("🔍 JSON Decoding Error for chats: \(error)")
+                    if let jsonString = String(data: data, encoding: .utf8) {
+                        print("📄 Raw JSON Response: \(jsonString)")
+                    }
+                    completion(.failure(error))
+                }
+            } else {
+                completion(.failure(ServiceError.invalidResponse))
+            }
+        }.resume()
+    }
 }
 
 enum ServiceError: Error {
@@ -223,6 +282,16 @@ struct Project: Codable, Identifiable {
         let index = abs(name.hash) % emojis.count
         return emojis[index]
     }
+}
+
+struct AgentChat: Codable, Identifiable {
+    let id: Int
+    let name: String
+    let project_id: Int
+    let user_id: Int
+    let status_id: Int
+    let created_at: Date
+    let updated_at: Date
 }
 
 extension Task.TaskStatus {
