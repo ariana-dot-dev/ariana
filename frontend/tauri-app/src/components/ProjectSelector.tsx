@@ -16,6 +16,13 @@ export function ProjectSelector({ onProjectCreated }: ProjectSelectorProps) {
 	const store = useStore();
 	const [selectedKind, setSelectedKind] = useState<OsSessionKind | undefined>();
 	const [selectedPath, setSelectedPath] = useState<string | undefined>();
+	
+	// Create project flow state
+	const [isCreatingProject, setIsCreatingProject] = useState(false);
+	const [createProjectStep, setCreateProjectStep] = useState<'selectLocation' | 'enterName' | 'creating'>('selectLocation');
+	const [selectedParentDir, setSelectedParentDir] = useState<string>('');
+	const [projectName, setProjectName] = useState<string>('');
+	const [createProjectError, setCreateProjectError] = useState<string>('');
 
 	const handleKindSelect = (kind: OsSessionKind) => {
 		setSelectedKind(kind);
@@ -116,6 +123,15 @@ export function ProjectSelector({ onProjectCreated }: ProjectSelectorProps) {
 
 	const handleCreateNewProject = async () => {
 		if (!selectedKind) return;
+		setIsCreatingProject(true);
+		setCreateProjectStep('selectLocation');
+		setCreateProjectError('');
+		setSelectedParentDir('');
+		setProjectName('');
+	};
+
+	const handleSelectParentDirectory = async () => {
+		if (!selectedKind) return;
 
 		try {
 			let defaultPath = "";
@@ -132,7 +148,6 @@ export function ProjectSelector({ onProjectCreated }: ProjectSelectorProps) {
 					}
 				}
 			} else if (typeof selectedKind === "object" && "Wsl" in selectedKind) {
-				// For WSL, start with WSL UNC path - user can navigate to Windows paths if needed
 				defaultPath = `\\\\wsl$\\${selectedKind.Wsl}\\home`;
 			}
 
@@ -141,73 +156,104 @@ export function ProjectSelector({ onProjectCreated }: ProjectSelectorProps) {
 				directory: true,
 				multiple: false,
 				defaultPath: defaultPath || undefined,
+				title: "Select folder location for your new project"
 			});
 
 			if (parentDir && typeof parentDir === 'string') {
-				// Prompt for new project name
-				const projectName = prompt("Enter new project name:");
-				if (!projectName || projectName.trim() === '') return;
-
-				const sanitizedName = projectName.trim().replace(/[<>:"/\\|?*]/g, '-');
-				
 				let convertedParentPath = parentDir;
-				let projectPath = "";
 
 				// Convert path to WSL format if WSL is selected
 				if (typeof selectedKind === "object" && "Wsl" in selectedKind) {
-					// Handle \\wsl$\distribution\path format
 					if (parentDir.startsWith(`\\\\wsl$\\${selectedKind.Wsl}\\`)) {
-						// Convert \\wsl$\distribution\path to /path
 						const pathAfterDistribution = parentDir.substring(`\\\\wsl$\\${selectedKind.Wsl}\\`.length);
 						convertedParentPath = '/' + pathAfterDistribution.replace(/\\/g, '/');
-					}
-					// Handle regular Windows drive paths (C:\ style) - convert to /mnt/c
-					else if (parentDir.match(/^[A-Za-z]:\\/)) {
+					} else if (parentDir.match(/^[A-Za-z]:\\/)) {
 						const drive = parentDir.charAt(0).toLowerCase();
 						const pathWithoutDrive = parentDir.substring(3).replace(/\\/g, '/');
 						convertedParentPath = `/mnt/${drive}/${pathWithoutDrive}`;
 					}
-					projectPath = `${convertedParentPath}/${sanitizedName}`;
-				} else {
-					// For Local sessions
-					const separator = parentDir.includes('/') ? '/' : '\\';
-					projectPath = `${convertedParentPath}${separator}${sanitizedName}`;
 				}
 
-				// Create OsSession for the operations
-				let osSession: OsSession;
-				if (selectedKind === "Local") {
-					osSession = { Local: projectPath };
-				} else if (typeof selectedKind === "object" && "Wsl" in selectedKind) {
-					osSession = {
-						Wsl: {
-							distribution: selectedKind.Wsl,
-							working_directory: projectPath,
-						},
-					};
-				} else {
-					console.error("Invalid OS session kind");
-					return;
-				}
-
-				// Create the directory
-				await invoke("create_directory_with_os_session", { 
-					path: projectPath, 
-					osSession 
-				});
-
-				// Initialize git repository
-				await invoke("git_init_repository", { 
-					directory: projectPath, 
-					osSession 
-				});
-
-				// Set the path as selected
-				setSelectedPath(projectPath);
+				setSelectedParentDir(convertedParentPath);
+				setCreateProjectStep('enterName');
 			}
 		} catch (error) {
-			console.error("Failed to create new project:", error);
+			console.error("Failed to open directory picker:", error);
+			setCreateProjectError("Failed to open directory picker. Please try again.");
 		}
+	};
+
+	const handleCreateProjectWithName = async () => {
+		if (!selectedKind || !selectedParentDir || !projectName.trim()) return;
+
+		setCreateProjectStep('creating');
+		setCreateProjectError('');
+
+		try {
+			const sanitizedName = projectName.trim().replace(/[<>:"/\\|?*]/g, '-');
+			let projectPath = "";
+
+			// Construct project path
+			if (typeof selectedKind === "object" && "Wsl" in selectedKind) {
+				projectPath = `${selectedParentDir}/${sanitizedName}`;
+			} else {
+				const separator = selectedParentDir.includes('/') ? '/' : '\\';
+				projectPath = `${selectedParentDir}${separator}${sanitizedName}`;
+			}
+
+			// Create OsSession for the operations
+			let osSession: OsSession;
+			if (selectedKind === "Local") {
+				osSession = { Local: projectPath };
+			} else if (typeof selectedKind === "object" && "Wsl" in selectedKind) {
+				osSession = {
+					Wsl: {
+						distribution: selectedKind.Wsl,
+						working_directory: projectPath,
+					},
+				};
+			} else {
+				throw new Error("Invalid OS session kind");
+			}
+
+			// Create the directory
+			await invoke("create_directory_with_os_session", { 
+				path: projectPath, 
+				osSession 
+			});
+
+			// Initialize git repository
+			await invoke("git_init_repository", { 
+				directory: projectPath, 
+				osSession 
+			});
+
+			// Create GitProject with the OsSession as root
+			const gitProject = new GitProject(osSession, sanitizedName);
+			const projectId = store.addGitProject(gitProject);
+
+			// Reset create project state
+			setIsCreatingProject(false);
+			setCreateProjectStep('selectLocation');
+			setSelectedParentDir('');
+			setProjectName('');
+
+			// Navigate to the new project
+			onProjectCreated(projectId);
+
+		} catch (error) {
+			console.error("Failed to create new project:", error);
+			setCreateProjectError(`Failed to create project: ${error}`);
+			setCreateProjectStep('enterName'); // Go back to name entry
+		}
+	};
+
+	const handleCancelCreateProject = () => {
+		setIsCreatingProject(false);
+		setCreateProjectStep('selectLocation');
+		setSelectedParentDir('');
+		setProjectName('');
+		setCreateProjectError('');
 	};
 
 	const handleGitInitIfNeeded = async (path: string) => {
@@ -286,68 +332,147 @@ export function ProjectSelector({ onProjectCreated }: ProjectSelectorProps) {
 
 	return (
 		<div className="flex gap-16 w-full max-w-full h-fit max-h-full px-6 justify-center overflow-hidden">
-			<div className="flex flex-wrap w-fit items-start gap-8">
-				{/* OS Session Kind Selector */}
-				<div className="flex-shrink-0 flex flex-col gap-4">
-					<div className="flex items-center justify-between">
-						<h2 className="text-lg font-medium text-[var(--base-700)]">Start</h2>
+			{isCreatingProject ? (
+				/* Create Project Flow */
+				<div className="flex flex-col items-center gap-6 w-full max-w-md">
+					<div className="text-center">
+						<h2 className="text-xl font-medium text-[var(--base-700)] mb-2">Create New Project</h2>
+						<p className="text-sm text-[var(--base-600)]">
+							{createProjectStep === 'selectLocation' && "First, select where you want to create your new project"}
+							{createProjectStep === 'enterName' && "Now, give your project a name"}
+							{createProjectStep === 'creating' && "Creating your project..."}
+						</p>
 					</div>
-					<div className="flex flex-col gap-4">
-						<OsSessionKindSelector
-							onSelect={handleKindSelect}
-							selectedKind={selectedKind}
-						/>
-						
-						{/* Action buttons - always show when selectedKind is available */}
-						{selectedKind && (
-							<div className="flex flex-col gap-1">
+
+					{createProjectError && (
+						<div className="w-full p-3 bg-[var(--negative-100)] border border-[var(--negative-300)] rounded-lg text-[var(--negative-700)] text-sm">
+							{createProjectError}
+						</div>
+					)}
+
+					{createProjectStep === 'selectLocation' && (
+						<div className="flex flex-col gap-4 w-full">
+							<button
+								onClick={handleSelectParentDirectory}
+								className="px-6 py-4 bg-[var(--acc-400)] hover:bg-[var(--acc-500)] text-[var(--whitest)] rounded-lg transition-colors text-center"
+							>
+								📁 Select Folder Location
+							</button>
+							<button
+								onClick={handleCancelCreateProject}
+								className="px-4 py-2 bg-[var(--base-200)] hover:bg-[var(--base-300)] text-[var(--base-700)] rounded-lg transition-colors text-center"
+							>
+								Cancel
+							</button>
+						</div>
+					)}
+
+					{createProjectStep === 'enterName' && (
+						<div className="flex flex-col gap-4 w-full">
+							<div className="text-sm text-[var(--base-600)]">
+								<span className="font-medium">Location:</span> {selectedParentDir}
+							</div>
+							<div className="flex flex-col gap-2">
+								<label className="text-sm font-medium text-[var(--base-700)]">
+									Project Name:
+								</label>
+								<input
+									type="text"
+									value={projectName}
+									onChange={(e) => setProjectName(e.target.value)}
+									placeholder="Enter project name..."
+									className="px-3 py-2 border border-[var(--base-400)] rounded-lg focus:outline-none focus:border-[var(--acc-500)] text-[var(--base-800)]"
+									autoFocus
+									onKeyDown={(e) => {
+										if (e.key === 'Enter' && projectName.trim()) {
+											handleCreateProjectWithName();
+										}
+									}}
+								/>
+							</div>
+							<div className="flex gap-2">
 								<button
-									onClick={handleSelectFromFilesystem}
-									className="px-4 w-64 py-2 bg-[var(--base-200-30)] hover:bg-[var(--base-200-70)] text-[var(--blackest)] rounded-xl text-left cursor-pointer border-(length:--border) border-[var(--base-400-50)] transition-colors text-sm"
+									onClick={handleCreateProjectWithName}
+									disabled={!projectName.trim()}
+									className="flex-1 px-4 py-2 bg-[var(--positive-400)] hover:bg-[var(--positive-500)] disabled:bg-[var(--base-300)] disabled:text-[var(--base-500)] text-[var(--whitest)] rounded-lg transition-colors"
 								>
-									Open existing Project
+									Create Project
 								</button>
 								<button
-									onClick={handleCreateNewProject}
-									className="px-4 w-64 py-2 bg-[var(--positive-200-30)] hover:bg-[var(--positive-200-70)] text-[var(--positive-800)] rounded-xl text-left cursor-pointer border-(length:--border) border-[var(--positive-400)] transition-colors text-sm"
+									onClick={handleCancelCreateProject}
+									className="px-4 py-2 bg-[var(--base-200)] hover:bg-[var(--base-300)] text-[var(--base-700)] rounded-lg transition-colors"
 								>
-									+ Create new Project
+									Cancel
 								</button>
 							</div>
-						)}
-					</div>
-					{/* Project Directory List - only show when kind is selected */}
-					{/* {selectedKind && (
-						<ProjectDirectoryList
-							osSessionKind={selectedKind}
-							onSelect={handlePathSelect}
-							selectedPath={selectedPath}
-							existingProjects={store.gitProjects}
-						/>
-					)} */}
-				</div>
-
-				{/* Selected Path Display and Open Button */}
-				{selectedPath && (
-					<div className="w-64 flex-shrink-0 flex flex-col items-center gap-3">
-						<div className="text-sm text-[var(--base-600)] w-full text-center">
-							<div className="font-medium mb-2">Selected: {selectedPath}</div>
 						</div>
-						<button
-							onClick={handleCreateSession}
-							className="px-6 py-3 bg-[var(--acc-400)] hover:bg-[var(--acc-500)] text-[var(--whitest)] rounded-md transition-colors"
-						>
-							Open Project
-						</button>
-					</div>
-				)}
-			</div>
+					)}
 
-			{/* Recent Projects Section - appears at the top */}
-			<RecentProjectsList 
-				projects={store.gitProjects} 
-				onProjectSelect={onProjectCreated}
-			/>
+					{createProjectStep === 'creating' && (
+						<div className="flex flex-col items-center gap-4">
+							<div className="w-8 h-8 border-4 border-[var(--acc-300)] border-t-[var(--acc-600)] rounded-full animate-spin"></div>
+							<p className="text-sm text-[var(--base-600)]">Creating project directory and initializing git...</p>
+						</div>
+					)}
+				</div>
+			) : (
+				/* Normal Project Selection */
+				<div className="flex flex-wrap w-fit items-start gap-8">
+					{/* OS Session Kind Selector */}
+					<div className="flex-shrink-0 flex flex-col gap-4">
+						<div className="flex items-center justify-between">
+							<h2 className="text-lg font-medium text-[var(--base-700)]">Start</h2>
+						</div>
+						<div className="flex flex-col gap-4">
+							<OsSessionKindSelector
+								onSelect={handleKindSelect}
+								selectedKind={selectedKind}
+							/>
+							
+							{/* Action buttons - always show when selectedKind is available */}
+							{selectedKind && (
+								<div className="flex flex-col gap-1">
+									<button
+										onClick={handleSelectFromFilesystem}
+										className="px-4 w-64 py-2 bg-[var(--base-200-30)] hover:bg-[var(--base-200-70)] text-[var(--blackest)] rounded-xl text-left cursor-pointer border-(length:--border) border-[var(--base-400-50)] transition-colors text-sm"
+									>
+										Open existing Project
+									</button>
+									<button
+										onClick={handleCreateNewProject}
+										className="px-4 w-64 py-2 bg-[var(--positive-200-30)] hover:bg-[var(--positive-200-70)] text-[var(--positive-800)] rounded-xl text-left cursor-pointer border-(length:--border) border-[var(--positive-400)] transition-colors text-sm"
+									>
+										+ Create new Project
+									</button>
+								</div>
+							)}
+						</div>
+					</div>
+
+					{/* Selected Path Display and Open Button */}
+					{selectedPath && (
+						<div className="w-64 flex-shrink-0 flex flex-col items-center gap-3">
+							<div className="text-sm text-[var(--base-600)] w-full text-center">
+								<div className="font-medium mb-2">Selected: {selectedPath}</div>
+							</div>
+							<button
+								onClick={handleCreateSession}
+								className="px-6 py-3 bg-[var(--acc-400)] hover:bg-[var(--acc-500)] text-[var(--whitest)] rounded-md transition-colors"
+							>
+								Open Project
+							</button>
+						</div>
+					)}
+				</div>
+			)}
+
+			{/* Recent Projects Section - only show when not creating project */}
+			{!isCreatingProject && (
+				<RecentProjectsList 
+					projects={store.gitProjects} 
+					onProjectSelect={onProjectCreated}
+				/>
+			)}
 		</div>
 	);
 }
