@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
@@ -392,10 +392,15 @@ async def create_chat(chat: AgentChatCreate, db: Session = Depends(get_db)):
 
 
 @app.get("/api/chats", response_model=List[AgentChatResponse])
-async def get_chats(project_id: Optional[int] = None, db: Session = Depends(get_db)):
-    if project_id:
-        return db.query(AgentChat).filter(AgentChat.project_id == project_id).all()
-    return db.query(AgentChat).all()
+async def get_chats(project_id: Optional[int] = Query(None), db: Session = Depends(get_db)):
+    print(f"DEBUG: Received project_id parameter: {project_id} (type: {type(project_id)})")
+    if project_id is not None:
+        filtered_result = db.query(AgentChat).filter(AgentChat.project_id == project_id).all()
+        print(f"DEBUG: Filtered query returned {len(filtered_result)} chats")
+        return filtered_result
+    all_result = db.query(AgentChat).all()
+    print(f"DEBUG: All query returned {len(all_result)} chats")
+    return all_result
 
 
 @app.get("/api/chats/{chat_id}", response_model=AgentChatResponse)

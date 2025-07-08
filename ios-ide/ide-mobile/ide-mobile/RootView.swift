@@ -66,13 +66,9 @@ struct ChatView: View {
                         
                         Spacer()
                         
-                        VStack(spacing: 2) {
-                            Text(project.emoji)
-                                .font(.title3)
-                            Text(selectedChatName)
-                                .font(.caption)
-                                .foregroundColor(.gray)
-                        }
+                        Text(selectedChatName)
+                            .font(.headline)
+                            .foregroundColor(.primary)
                         
                         Spacer()
                         

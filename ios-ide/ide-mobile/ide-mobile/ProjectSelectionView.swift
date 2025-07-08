@@ -133,14 +133,15 @@ struct ProjectCard: View {
     
     var body: some View {
         Button(action: onTap) {
-            HStack(spacing: 16) {
-                // Emoji section (30% of width)
+            HStack(spacing: 12) {
+                // Emoji section (fixed width)
                 Text(project.emoji)
-                    .font(.system(size: 40))
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .frame(maxWidth: UIScreen.main.bounds.width * 0.3)
+                    .font(.system(size: 28))
+                    .frame(width: 60, height: 60)
+                    .background(Color.gray.opacity(0.1))
+                    .cornerRadius(8)
                 
-                // Project info section (70% of width)
+                // Project info section (takes remaining space)
                 VStack(alignment: .leading, spacing: 8) {
                     Text(project.name)
                         .font(.headline)
@@ -161,8 +162,6 @@ struct ProjectCard: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                
-                Spacer()
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
