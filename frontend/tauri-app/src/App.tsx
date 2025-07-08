@@ -368,7 +368,7 @@ function App() {
 						provider="anthropic"
 						model="claude-3-5-sonnet-20241022"
 						systemPrompt="You are a helpful coding assistant integrated into the Ariana IDE."
-						onAgentCreate={async (agentName: string, prompt: string) => {
+						onAgentCreate={(agentName: string, prompt: string) => {
 							// Get the current project
 							if (selectedGitProjectId) {
 								const selectedProject = store.getGitProject(selectedGitProjectId);
@@ -376,7 +376,7 @@ function App() {
 									try {
 										// Create a new canvas copy (agent workspace) with initial prompt
 										const initialPrompt = prompt && prompt.trim() !== 'general assistance' ? prompt.trim() : '';
-										const result = await selectedProject.addCanvasCopy(undefined, initialPrompt);
+										const result = selectedProject.addCanvasCopy(() => {}, undefined, initialPrompt);
 										
 										if (result.success && result.canvasId) {
 											// Rename the canvas to the agent name

@@ -19,7 +19,7 @@ export interface CommandHandler {
 
 export class CommandDispatcher {
   private handlers: Map<string, CommandHandler> = new Map();
-  private agentCreateCallback?: (agentName: string, prompt: string) => Promise<{success: boolean, message: string, data?: any}>;
+  private agentCreateCallback?: (agentName: string, prompt: string) => {success: boolean, message: string, data?: any};
 
   constructor() {
     this.registerDefaultHandlers();
@@ -28,7 +28,7 @@ export class CommandDispatcher {
   /**
    * Set the agent creation callback for actual UI integration
    */
-  setAgentCreateCallback(callback: (agentName: string, prompt: string) => Promise<{success: boolean, message: string, data?: any}>) {
+  setAgentCreateCallback(callback: (agentName: string, prompt: string) => {success: boolean, message: string, data?: any}) {
     this.agentCreateCallback = callback;
   }
 
@@ -138,7 +138,7 @@ export class CommandDispatcher {
     try {
       // If we have a callback for actual UI integration, use it
       if (this.agentCreateCallback) {
-        const result = await this.agentCreateCallback(agentName, prompt || 'general assistance');
+        const result = this.agentCreateCallback(agentName, prompt || 'general assistance');
         return result;
       }
       

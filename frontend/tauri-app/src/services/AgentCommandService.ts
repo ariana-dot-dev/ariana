@@ -253,7 +253,7 @@ Response format:
 
     try {
       // Use the existing GitProject addCanvasCopy method to create a new canvas/agent
-      const result = await this.currentProject.addCanvasCopy();
+      const result = this.currentProject.addCanvasCopy();
       
       if (result.success && result.canvasId) {
         // Get the newly created canvas

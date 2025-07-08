@@ -7,11 +7,10 @@ interface CanvasesListProps {
 	canvases: GitProjectCanvas[];
 	currentCanvasId: string | null;
 	onCanvasSelect: (index: number) => void;
-	onCreateCanvas: () => Promise<void>;
+	onCreateCanvas: () => void;
 	onMergeCanvas: (canvasId: string) => Promise<void>;
 	getCanvasTaskCounts: (canvasId: string) => { running: number; finished: number; error: number; total: number };
 	getCanvasLockState: (canvasId: string) => CanvasLockState | null;
-	isCreatingCanvas: boolean;
 	mergingCanvases: Set<string>;
 	onShowInExplorer: (canvasId: string) => Promise<void>;
 	onDeleteWorkspace: (canvasId: string) => Promise<void>;
@@ -25,7 +24,6 @@ export const CanvasesList: React.FC<CanvasesListProps> = ({
 	onMergeCanvas,
 	getCanvasTaskCounts,
 	getCanvasLockState,
-	isCreatingCanvas,
 	mergingCanvases,
 	onShowInExplorer,
 	onDeleteWorkspace
@@ -121,6 +119,12 @@ export const CanvasesList: React.FC<CanvasesListProps> = ({
 									)}
 									
 									{/* Lock State Indicator */}
+									{lockState === 'loading' && (
+										<span className="w-5 aspect-square flex items-center justify-center relative text-[var(--whitest)] rounded-md">
+											<div className="absolute top-0 left-0 w-full h-full bg-[var(--acc-400)] animate-spin rounded-lg"></div>
+											<div className="z-10 text-xs">⚡</div>
+										</span>
+									)}
 									{lockState === 'merging' && (
 										<span className="w-5 aspect-square flex items-center justify-center relative text-[var(--whitest)] rounded-md">
 											<div className="absolute top-0 left-0 w-full h-full bg-[var(--acc-400)] animate-spin rounded-lg"></div>
@@ -161,16 +165,10 @@ export const CanvasesList: React.FC<CanvasesListProps> = ({
 
 			{/* New Canvas Button */}
 			<button 
-				className={cn(
-					"w-full px-4 py-2 border-(length:--border) border-dashed bg-[var(--positive-300-10)] hover:bg-[var(--positive-300-20)] border-[var(--positive-500-50)] text-[var(--positive-500-70)] hover:text-[var(--positive-500)] hover:border-solid hover:border-[var(--positive-500)] text-sm text-center rounded-xl mt-2 transition-all",
-					isCreatingCanvas 
-						? "opacity-50 cursor-not-allowed" 
-						: "cursor-pointer"
-				)}
-				disabled={isCreatingCanvas}
+				className="w-full px-4 py-2 border-(length:--border) border-dashed bg-[var(--positive-300-10)] hover:bg-[var(--positive-300-20)] border-[var(--positive-500-50)] text-[var(--positive-500-70)] hover:text-[var(--positive-500)] hover:border-solid hover:border-[var(--positive-500)] text-sm text-center rounded-xl mt-2 transition-all cursor-pointer"
 				onClick={onCreateCanvas}
 			>
-				{isCreatingCanvas ? "Creating..." : "+ New Agent"}
+				+ New Agent
 			</button>
 
 			{/* Context Menu */}

@@ -1,6 +1,7 @@
 import { OsSession, osSessionGetWorkingDirectory } from "../bindings/os";
 import type { CanvasElement } from "../canvas/types";
 import { CanvasService } from "../services/CanvasService";
+import { CopyPoolManager, CopyPoolEntry, CopyProgress } from "../services/CopyPoolManager";
 import { TaskManager } from "./Task";
 import { TextArea } from "../canvas/TextArea";
 import { BackgroundAgent, BackgroundAgentState, MergeResult } from "./BackgroundAgent";
@@ -17,7 +18,7 @@ export interface ProcessState {
 	prompt?: string; // For claude-code processes
 }
 
-export type CanvasLockState = 'normal' | 'merging' | 'merged';
+export type CanvasLockState = 'normal' | 'loading' | 'merging' | 'merged';
 
 export interface GitProjectCanvas {
 	id: string;
@@ -31,6 +32,7 @@ export interface GitProjectCanvas {
 	lockState: CanvasLockState;
 	lockingAgentId?: string; // ID of background agent that locked this canvas
 	lockedAt?: number; // Timestamp when locked
+	copyProgress?: CopyProgress; // Progress of copy operation if loading
 }
 
 export class GitProject {
@@ -60,6 +62,7 @@ export class GitProject {
 
 		console.log(this.canvases)
 	}
+
 
 	// Reactive getters
 	getCurrentCanvas(): GitProjectCanvas | null {
@@ -139,77 +142,27 @@ export class GitProject {
 	}
 
 	/**
-	 * Creates a new canvas that is a copy of the repository on another branch and location
+	 * Creates a new canvas immediately in loading state, then populates it asynchronously
 	 */
-	async addCanvasCopy(canvas?: Partial<GitProjectCanvas>, initialPrompt?: string): Promise<{ success: boolean; canvasId?: string; error?: string }> {
+	addCanvasCopy(onProgress?: (progress: CopyProgress) => void, canvas?: Partial<GitProjectCanvas>, initialPrompt?: string): { success: boolean; canvasId?: string; error?: string } {
 		try {
-			// Generate random ID for the new version
-			const randomId = CanvasService.generateRandomId();
-			const branchName = `canvas-${randomId}`;
-			
 			// Get the root working directory
 			const rootDirectory = osSessionGetWorkingDirectory(this.root);
 			if (!rootDirectory) {
 				return { success: false, error: "Could not determine root directory" };
 			}
 
-			// Create new location path (add suffix to avoid conflicts)
-			const newLocation = `${rootDirectory}-${randomId}`;
-			
-			// Step 1: Copy the folder to new location
-			const copyResult = await CanvasService.copyDirectory(
-				rootDirectory,
-				newLocation,
-				this.root
-			);
-			
-			if (!copyResult.success) {
-				return { 
-					success: false, 
-					error: `Failed to copy directory: ${copyResult.error}` 
-				};
-			}
-
-			// Step 2: Create new OsSession with the new working directory
-			let newOsSession: OsSession;
-			if ('Local' in this.root) {
-				newOsSession = { Local: newLocation };
-			} else if ('Wsl' in this.root) {
-				newOsSession = {
-					Wsl: {
-						distribution: this.root.Wsl.distribution,
-						working_directory: newLocation
-					}
-				};
-			} else {
-				return { success: false, error: "Unknown OS session type" };
-			}
-
-			// Step 3: Create git branch in the new location
-			const gitResult = await CanvasService.createGitBranch(
-				newLocation,
-				branchName,
-				newOsSession
-			);
-			
-			if (!gitResult.success) {
-				return { 
-					success: false, 
-					error: `Failed to create git branch: ${gitResult.error}` 
-				};
-			}
-
-			// Step 4: Create the new canvas with the new OsSession
+			// Create the canvas immediately in loading state with temporary osSession
 			const canvasId = this.addCanvas({
-				name: `Canvas ${this.canvases.length + 1} (${branchName})`,
-				osSession: newOsSession,
+				name: `Canvas ${this.canvases.length + 1} (Loading...)`,
+				osSession: this.root, // Temporary, will be replaced when copy is ready
 				taskManager: new TaskManager(),
-				elements: initialPrompt ? [
-					// Create TextArea with initial prompt if provided
-					TextArea.canvasElement(newOsSession, initialPrompt)
-				] : undefined, // Let addCanvas create the default TextArea if no prompt
+				lockState: 'loading',
 				...canvas
 			});
+
+			// Start the copy process asynchronously
+			this.populateCanvasAsync(canvasId, rootDirectory, onProgress);
 
 			return { success: true, canvasId };
 		} catch (error) {
@@ -218,6 +171,82 @@ export class GitProject {
 				error: `Unexpected error: ${error}` 
 			};
 		}
+	}
+
+	/**
+	 * Populates a loading canvas with actual copy data asynchronously
+	 */
+	private async populateCanvasAsync(canvasId: string, rootDirectory: string, onProgress?: (progress: CopyProgress) => void): Promise<void> {
+		try {
+			const canvas = this.canvases.find(c => c.id === canvasId);
+			if (!canvas) {
+				console.error(`Canvas ${canvasId} not found for population`);
+				return;
+			}
+
+			// Update progress on the canvas
+			const progressHandler = (progress: CopyProgress) => {
+				const canvas = this.canvases.find(c => c.id === canvasId);
+				if (canvas) {
+					canvas.copyProgress = progress;
+					this.lastModified = Date.now();
+					this.notifyListeners('canvases');
+				}
+				onProgress?.(progress);
+			};
+
+			// Get a copy from the pool (handles reuse and creation automatically)
+			const copyPool = CopyPoolManager.getInstance();
+			const copyEntry = await copyPool.getCopy(rootDirectory, this.root, progressHandler);
+			
+			// Update the canvas with the real copy data
+			canvas.name = `Canvas ${this.canvases.indexOf(canvas) + 1} (${copyEntry.branchName})`;
+			canvas.osSession = copyEntry.osSession;
+			canvas.lockState = 'normal';
+			canvas.copyProgress = undefined;
+			this.lastModified = Date.now();
+			this.notifyListeners('canvases');
+
+			console.log(`Canvas ${canvasId} populated successfully`);
+		} catch (error) {
+			console.error(`Failed to populate canvas ${canvasId}:`, error);
+			
+			// Mark canvas as failed
+			const canvas = this.canvases.find(c => c.id === canvasId);
+			if (canvas) {
+				canvas.name = `Canvas ${this.canvases.indexOf(canvas) + 1} (Failed)`;
+				canvas.lockState = 'normal';
+				canvas.copyProgress = undefined;
+				this.lastModified = Date.now();
+				this.notifyListeners('canvases');
+			}
+		}
+	}
+
+	/**
+	 * Returns a canvas copy back to the pool for reuse
+	 */
+	async returnCanvasCopy(canvasId: string): Promise<void> {
+		const canvas = this.canvases.find(c => c.id === canvasId);
+		if (!canvas?.osSession) {
+			return;
+		}
+
+		const rootDirectory = osSessionGetWorkingDirectory(this.root);
+		if (!rootDirectory) {
+			return;
+		}
+
+		const copyEntry: CopyPoolEntry = {
+			id: canvasId,
+			path: osSessionGetWorkingDirectory(canvas.osSession) || "",
+			osSession: canvas.osSession,
+			branchName: `canvas-${canvasId}`,
+			createdAt: new Date()
+		};
+
+		const copyPool = CopyPoolManager.getInstance();
+		await copyPool.returnCopy(copyEntry, rootDirectory, this.root);
 	}
 
 	/**

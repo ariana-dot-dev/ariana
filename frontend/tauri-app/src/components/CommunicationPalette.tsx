@@ -23,7 +23,7 @@ interface CommunicationPaletteProps {
   model?: string;
   apiKey?: string;
   systemPrompt?: string;
-  onAgentCreate?: (agentName: string, prompt: string) => Promise<{success: boolean, message: string, data?: any}>;
+  onAgentCreate?: (agentName: string, prompt: string) => {success: boolean, message: string, data?: any};
 }
 
 // Check if we're running in Tauri
