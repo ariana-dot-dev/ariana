@@ -377,9 +377,51 @@ Attempt ${this.context.mergeAttempts + 1} of ${this.context.maxAttempts}.
 				throw new Error(`Failed to sync result back to root: ${finalCopyResult.error}`);
 			}
 
+			// Step 3: Sync all existing copies to new root state
+			const { CopyPoolManager } = await import('../services/CopyPoolManager');
+			const copyPool = CopyPoolManager.getInstance();
+			await copyPool.syncAllToRoot(rootDir, this.context.rootOsSession);
+			console.log('Synced all copy pool entries to new root state');
+
 			this.updateStatus('completed', 'Merge completed successfully');
+			
+			// Return the merge workspace to the copy pool for reuse
+			await this.returnToPool();
 		} catch (error) {
 			throw new Error(`Finalize failed: ${error}`);
+		}
+	}
+
+	/**
+	 * Returns the completed merge workspace to the copy pool for reuse
+	 */
+	private async returnToPool(): Promise<void> {
+		try {
+			const workingDir = osSessionGetWorkingDirectory(this.osSession);
+			const rootDir = osSessionGetWorkingDirectory(this.context.rootOsSession);
+			
+			if (!workingDir || !rootDir) {
+				console.warn('Cannot return to pool: missing directory paths');
+				return;
+			}
+
+			// Import the copy pool manager (dynamic import to avoid circular dependencies)
+			const { CopyPoolManager } = await import('../services/CopyPoolManager');
+			const copyPool = CopyPoolManager.getInstance();
+			
+			// Create a copy pool entry for this merge workspace
+			const copyEntry = {
+				id: this.id,
+				path: workingDir,
+				osSession: this.osSession,
+				branchName: `merge-${this.id}`,
+				createdAt: new Date()
+			};
+
+			await copyPool.returnCopy(copyEntry, rootDir, this.context.rootOsSession);
+			console.log(`Returned merge workspace ${workingDir} to copy pool`);
+		} catch (error) {
+			console.warn('Failed to return merge workspace to pool:', error);
 		}
 	}
 

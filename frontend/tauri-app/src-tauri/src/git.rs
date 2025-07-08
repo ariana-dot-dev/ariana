@@ -179,4 +179,13 @@ impl GitManager {
             }
         }
     }
+
+    pub fn get_current_hash(directory: &str, os_session: &OsSession) -> Result<String, String> {
+        CommandExecutor::execute_with_os_session(
+            "git", 
+            &["rev-parse", "HEAD"], 
+            Some(directory), 
+            os_session
+        ).map(|output| output.trim().to_string())
+    }
 }

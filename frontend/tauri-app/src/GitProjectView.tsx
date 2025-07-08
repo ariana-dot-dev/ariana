@@ -26,7 +26,6 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 	} = useGitProject();
 	const { updateGitProject, removeGitProject } = useStore();
 	const [showCanvases, setShowCanvases] = useState(true);
-	const [isCreatingCanvas, setIsCreatingCanvas] = useState(false);
 	const [mergingCanvases, setMergingCanvases] = useState<Set<string>>(new Set());
 	const [viewingAgent, setViewingAgent] = useState<string | null>(null);
 
@@ -58,27 +57,21 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 	};
 
 	// Handle canvas creation
-	const handleCreateCanvas = async () => {
-		setIsCreatingCanvas(true);
+	const handleCreateCanvas = () => {
+		if (!selectedGitProject) return;
+		
 		console.log("Creating new canvas copy...");
 		
-		try {
-			const result = await selectedGitProject!.addCanvasCopy();
-			
-			if (result.success && result.canvasId) {
-				selectedGitProject!.setCurrentCanvasIndex(selectedGitProject!.canvases.length - 1);
-				console.log("New canvas copy created with ID:", result.canvasId);
-				// Trigger state update to save to disk
-				updateGitProject(selectedGitProject!.id);
-			} else {
-				console.error("Failed to create canvas copy:", result.error);
-				alert(`Failed to create canvas copy: ${result.error}`);
-			}
-		} catch (error) {
-			console.error("Unexpected error creating canvas copy:", error);
-			alert(`Unexpected error: ${error}`);
-		} finally {
-			setIsCreatingCanvas(false);
+		const result = selectedGitProject.addCanvasCopy();
+		
+		if (result.success && result.canvasId) {
+			selectedGitProject.setCurrentCanvasIndex(selectedGitProject.canvases.length - 1);
+			console.log("New canvas copy created with ID:", result.canvasId);
+			// Trigger state update to save to disk
+			updateGitProject(selectedGitProject.id);
+		} else {
+			console.error("Failed to create canvas copy:", result.error);
+			alert(`Failed to create canvas copy: ${result.error}`);
 		}
 	};
 
@@ -166,15 +159,22 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 
 			const confirmed = window.confirm(`Are you sure you want to permanently delete this workspace and all its files? This action cannot be undone.\n\nPath: ${deletePath}`);
 			if (confirmed) {
-				// Delete from filesystem first using osSession-aware deletion
-				await invoke("delete_path_with_os_session", { 
-					path: deletePath, 
-					osSession: canvas.osSession 
-				});
-				// Then remove from project
+				// Try to return to pool first (for reuse if possible)
+				try {
+					await selectedGitProject.returnCanvasCopy(canvasId);
+				} catch (returnError) {
+					console.warn('Could not return canvas to pool, deleting instead:', returnError);
+					// Delete from filesystem using osSession-aware deletion
+					await invoke("delete_path_with_os_session", { 
+						path: deletePath, 
+						osSession: canvas.osSession 
+					});
+				}
+				
+				// Remove from project
 				selectedGitProject.removeCanvas(canvasId);
 				updateGitProject(selectedGitProject.id);
-				console.log(`Deleted workspace from filesystem and project: ${canvasId}`);
+				console.log(`Deleted workspace from project: ${canvasId}`);
 			}
 		} catch (error) {
 			console.error("Failed to delete workspace:", error);
@@ -197,20 +197,13 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 	useEffect(() => {
 		if (selectedGitProject && selectedGitProject.canvases.length === 0) {
 			console.log("No canvases found, creating first version...");
-			const createFirstCanvas = async () => {
-				try {
-					const result = await selectedGitProject.addCanvasCopy();
-					if (result.success) {
-						console.log("First canvas created with ID:", result.canvasId);
-						updateGitProject(selectedGitProject.id);
-					} else {
-						console.error("Failed to create first canvas:", result.error);
-					}
-				} catch (error) {
-					console.error("Error creating first canvas:", error);
-				}
-			};
-			createFirstCanvas();
+			const result = selectedGitProject.addCanvasCopy();
+			if (result.success) {
+				console.log("First canvas created with ID:", result.canvasId);
+				updateGitProject(selectedGitProject.id);
+			} else {
+				console.error("Failed to create first canvas:", result.error);
+			}
 		}
 	}, [selectedGitProject?.id, selectedGitProject?.canvases.length, updateGitProject]);
 
@@ -256,7 +249,6 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 									onMergeCanvas={handleMergeCanvas}
 									getCanvasTaskCounts={getCanvasTaskCounts}
 									getCanvasLockState={getCanvasLockState}
-									isCreatingCanvas={isCreatingCanvas}
 									mergingCanvases={mergingCanvases}
 									onShowInExplorer={showWorkspaceInExplorer}
 									onDeleteWorkspace={deleteWorkspace}
@@ -308,16 +300,38 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 				})()
 			) : currentCanvas ? (
 				<div className="w-full h-full animate-fade-in opacity-100" key={currentCanvas.id}>
-					<CanvasView
-						elements={currentCanvas.elements}
-						onElementsChange={updateCanvasElements}
-					/>
+					{currentCanvas.lockState === 'loading' ? (
+						<div className="w-full h-full flex items-center justify-center">
+							<div className="text-center text-[var(--base-600)]">
+								<div className="text-lg">Setting up workspace...</div>
+								<div className="text-sm mt-2">
+									{currentCanvas.copyProgress ? 
+										`${currentCanvas.copyProgress.percentage.toFixed(0)}% - ${currentCanvas.copyProgress.speed}` :
+										'Preparing copy...'
+									}
+								</div>
+								{currentCanvas.copyProgress && (
+									<div className="w-64 bg-[var(--base-200)] rounded-full h-2 mt-3">
+										<div 
+											className="bg-[var(--acc-500)] h-2 rounded-full transition-all duration-300"
+											style={{ width: `${currentCanvas.copyProgress.percentage}%` }}
+										/>
+									</div>
+								)}
+							</div>
+						</div>
+					) : (
+						<CanvasView
+							elements={currentCanvas.elements}
+							onElementsChange={updateCanvasElements}
+						/>
+					)}
 				</div>
 			) : (
 				<div className="w-full h-full flex items-center justify-center">
 					<div className="text-center text-[var(--base-600)]">
-						<div className="text-lg">Creating first version...</div>
-						<div className="text-sm mt-2">Please wait while we set up your project workspace</div>
+						<div className="text-lg">No workspace available</div>
+						<div className="text-sm mt-2">Click "+ New Agent" to create your first workspace</div>
 					</div>
 				</div>
 			)}

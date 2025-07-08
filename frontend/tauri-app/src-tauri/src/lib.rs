@@ -72,6 +72,9 @@ pub fn run() {
 			list_available_os_session_kinds,
 			// Canvas management commands
 			copy_files,
+			copy_files_optimized,
+			get_copy_stats,
+			get_git_hash,
 			create_git_branch,
 			execute_command,
 			execute_command_in_dir,
@@ -177,6 +180,34 @@ async fn copy_files(
 ) -> Result<(), String> {
 	let should_exclude = exclude_git.unwrap_or(false);
 	filesystem::FileSystemManager::copy_files_with_exclusion(&source, &destination, &os_session, should_exclude)
+}
+
+#[tauri::command]
+async fn copy_files_optimized(
+	source: String, 
+	destination: String, 
+	os_session: OsSession,
+	exclude_git: Option<bool>
+) -> Result<(), String> {
+	let should_exclude = exclude_git.unwrap_or(false);
+	filesystem::FileSystemManager::copy_files_optimized(&source, &destination, &os_session, should_exclude)
+}
+
+#[tauri::command]
+async fn get_copy_stats(
+	source: String, 
+	destination: String, 
+	os_session: OsSession
+) -> Result<serde_json::Value, String> {
+	filesystem::FileSystemManager::get_copy_stats(&source, &destination, &os_session)
+}
+
+#[tauri::command]
+async fn get_git_hash(
+	directory: String, 
+	os_session: OsSession
+) -> Result<String, String> {
+	git::GitManager::get_current_hash(&directory, &os_session)
 }
 
 #[tauri::command]
