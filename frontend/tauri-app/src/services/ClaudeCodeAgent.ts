@@ -51,7 +51,7 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	private lastActivityTime: number = 0;
 	private completionTimeoutId: NodeJS.Timeout | null = null;
 	private lastScreenUpdateTime: number = 0;
-	private readonly SCREEN_UPDATE_THROTTLE_MS = 100; // Throttle screen updates to 10fps
+	private readonly SCREEN_UPDATE_THROTTLE_MS = 50; // Throttle screen updates to 20fps - more responsive
 
 	constructor() {
 		super();
@@ -303,73 +303,30 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 			switch (event.type) {
 				case "screenUpdate":
 					if (event.screen) {
-						// console.log(
-						// 	this.logPrefix,
-						// 	"Screen update - new screen has",
-						// 	event.screen.length,
-						// 	"lines",
-						// );
-						this.screenLines = [...event.screen];
-
-						// Log current screen content for debugging
-						// const screenText = event.screen.map((line) =>
-						// 	line.map((item) => item.lexeme).join(""),
-						// );
-						// console.log(this.logPrefix, "Current screen content:");
-						// screenText.forEach((line, i) => {
-						// 	if (line.trim()) {
-						// 		console.log(
-						// 			this.logPrefix,
-						// 			`  Line ${i}:`,
-						// 			JSON.stringify(line),
-						// 		);
-						// 	}
-						// });
+						// Direct reference instead of copying to avoid blocking
+						this.screenLines = event.screen;
 					}
 					break;
 
 				case "newLines":
 					if (event.lines) {
-						// console.log(this.logPrefix, "New lines added:", event.lines.length);
-						this.screenLines.push(...event.lines);
-
-						// Log new lines content
-						event.lines.forEach((line, i) => {
-							const lineText = line.map((item) => item.lexeme).join("");
-							if (lineText.trim()) {
-								// console.log(
-								// 	this.logPrefix,
-								// 	`  New line ${i}:`,
-								// 	JSON.stringify(lineText),
-								// );
-							}
-						});
+						// Use more efficient array concatenation for large arrays
+						if (event.lines.length > 10) {
+							this.screenLines = this.screenLines.concat(event.lines);
+						} else {
+							this.screenLines.push(...event.lines);
+						}
 					}
 					break;
 
 				case "patch":
 					if (event.line !== undefined && event.items) {
-						// console.log(
-						// 	this.logPrefix,
-						// 	"Patching line",
-						// 	event.line,
-						// 	"with",
-						// 	event.items.length,
-						// 	"items",
-						// );
 						// Ensure we have enough lines
 						while (this.screenLines.length <= event.line) {
 							this.screenLines.push([]);
 						}
-						this.screenLines[event.line] = [...event.items];
-
-						// Log patched line content
-						const lineText = event.items.map((item) => item.lexeme).join("");
-						// console.log(
-						// 	this.logPrefix,
-						// 	`  Patched line ${event.line}:`,
-						// 	JSON.stringify(lineText),
-						// );
+						// Direct assignment instead of copying
+						this.screenLines[event.line] = event.items;
 					}
 					break;
 			}

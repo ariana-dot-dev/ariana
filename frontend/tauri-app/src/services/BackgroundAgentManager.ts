@@ -53,20 +53,10 @@ export class BackgroundAgentManager {
 			throw new Error("Unknown OS session type");
 		}
 
-		// Detect the current branch in the ROOT directory
-		let rootBranchName: string;
-		try {
-			console.log('Detecting ROOT branch in directory:', rootDir, 'with OS session:', rootOsSession);
-			rootBranchName = await invoke<string>('git_get_current_branch', {
-				directory: rootDir,
-				osSession: rootOsSession
-			});
-			console.log('Detected root branch:', rootBranchName);
-		} catch (error) {
-			// Fallback to 'main' if detection fails
-			console.warn('Failed to detect root branch, using fallback:', error);
-			rootBranchName = 'main';
-		}
+		// Use the original root branch from GitProject instead of detecting current branch
+		// This prevents using corrupted branch names if root was accidentally switched
+		const rootBranchName = gitProject.getOriginalRootBranch();
+		console.log('Using original root branch from GitProject:', rootBranchName);
 
 		// Detect the current branch in the CANVAS directory
 		let canvasBranchName: string;

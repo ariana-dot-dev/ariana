@@ -128,6 +128,11 @@ export class MergeBackgroundAgent extends BackgroundAgent<MergeAgentContext> {
 		const workingDir = osSessionGetWorkingDirectory(this.osSession);
 		const canvasDir = osSessionGetWorkingDirectory(this.context.canvasToMergeOsSession);
 
+		// SAFETY CHECK: Ensure working directory is not the same as root directory
+		if (rootDir === workingDir) {
+			throw new Error(`SAFETY: Working directory cannot be the same as root directory. This would corrupt the main repository.`);
+		}
+
 		// Validate directories exist
 		if (!rootDir) {
 			throw new Error('Root directory is undefined');

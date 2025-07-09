@@ -45,6 +45,10 @@ export class GitProject {
 	public backgroundAgents: BackgroundAgent[];
 	public createdAt: number;
 	public lastModified: number;
+	
+	// Track original root branch to prevent root corruption
+	private originalRootBranch: string | null = null;
+	private rootDirectoryPath: string;
 
 	// Reactive state management
 	private listeners: Map<string, Set<() => void>> = new Map();
@@ -59,8 +63,48 @@ export class GitProject {
 		this.createdAt = Date.now();
 		this.lastModified = Date.now();
 		this.mergedCanvases = [];
+		
+		// Store root directory path for validation
+		this.rootDirectoryPath = osSessionGetWorkingDirectory(root) || '';
+		
+		// Initialize original root branch detection
+		this.initializeOriginalRootBranch();
 
 		console.log(this.canvases)
+	}
+
+
+	// Initialize original root branch detection
+	private async initializeOriginalRootBranch(): Promise<void> {
+		try {
+			this.originalRootBranch = await invoke<string>('git_get_current_branch', {
+				directory: this.rootDirectoryPath,
+				osSession: this.root
+			});
+			console.log(`GitProject: Original root branch detected: ${this.originalRootBranch}`);
+		} catch (error) {
+			console.warn(`GitProject: Failed to detect original root branch, using 'main' as fallback:`, error);
+			this.originalRootBranch = 'main';
+		}
+	}
+
+	// Get the original root branch for merge operations
+	getOriginalRootBranch(): string {
+		return this.originalRootBranch || 'main';
+	}
+
+	// Validate that a directory path is not the root (to prevent root corruption)
+	private isRootDirectory(directoryPath: string): boolean {
+		const normalizedRoot = this.rootDirectoryPath.replace(/[\/\\]+$/, '');
+		const normalizedPath = directoryPath.replace(/[\/\\]+$/, '');
+		return normalizedRoot === normalizedPath;
+	}
+
+	// Safeguard to prevent git operations on root directory
+	validateNotRootDirectory(directoryPath: string, operationName: string): void {
+		if (this.isRootDirectory(directoryPath)) {
+			throw new Error(`SAFETY: Attempted ${operationName} on root directory. This is not allowed to prevent root corruption.`);
+		}
 	}
 
 
