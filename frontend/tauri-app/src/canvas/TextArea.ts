@@ -16,11 +16,11 @@ export class TextArea {
 	public completedTasks: CompletedTask[];
 	public currentPrompt: string;
 
-	constructor(osSession: OsSession, content: string = "") {
+	constructor(osSession: OsSession | null, content: string = "") {
 		this.id = Math.random().toString(36).substring(2, 9);
 		this.content = content;
 		this.isLocked = false;
-		this.osSession = osSession;
+		this.osSession = osSession || { Local: "." };
 		this.completedTasks = [];
 		this.currentPrompt = content;
 	}
@@ -28,7 +28,7 @@ export class TextArea {
 	public targets(): ElementTargets {
 		return {
 			size: "medium",
-			aspectRatio: 16 / 9, // Wide aspect ratio for text area + terminal
+			aspectRatio: 16 / 9,
 			area: "center",
 		};
 	}
@@ -39,6 +39,15 @@ export class TextArea {
 		}
 	}
 
+	public setContentAndTriggerAutoGo(content: string): void {
+		if (!this.isLocked) {
+			this.content = content;
+			this.shouldTriggerAutoGo = true;
+		}
+	}
+
+	public shouldTriggerAutoGo: boolean = false;
+
 	public lock(): void {
 		this.isLocked = true;
 	}
@@ -47,10 +56,9 @@ export class TextArea {
 		this.isLocked = false;
 	}
 
-	// Task management methods
 	public updateCurrentPrompt(prompt: string): void {
 		this.currentPrompt = prompt;
-		this.content = prompt; // Keep content in sync
+		this.content = prompt;
 	}
 
 	public addCompletedTask(prompt: string, commitHash: string): void {
@@ -60,13 +68,12 @@ export class TextArea {
 			isReverted: false,
 			completedAt: Date.now()
 		});
-		this.currentPrompt = ""; // Reset current prompt
-		this.content = ""; // Reset content
+		this.currentPrompt = "";
+		this.content = "";
 	}
 
 	public revertTask(taskIndex: number): void {
 		if (taskIndex >= 0 && taskIndex < this.completedTasks.length) {
-			// Mark this task and all subsequent tasks as reverted
 			for (let i = taskIndex; i < this.completedTasks.length; i++) {
 				this.completedTasks[i].isReverted = true;
 			}
@@ -75,7 +82,6 @@ export class TextArea {
 
 	public restoreTask(taskIndex: number): void {
 		if (taskIndex >= 0 && taskIndex < this.completedTasks.length) {
-			// Restore this task and all previous tasks, keep subsequent ones reverted
 			for (let i = 0; i <= taskIndex; i++) {
 				this.completedTasks[i].isReverted = false;
 			}
@@ -90,7 +96,7 @@ export class TextArea {
 		return this.completedTasks.filter(task => task.commitHash && task.commitHash !== "NO_CHANGES");
 	}
 
-	static canvasElement(osSession: OsSession, content: string = ""): CanvasElement {
+	static canvasElement(osSession: OsSession | null, content: string = ""): CanvasElement {
 		const textArea = new TextArea(osSession, content);
 		return new CanvasElement({ textArea }, 1);
 	}

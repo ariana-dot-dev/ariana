@@ -158,6 +158,15 @@ export class GitProject {
 				osSession: null, // Will be set when copy is ready
 				taskManager: new TaskManager(),
 				lockState: 'loading',
+				elements: initialPrompt ? [
+					(() => {
+						const textAreaElement = TextArea.canvasElement(null, "");
+						if ('textArea' in textAreaElement.kind) {
+							textAreaElement.kind.textArea.setContentAndTriggerAutoGo(initialPrompt);
+						}
+						return textAreaElement;
+					})()
+				] : undefined,
 				...canvas
 			});
 

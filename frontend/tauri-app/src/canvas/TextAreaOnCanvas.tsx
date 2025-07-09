@@ -3,13 +3,10 @@ import { motion, PanInfo } from "framer-motion";
 import { cn } from "../utils";
 import { CanvasElement, ElementLayout, TextAreaKind } from "./types";
 import { CustomTerminalRenderer } from "./CustomTerminalRenderer";
-import { TerminalSpec } from "../services/CustomTerminalAPI";
 import { ClaudeCodeAgent } from "../services/ClaudeCodeAgent";
 import { useGitProject } from "../contexts/GitProjectContext";
-import { useStore } from "../state";
 import { ProcessManager } from "../services/ProcessManager";
 import { ProcessState } from "../types/GitProject";
-import { OsSession } from "../bindings/os";
 import { GitService } from "../services/GitService";
 
 interface TextAreaOnCanvasProps {
@@ -33,9 +30,7 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 	isDragging
 }) => {
 	const { cell, element } = layout;
-	const { isLightTheme } = useStore();
 	const { 
-		selectedGitProject,
 		getProcessByElementId, 
 		addProcess, 
 		updateProcess, 
@@ -52,76 +47,42 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 		canEditCanvas
 	} = useGitProject();
 	
-	// Get task manager
 	const taskManager = getCurrentTaskManager();
-	
-	// Canvas lock state
 	const canvasLockState = currentCanvas ? getCanvasLockState(currentCanvas.id) : 'normal';
 	const isCanvasLocked = canvasLockState !== 'normal';
 	const canEdit = currentCanvas ? canEditCanvas(currentCanvas.id) : false;
 	
-	
-	// Text area state - simplified to just current prompt
 	const [text, setText] = useState((layout.element.kind as TextAreaKind).textArea.content);
 	const [currentPrompt, setCurrentPrompt] = useState("");
-	
-	// Terminal state
 	const [showTerminal, setShowTerminal] = useState(false);
 	const [terminalId, setTerminalId] = useState<string | null>(null);
 	const [claudeAgent, setClaudeAgent] = useState<ClaudeCodeAgent | null>(null);
-	
-	// Track automatic Go button mode
 	const [autoGoRemaining, setAutoGoRemaining] = useState(0);
+	const [dragging, setDragging] = useState(false);
 	
-	// Get all tasks for display
-	const allTasks = taskManager?.getTasks() || [];
 	const currentPromptingTask = taskManager?.getCurrentPromptingTask();
 	const currentInProgressTask = taskManager?.getCurrentInProgressTask();
 	const completedTasks = taskManager?.getCompletedTasks() || [];
-	
 	const elementId = element.id;
-
-	
 	const textAreaRef = useRef<HTMLTextAreaElement>(null);
-	const [dragging, setDragging] = useState(false);
-	
 	const textAreaOsSession = (element.kind as TextAreaKind).textArea.osSession; 
 	
-	const handleDragStartInternal = () => {
-		propOnDragStart(element);
-	};
+	const handleDragStartInternal = () => propOnDragStart(element);
+	const handleDragEndInternal = () => propOnDragEnd(element);
 
-	const handleDragEndInternal = () => {
-		propOnDragEnd(element);
-	};
-
-	// Shared task starting logic
 	const startTaskWithPrompt = async (prompt: string) => {
-		// Block task creation if canvas is locked
-		if (!canEdit) {
-			return false;
-		}
-
-		if (currentInProgressTask || !prompt.trim()) {
-			return false;
-		}
+		if (!canEdit || currentInProgressTask || !prompt.trim()) return false;
 		
-		// Create task in TaskManager
 		let taskId: string;
 		if (currentPromptingTask) {
-			// Update existing prompting task
 			updateTaskPrompt(currentPromptingTask.id, prompt.trim());
 			taskId = currentPromptingTask.id;
 		} else {
-			// Create new task
 			taskId = createTask(prompt.trim()) || '';
-			if (!taskId) {
-				return false;
-			}
+			if (!taskId) return false;
 		}
 
 		try {
-			// Create Claude Code agent
 			const agent = new ClaudeCodeAgent();
 			setClaudeAgent(agent);
 			setShowTerminal(true);
@@ -133,7 +94,6 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 					setTerminalId(newTerminalId);
 					setShowTerminal(true);
 					
-					// Register process with persistence system
 					const processId = crypto.randomUUID();
 					const processState: ProcessState = {
 						processId,
@@ -145,7 +105,6 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 						prompt: prompt.trim()
 					};
 					
-					// Register with global ProcessManager
 					ProcessManager.registerProcess(processId, agent);
 					ProcessManager.setTerminalConnection(elementId, newTerminalId);
 					addProcess(processState);
@@ -164,172 +123,119 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 	const handleGoClick = async () => {
 		const success = await startTaskWithPrompt(currentPrompt);
 		if (success && autoGoRemaining > 0) {
-			// Decrement counter when user manually presses Go while in auto mode
 			setAutoGoRemaining(prev => Math.max(0, prev - 1));
 		}
 	};
 
 	useEffect(() => {
 		(layout.element.kind as TextAreaKind).textArea.content = text;
-	}, [text])
+	}, [text]);
 
-	// Initialize current prompt from text or existing prompting task
 	useEffect(() => {
 		if (currentPromptingTask) {
 			setCurrentPrompt(currentPromptingTask.prompt);
 			setText(currentPromptingTask.prompt);
 		} else if (!currentPrompt && text) {
 			setCurrentPrompt(text);
-			// If text was set programmatically (e.g., from agent creation), increment auto-go counter
-			if (text.trim()) {
-				setAutoGoRemaining(prev => prev + 1);
+			const textAreaObj = (layout.element.kind as TextAreaKind).textArea;
+			if (textAreaObj.shouldTriggerAutoGo) {
+				setAutoGoRemaining(1);
+				textAreaObj.shouldTriggerAutoGo = false;
 			}
 		}
-	}, [text, currentPrompt, currentPromptingTask]);
+	}, [text, currentPrompt, currentPromptingTask, layout.element.kind]);
 
-	// Auto-press Go button when in automatic mode
 	useEffect(() => {
-		// Only auto-press Go if:
-		// 1. We have automatic presses remaining
-		// 2. We have text to process
-		// 3. No tasks are in progress
-		// 4. Canvas can be edited
 		if (autoGoRemaining > 0 && currentPrompt.trim() && !currentInProgressTask && !currentPromptingTask && canEdit) {
 			const autoPress = async () => {
 				const success = await startTaskWithPrompt(currentPrompt);
 				if (success) {
-					// Decrement counter only if task started successfully
 					setAutoGoRemaining(prev => Math.max(0, prev - 1));
 				}
 			};
-			
 			setTimeout(autoPress, 1500);
 		}
 	}, [autoGoRemaining, currentPrompt, currentInProgressTask, currentPromptingTask, canEdit]);
 
-	// Hide terminal when no tasks are in progress
 	useEffect(() => {
 		if (!currentInProgressTask && !claudeAgent) {
-			// Small delay to prevent flickering between tasks
 			const timeoutId = setTimeout(() => {
 				setShowTerminal(false);
 				setTerminalId(null);
 			}, 1000);
-			
-			return () => {
-				clearTimeout(timeoutId);
-			};
+			return () => clearTimeout(timeoutId);
 		}
 	}, [currentInProgressTask, claudeAgent]);
 
-	// Restore process state on mount
 	useEffect(() => {
 		const existingProcess = getProcessByElementId(elementId);
 		
 		if (existingProcess) {
 			if (existingProcess.status === 'running') {
-				// Only restore running processes
 				setShowTerminal(true);
 				setTerminalId(existingProcess.terminalId);
 				
-				// Try to restore the ClaudeCodeAgent instance from ProcessManager
 				const restoredAgent = ProcessManager.getProcess(existingProcess.processId);
 				if (restoredAgent) {
 					setClaudeAgent(restoredAgent);
 				} else {
-					// Mark process as finished since we can't restore it
 					updateProcess(existingProcess.processId, { status: 'finished' });
-					// Find matching task and complete it
 					const inProgressTask = taskManager?.getInProgressTasks().find(t => t.processId === existingProcess.processId);
 					if (inProgressTask) {
-						completeTask(inProgressTask.id, ""); // Empty commit hash for failed restoration
+						completeTask(inProgressTask.id, "");
 					}
 				}
 			} else if (existingProcess.status === 'finished' || existingProcess.status === 'completed') {
-				// Clean up old finished processes instead of restoring their UI state
 				removeProcess(existingProcess.processId);
-				// Don't set terminal state - let current task flow handle it
 			}
 		}
 	}, [elementId, getProcessByElementId, updateProcess]);
 
-	// Listen for task completion
 	useEffect(() => {
 		if (!claudeAgent) return;
 
-
 		const handleTaskComplete = async (result: any) => {
-			// Find the current in-progress task
 			const inProgressTask = taskManager?.getCurrentInProgressTask();
-			if (!inProgressTask) {
-				return;
-			}
+			if (!inProgressTask) return;
 			
 			let commitHash = "";
 			
 			try {
-				// Create git commit with the task prompt as the commit message
 				commitHash = await GitService.createCommit(
 					textAreaOsSession || { Local: "." },
 					inProgressTask.prompt
 				);
 			} catch (error) {
-				// Check if it's a "no changes" error
 				const errorString = String(error);
 				if (errorString === "NO_CHANGES_TO_COMMIT" || errorString.toLowerCase().includes("nothing to commit")) {
-					commitHash = "NO_CHANGES"; // Special marker for no-change tasks
+					commitHash = "NO_CHANGES";
 				}
 			}
 			
-			// Complete the task in TaskManager
 			completeTask(inProgressTask.id, commitHash);
-			
-			// Reset states for new prompt
-			// Don't immediately hide terminal - let it stay for potential next task
 			setCurrentPrompt("");
 			setText("");
 			
-			// Update process state and clean up agent
 			const existingProcess = getProcessByElementId(elementId);
 			if (existingProcess) {
 				updateProcess(existingProcess.processId, { status: 'finished' });
 				ProcessManager.unregisterProcess(existingProcess.processId);
 			}
 			
-			// Clean up the claude agent after a short delay to let any final operations complete
-			setTimeout(() => {
-				setClaudeAgent(null);
-			}, 500);
+			setTimeout(() => setClaudeAgent(null), 500);
 		};
 
 		const handleTaskError = (error: string) => {
-			
-			// Find the current in-progress task and revert to prompting
-			const inProgressTask = taskManager?.getCurrentInProgressTask();
-			if (inProgressTask) {
-				// Task failed, revert to prompting state
-				// Note: TaskManager doesn't have a revert-to-prompting method, so we'll leave it in_progress
-				// In a full implementation, we'd add an "error" state or revert mechanism
-			}
-			
-			// Update process state
 			const existingProcess = getProcessByElementId(elementId);
 			if (existingProcess) {
 				updateProcess(existingProcess.processId, { status: 'error' });
 				ProcessManager.unregisterProcess(existingProcess.processId);
 			}
-			
-			// Clean up agent - terminal will be hidden by the useEffect
 			setClaudeAgent(null);
 		};
 
-		const handleTaskStarted = (data: any) => {
-			// Task started
-		};
-
-		const handleScreenUpdate = (tuiLines: any) => {
-			// Screen update received
-		};
+		const handleTaskStarted = (data: any) => {};
+		const handleScreenUpdate = (tuiLines: any) => {};
 
 		claudeAgent.on("taskCompleted", handleTaskComplete);
 		claudeAgent.on("taskError", handleTaskError);
@@ -350,7 +256,6 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 			setClaudeAgent(null);
 		}
 		
-		// Clean up process state
 		const existingProcess = getProcessByElementId(elementId);
 		if (existingProcess) {
 			removeProcess(existingProcess.processId);
@@ -360,35 +265,19 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 		
 		setShowTerminal(false);
 		setTerminalId(null);
-		// Keep the current prompt so user can try again
-		
-		// Revert task back to prompting state (if we had this functionality)
-		// For now, the in-progress task will remain in that state
 	};
 
 	const handleRevertTask = async (taskId: string) => {
 		try {
 			const task = taskManager?.getTask(taskId);
-			if (!task || task.status !== 'completed') {
+			if (!task || task.status !== 'completed' || !task.commitHash || task.commitHash === "NO_CHANGES") {
 				return;
 			}
 
-			if (!task.commitHash || task.commitHash === "NO_CHANGES") {
-				return;
-			}
-
-			// Get target commit from TaskManager
 			const targetCommitHash = taskManager?.getRevertTargetCommit(taskId);
-			if (!targetCommitHash) {
-				return;
-			}
+			if (!targetCommitHash) return;
 			
-			await GitService.revertToCommit(
-				textAreaOsSession || { Local: "." },
-				targetCommitHash
-			);
-
-			// Update TaskManager state
+			await GitService.revertToCommit(textAreaOsSession || { Local: "." }, targetCommitHash);
 			revertTask(taskId);
 		} catch (error) {
 			alert(`Failed to revert: ${error}`);
@@ -398,20 +287,11 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 	const handleRestoreTask = async (taskId: string) => {
 		try {
 			const task = taskManager?.getTask(taskId);
-			if (!task || task.status !== 'completed') {
+			if (!task || task.status !== 'completed' || !task.commitHash || task.commitHash === "NO_CHANGES") {
 				return;
 			}
 
-			if (!task.commitHash || task.commitHash === "NO_CHANGES") {
-				return;
-			}
-
-			await GitService.revertToCommit(
-				textAreaOsSession || { Local: "." },
-				task.commitHash
-			);
-
-			// Update TaskManager state
+			await GitService.revertToCommit(textAreaOsSession || { Local: "." }, task.commitHash);
 			restoreTask(taskId);
 		} catch (error) {
 			alert(`Failed to restore: ${error}`);
@@ -446,12 +326,7 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 			}}
 			layout
 		>
-			{/* <div className="fixed w-full h-full opacity-30" style={{ background: 'url("assets/noise.png")' }}>
-			</div> */}
-			
-			
 			<div className={cn("w-full h-full flex flex-col p-3")}>
-				{/* Text Area Section */}
 				<div
 					className={cn(
 						"relative flex flex-col rounded-md gap-0",
@@ -464,9 +339,7 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 						backgroundPosition: "10px 20px",
 					}}
 				>
-					{/* Container for all prompts */}
 					<div className="h-full overflow-y-auto">
-						{/* Completed Tasks */}
 						{completedTasks.map((task, index, array) => (
 							<div key={task.id} className="relative not-last:mb-2 group">
 								<div className="relative">
@@ -486,24 +359,21 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 										)}
 										rows={Math.max(1, task.prompt.split("\n").length)}
 									/>
-									{/* Status indicators and button positioned at end of text */}
 									<div className="absolute flex items-center gap-1" style={{
 										left: `${task.prompt.split("\n").reduce((max, line) => Math.max(max, line.length), 0) * 9.7 + 10}px`,
 										top: `${Math.max(0, task.prompt.split("\n").length - 1) * 24 + 2}px`
 									}}>
-										{/* Status emoji */}
 										<span className="text-base">
 											{task.isReverted 
 												? '❌' 
 												: task.commitHash === "NO_CHANGES"
-													? '⚠️' // Warning for no-change tasks
+													? '⚠️'
 													: task.commitHash 
 														? '✅' 
-														: '❌' // Error for failed commits
+														: '❌'
 											}
 										</span>
 										
-										{/* Revert/Restore Button - only for actual commits, not NO_CHANGES */}
 										{task.commitHash && task.commitHash !== "NO_CHANGES" && (
 											<button
 												onClick={() => task.isReverted ? handleRestoreTask(task.id) : handleRevertTask(task.id)}
@@ -527,7 +397,6 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 							</div>
 						))}
 
-						{/* Current/Running Prompt */}
 						{currentInProgressTask && (
 							<div className="relative">
 								<textarea
@@ -544,8 +413,6 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 								/>
 							</div>
 						)}
-
-						{/* New Input Area */}
 						<div className="relative">
 							<textarea
 								ref={textAreaRef}
@@ -555,12 +422,10 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 										setCurrentPrompt(e.target.value);
 										setText(e.target.value);
 										
-										// When user starts typing, exit automatic mode
 										if (autoGoRemaining > 0) {
 											setAutoGoRemaining(0);
 										}
 										
-										// Update existing prompting task if it exists
 										if (currentPromptingTask) {
 											updateTaskPrompt(currentPromptingTask.id, e.target.value);
 										}
@@ -583,13 +448,12 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 									"focus:text-[var(--base-500)]",
 									"placeholder:text-[var(--base-600-50)]",
 									(currentInProgressTask || !canEdit) && "opacity-60 cursor-not-allowed",
-									!canEdit && "bg-[var(--base-200-20)]", // Show locked background
+									!canEdit && "bg-[var(--base-200-20)]",
 									"scrollbar-thin scrollbar-thumb-[var(--base-400)] scrollbar-track-transparent",
 								)}
 								rows={Math.max(1, currentPrompt.split("\n").length)}
 							/>
 
-							{/* Canvas Lock Status Indicator */}
 							{isCanvasLocked && (
 								<div className="absolute right-5 top-5 flex items-center gap-1 text-base text-[var(--base-600)] bg-[var(--base-100)] px-3 py-1.5 rounded-lg">
 									{canvasLockState === 'merging' && (
@@ -606,8 +470,6 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 									)}
 								</div>
 							)}
-
-							{/* Action Button */}
 							{!currentInProgressTask && currentPrompt.trim().length > 0 && (
 								<motion.div
 									className="absolute left-0 flex justify-end"
@@ -644,7 +506,6 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 					</div>
 				</div>
 
-				{/* Terminal Section */}
 				{showTerminal && terminalId && (
 					<div className="h-2/3 mt-2 opacity-70">
 						<CustomTerminalRenderer

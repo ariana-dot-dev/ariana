@@ -151,11 +151,26 @@ const Canvas: React.FC<CanvasProps> = ({
 			const message: WorkerMessage = {
 				type: "OPTIMIZE_GRID",
 				payload: {
-					elements: elements.map((e) => ({
-						id: e.id,
-						targets: e.targets,
-						weight: e.weight,
-					})),
+					elements: elements.map((e) => {
+						try {
+							return {
+								id: e.id,
+								targets: e.targets,
+								weight: e.weight,
+							};
+						} catch (error) {
+							console.warn("Failed to get targets for element:", e.id, error);
+							return {
+								id: e.id,
+								targets: {
+									size: "medium" as const,
+									aspectRatio: 16 / 9,
+									area: "center" as const,
+								},
+								weight: e.weight,
+							};
+						}
+					}),
 					canvasWidth: canvasSize.width,
 					canvasHeight: canvasSize.height,
 					previousLayouts: previousLayoutsRef.current,
