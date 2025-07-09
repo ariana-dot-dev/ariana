@@ -226,6 +226,10 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 				const errorString = String(error);
 				if (errorString === "NO_CHANGES_TO_COMMIT" || errorString.toLowerCase().includes("nothing to commit")) {
 					commitHash = "NO_CHANGES";
+				} else {
+					// Don't treat git commit failures as task failures - task succeeded but no commit was made
+					console.warn(`[TextAreaOnCanvas] Git commit failed but task completed successfully:`, error);
+					commitHash = "NO_CHANGES";
 				}
 			}
 			

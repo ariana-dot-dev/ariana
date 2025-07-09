@@ -284,7 +284,7 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		this.processEventQueue();
 	}
 
-	private async processEventQueue(): Promise<void> {
+	private processEventQueue(): void {
 		if (this.isProcessingEvents || this.eventQueue.length === 0) {
 			return;
 		}
@@ -292,12 +292,10 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		this.isProcessingEvents = true;
 
 		try {
+			// Process all queued events synchronously to avoid blocking
 			while (this.eventQueue.length > 0) {
 				const events = this.eventQueue.shift()!;
-				await this.handleTerminalEvents(events);
-				
-				// Yield control back to event loop to prevent UI blocking
-				await new Promise(resolve => setTimeout(resolve, 0));
+				this.handleTerminalEvents(events);
 			}
 		} catch (error) {
 			console.error(this.logPrefix, "Error processing event queue:", error);
@@ -306,7 +304,7 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		}
 	}
 
-	private async handleTerminalEvents(events: TerminalEvent[]): Promise<void> {
+	private handleTerminalEvents(events: TerminalEvent[]): void {
 		// console.log(this.logPrefix, "Received", events.length, "terminal events");
 
 		for (const event of events) {
@@ -358,8 +356,8 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 			this.emit("screenUpdate", tuiLines);
 		}
 
-		// Process TUI interactions based on new lines
-		await this.processTuiInteraction(tuiLines);
+		// Process TUI interactions based on new lines (async but don't block event processing)
+		setTimeout(() => this.processTuiInteraction(tuiLines), 0);
 	}
 
 	private async initializeClaudeCode(): Promise<void> {
@@ -526,8 +524,10 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 				this.logPrefix,
 				"Found trust confirmation prompt, sending Enter...",
 			);
-			await this.delay(Math.random() * 500 + 500);
-			await this.sendRawInput(this.terminalId, "\r");
+			// Use setTimeout to delay without blocking event processing
+			setTimeout(async () => {
+				await this.sendRawInput(this.terminalId!, "\r");
+			}, Math.random() * 500 + 500);
 			this.hasSeenTrustPrompt = true;
 			return;
 		}
@@ -541,8 +541,10 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 				this.logPrefix,
 				"Found '1. Yes'",
 			);
-			await this.delay(Math.random() * 500 + 500);
-			await this.sendRawInput(this.terminalId, "\r");
+			// Use setTimeout to delay without blocking event processing
+			setTimeout(async () => {
+				await this.sendRawInput(this.terminalId!, "\r");
+			}, Math.random() * 500 + 500);
 			return;
 		}
 
@@ -555,29 +557,32 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 				this.currentPrompt,
 			);
 			this.hasSeenTryPrompt = true;
-			// Send the prompt in chunks to avoid blocking the main thread
-			const chunkSize = 20; // Send 20 characters at a time
-			for (let i = 0; i < this.currentPrompt.length; i += chunkSize) {
-				const chunk = this.currentPrompt.slice(i, i + chunkSize);
-				let processedChunk = "";
-				
-				for (const char of chunk) {
-					if (char === "\n") {
-						processedChunk += "\\\r";
-					} else {
-						processedChunk += char;
+			
+			// Use setTimeout to send prompt in chunks with delays to ensure reliability
+			setTimeout(async () => {
+				const chunkSize = 20; // Send 20 characters at a time
+				for (let i = 0; i < this.currentPrompt!.length; i += chunkSize) {
+					const chunk = this.currentPrompt!.slice(i, i + chunkSize);
+					let processedChunk = "";
+					
+					for (const char of chunk) {
+						if (char === "\n") {
+							processedChunk += "\\\r";
+						} else {
+							processedChunk += char;
+						}
+					}
+					
+					await this.sendRawInput(this.terminalId!, processedChunk);
+					
+					// Small delay between chunks to prevent input corruption
+					if (i + chunkSize < this.currentPrompt!.length) {
+						await this.delay(50);
 					}
 				}
-				
-				await this.sendRawInput(this.terminalId, processedChunk);
-				
-				// Yield control to prevent blocking
-				if (i + chunkSize < this.currentPrompt.length) {
-					await new Promise(resolve => setTimeout(resolve, 0));
-				}
-			}
-			await this.delay(Math.random() * 500 + 500);
-			await this.sendRawInput(this.terminalId, "\r");
+				await this.delay(200); // Final delay before Enter
+				await this.sendRawInput(this.terminalId!, "\r");
+			}, Math.random() * 500 + 500);
 			return;
 		}
 
