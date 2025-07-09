@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { motion, PanInfo } from "framer-motion";
 import { cn } from "../utils";
 import { CanvasElement, ElementLayout, TextAreaKind } from "./types";
@@ -73,6 +73,19 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 	const startTaskWithPrompt = async (prompt: string) => {
 		if (!canEdit || currentInProgressTask || !prompt.trim()) return false;
 		
+		// CRITICAL FIX: Prevent multiple agents - check if one is already running
+		if (claudeAgent && claudeAgent.isTaskRunning()) {
+			console.warn(`[TextAreaOnCanvas] Agent already running for element ${elementId}, ignoring new request`);
+			return false;
+		}
+		
+		// Clean up any existing agent first
+		if (claudeAgent) {
+			console.log(`[TextAreaOnCanvas] Cleaning up existing agent for element ${elementId}`);
+			await claudeAgent.cleanup();
+			setClaudeAgent(null);
+		}
+		
 		let taskId: string;
 		if (currentPromptingTask) {
 			updateTaskPrompt(currentPromptingTask.id, prompt.trim());
@@ -83,6 +96,7 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 		}
 
 		try {
+			console.log(`[TextAreaOnCanvas] Creating new agent for element ${elementId}`);
 			const agent = new ClaudeCodeAgent();
 			setClaudeAgent(agent);
 			setShowTerminal(true);
@@ -131,31 +145,34 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 		(layout.element.kind as TextAreaKind).textArea.content = text;
 	}, [text]);
 
+	// Memoize textArea object to prevent re-render loops
+	const textAreaObj = useMemo(() => (layout.element.kind as TextAreaKind).textArea, [layout.element.id]);
+
 	useEffect(() => {
 		if (currentPromptingTask) {
 			setCurrentPrompt(currentPromptingTask.prompt);
 			setText(currentPromptingTask.prompt);
 		} else if (!currentPrompt && text) {
 			setCurrentPrompt(text);
-			const textAreaObj = (layout.element.kind as TextAreaKind).textArea;
 			if (textAreaObj.shouldTriggerAutoGo) {
 				setAutoGoRemaining(1);
 				textAreaObj.shouldTriggerAutoGo = false;
 			}
 		}
-	}, [text, currentPrompt, currentPromptingTask, layout.element.kind]);
+	}, [text, currentPrompt, currentPromptingTask, textAreaObj]);
 
 	useEffect(() => {
-		if (autoGoRemaining > 0 && currentPrompt.trim() && !currentInProgressTask && !currentPromptingTask && canEdit) {
+		if (autoGoRemaining > 0 && currentPrompt.trim() && !currentInProgressTask && !currentPromptingTask && canEdit && !claudeAgent) {
 			const autoPress = async () => {
 				const success = await startTaskWithPrompt(currentPrompt);
 				if (success) {
 					setAutoGoRemaining(prev => Math.max(0, prev - 1));
 				}
 			};
-			setTimeout(autoPress, 1500);
+			const timeoutId = setTimeout(autoPress, 1500);
+			return () => clearTimeout(timeoutId); // IMPORTANT: Clear timeout on cleanup
 		}
-	}, [autoGoRemaining, currentPrompt, currentInProgressTask, currentPromptingTask, canEdit]);
+	}, [autoGoRemaining, currentPrompt, currentInProgressTask, currentPromptingTask, canEdit, claudeAgent]);
 
 	useEffect(() => {
 		if (!currentInProgressTask && !claudeAgent) {
@@ -249,6 +266,16 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 			claudeAgent.off("screenUpdate", handleScreenUpdate);
 		};
 	}, [claudeAgent]);
+
+	// CRITICAL: Clean up agent on component unmount
+	useEffect(() => {
+		return () => {
+			if (claudeAgent) {
+				console.log(`[TextAreaOnCanvas] Component unmounting, cleaning up agent for element ${elementId}`);
+				claudeAgent.cleanup();
+			}
+		};
+	}, [elementId]); // Only depend on elementId, not claudeAgent
 
 	const handleStopClick = async () => {
 		if (claudeAgent) {
