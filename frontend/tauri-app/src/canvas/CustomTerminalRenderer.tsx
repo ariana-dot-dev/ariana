@@ -250,7 +250,7 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 						scrollableDiv.scrollHeight,
 				) < 5;
 
-			if (true) {
+			if (isAtBottom) {
 				// Use requestAnimationFrame for smoother scrolling
 				requestAnimationFrame(() => {
 					scrollableDiv.scrollTop = scrollableDiv.scrollHeight;

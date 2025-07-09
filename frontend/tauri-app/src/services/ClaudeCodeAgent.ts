@@ -50,6 +50,8 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	private eventQueue: TerminalEvent[][] = [];
 	private lastActivityTime: number = 0;
 	private completionTimeoutId: NodeJS.Timeout | null = null;
+	private lastScreenUpdateTime: number = 0;
+	private readonly SCREEN_UPDATE_THROTTLE_MS = 100; // Throttle screen updates to 10fps
 
 	constructor() {
 		super();
@@ -255,41 +257,11 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 			return;
 		}
 
-		console.log(this.logPrefix, "🔧 Setting up terminal event listener for terminal:", this.terminalId);
-		
 		try {
 			this.onTerminalEvent(this.terminalId, (events: TerminalEvent[]) => {
-				console.log(this.logPrefix, "🎭 ClaudeCodeAgent received events:", events.length);
-				
-				// Log event types and content for debugging
-				events.forEach((event, i) => {
-					console.log(this.logPrefix, `📋 Event ${i}: type="${event.type}"`);
-					if (event.type === 'screenUpdate' && event.screen) {
-						console.log(this.logPrefix, `📺 Screen has ${event.screen.length} lines`);
-						event.screen.slice(0, 3).forEach((line, lineIdx) => {
-							const lineText = line.map(item => item.lexeme).join('');
-							if (lineText.trim()) {
-								console.log(this.logPrefix, `📺   Screen line ${lineIdx}: "${lineText}"`);
-							}
-						});
-					}
-					if (event.type === 'newLines' && event.lines) {
-						console.log(this.logPrefix, `📝 New lines: ${event.lines.length}`);
-						event.lines.slice(0, 3).forEach((line, lineIdx) => {
-							const lineText = line.map(item => item.lexeme).join('');
-							if (lineText.trim()) {
-								console.log(this.logPrefix, `📝   New line ${lineIdx}: "${lineText}"`);
-							}
-						});
-					}
-					if (event.type === 'cursorMove') {
-						console.log(this.logPrefix, `🖱️ Cursor moved to line=${event.line}, col=${event.col}`);
-					}
-				});
-				
+				// Remove excessive logging that causes performance issues
 				this.queueEventBatch(events);
 			});
-			console.log(this.logPrefix, "✅ ClaudeCodeAgent event listener setup completed");
 		} catch (error) {
 			console.error(this.logPrefix, "❌ Error setting up ClaudeCodeAgent event listener:", error);
 		}
@@ -311,6 +283,9 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 			while (this.eventQueue.length > 0) {
 				const events = this.eventQueue.shift()!;
 				await this.handleTerminalEvents(events);
+				
+				// Yield control back to event loop to prevent UI blocking
+				await new Promise(resolve => setTimeout(resolve, 0));
 			}
 		} catch (error) {
 			console.error(this.logPrefix, "Error processing event queue:", error);
@@ -406,8 +381,13 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 
 		// Get current TUI lines for CLI agents library
 		const tuiLines = this.getCurrentTuiLines();
-		// Emit screen update event
-		this.emit("screenUpdate", tuiLines);
+		
+		// Throttle screen update events to prevent excessive re-renders
+		const now = Date.now();
+		if (now - this.lastScreenUpdateTime >= this.SCREEN_UPDATE_THROTTLE_MS) {
+			this.lastScreenUpdateTime = now;
+			this.emit("screenUpdate", tuiLines);
+		}
 
 		// Process TUI interactions based on new lines
 		await this.processTuiInteraction(tuiLines);
@@ -603,16 +583,26 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 				this.currentPrompt,
 			);
 			this.hasSeenTryPrompt = true;
-			// Send the prompt key by key, simulating typing
-			for (const char of this.currentPrompt) {
-				if (char === "\n") {
-					await this.sendRawInput(this.terminalId, "\\");
-					await this.delay(Math.random() * 50 + 50);
-					await this.sendRawInput(this.terminalId, "\r");
-				} else {
-					await this.sendRawInput(this.terminalId, char);
+			// Send the prompt in chunks to avoid blocking the main thread
+			const chunkSize = 20; // Send 20 characters at a time
+			for (let i = 0; i < this.currentPrompt.length; i += chunkSize) {
+				const chunk = this.currentPrompt.slice(i, i + chunkSize);
+				let processedChunk = "";
+				
+				for (const char of chunk) {
+					if (char === "\n") {
+						processedChunk += "\\\r";
+					} else {
+						processedChunk += char;
+					}
 				}
-				await this.delay(Math.random() * 50 + 50);
+				
+				await this.sendRawInput(this.terminalId, processedChunk);
+				
+				// Yield control to prevent blocking
+				if (i + chunkSize < this.currentPrompt.length) {
+					await new Promise(resolve => setTimeout(resolve, 0));
+				}
 			}
 			await this.delay(Math.random() * 500 + 500);
 			await this.sendRawInput(this.terminalId, "\r");

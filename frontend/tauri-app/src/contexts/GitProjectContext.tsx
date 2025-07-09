@@ -71,19 +71,13 @@ export function GitProjectProvider({ children, gitProject }: GitProjectProviderP
 			forceUpdate(prev => prev + 1);
 		});
 
-		// Periodic update for background agents to ensure UI stays current
-		const backgroundAgentUpdateInterval = setInterval(() => {
-			if (gitProject.backgroundAgents.length > 0) {
-				// Trigger update to persist any background agent changes and refresh UI
-				updateGitProject(gitProject.id);
-			}
-		}, 500); // Update every 500ms when there are active agents
+		// Remove periodic updates - rely on event-driven updates only
+		// Background agents will trigger updates through their own events when needed
 
 		return () => {
 			unsubscribeCanvases();
 			unsubscribeCurrentCanvas();
 			unsubscribeBackgroundAgents();
-			clearInterval(backgroundAgentUpdateInterval);
 		};
 	}, [gitProject, updateGitProject]);
 
