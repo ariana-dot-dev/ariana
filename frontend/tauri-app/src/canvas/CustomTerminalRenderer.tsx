@@ -263,6 +263,20 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 	}, []);
 
 	const handleTerminalEvent = useCallback((events: TerminalEvent[]) => {
+		// Benchmark: Log if we're getting too many events
+		const now = Date.now();
+		if (window.terminalEventCount === undefined) {
+			window.terminalEventCount = 0;
+			window.lastTerminalBenchmark = now;
+		}
+		window.terminalEventCount++;
+		
+		if (now - window.lastTerminalBenchmark >= 2000) {
+			console.log(`[BENCHMARK] CustomTerminalRenderer - Events processed in last 2s: ${window.terminalEventCount}`);
+			window.terminalEventCount = 0;
+			window.lastTerminalBenchmark = now;
+		}
+
 		// Batch multiple events together to reduce React renders
 		const screenUpdates = events.filter((e) => {
 			return (

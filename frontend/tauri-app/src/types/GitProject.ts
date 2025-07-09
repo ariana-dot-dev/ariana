@@ -100,12 +100,6 @@ export class GitProject {
 		return normalizedRoot === normalizedPath;
 	}
 
-	// Safeguard to prevent git operations on root directory
-	validateNotRootDirectory(directoryPath: string, operationName: string): void {
-		if (this.isRootDirectory(directoryPath)) {
-			throw new Error(`SAFETY: Attempted ${operationName} on root directory. This is not allowed to prevent root corruption.`);
-		}
-	}
 
 
 	// Reactive getters
@@ -132,6 +126,7 @@ export class GitProject {
 	getBackgroundAgent(agentId: string): BackgroundAgent | undefined {
 		return this.backgroundAgents.find(a => a.id === agentId);
 	}
+
 
 	updateBackgroundAgent(agentId: string, agent: BackgroundAgent): void {
 		const index = this.backgroundAgents.findIndex(a => a.id === agentId);
@@ -283,6 +278,7 @@ export class GitProject {
 			}
 		}
 	}
+
 
 	/**
 	 * Returns a canvas copy back to the pool for reuse

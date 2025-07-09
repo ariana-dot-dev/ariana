@@ -52,6 +52,8 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	private completionTimeoutId: NodeJS.Timeout | null = null;
 	private lastScreenUpdateTime: number = 0;
 	private readonly SCREEN_UPDATE_THROTTLE_MS = 50; // Throttle screen updates to 20fps - more responsive
+	private eventCount: number = 0;
+	private lastBenchmarkTime: number = Date.now();
 
 	constructor() {
 		super();
@@ -269,6 +271,16 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 
 	private queueEventBatch(events: TerminalEvent[]): void {
 		this.eventQueue.push(events);
+		
+		// Benchmark: Count events received
+		this.eventCount++;
+		const now = Date.now();
+		if (now - this.lastBenchmarkTime >= 2000) { // Every 2 seconds
+			console.log(`[BENCHMARK] ClaudeCodeAgent ${this.logPrefix} - Events processed in last 2s: ${this.eventCount}`);
+			this.eventCount = 0;
+			this.lastBenchmarkTime = now;
+		}
+		
 		this.processEventQueue();
 	}
 
@@ -486,6 +498,9 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	private async processTuiInteraction(tuiLines: TuiLine[]): Promise<void> {
 		if (!this.terminalId) return;
 
+		// Benchmark: Time TUI interaction processing
+		const startTime = performance.now();
+
 		// Extract all new line content from the events
 		let newLines: string[] = tuiLines.map((tuiLine) => tuiLine.content);
 
@@ -573,6 +588,12 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		if (hasEscToInterrupt) {
 			// console.log(this.logPrefix, "Found 'esc to interrupt', waiting...");
 			return;
+		}
+
+		// Benchmark: Log TUI processing time if it takes > 1ms
+		const processingTime = performance.now() - startTime;
+		if (processingTime > 1) {
+			console.log(`[BENCHMARK] TUI interaction processing took ${processingTime.toFixed(2)}ms`);
 		}
 	}
 

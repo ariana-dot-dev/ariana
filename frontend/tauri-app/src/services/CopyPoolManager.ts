@@ -229,12 +229,6 @@ export class CopyPoolManager {
      * Ensure we're on the specified branch
      */
     private async ensureBranch(directory: string, osSession: OsSession, targetBranch: string): Promise<void> {
-        // SAFETY CHECK: Ensure this is not being called on a root directory
-        // This prevents accidental corruption of the main repository
-        if (this.isLikelyRootDirectory(directory)) {
-            throw new Error(`SAFETY: Attempted to perform git branch operation on potential root directory: ${directory}. This is not allowed to prevent repository corruption.`);
-        }
-
         const currentBranch = await this.getCurrentBranch(directory, osSession);
         
         if (currentBranch !== targetBranch) {
@@ -257,16 +251,6 @@ export class CopyPoolManager {
         }
     }
 
-    // Helper to detect if a directory might be a root directory (not a copy)
-    private isLikelyRootDirectory(directory: string): boolean {
-        // Root directories typically don't have merge/copy suffixes
-        const hasAgentSuffix = directory.includes('-merge-') || directory.includes('-agent-');
-        const hasCopySuffix = directory.includes('-copy-') || directory.includes('-canvas-');
-        const hasRandomId = /[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/.test(directory);
-        
-        // If it doesn't have any copy/merge indicators, it might be a root
-        return !hasAgentSuffix && !hasCopySuffix && !hasRandomId;
-    }
 
     // Utility methods
     private getPoolKey(projectPath: string, osSession: OsSession): string {

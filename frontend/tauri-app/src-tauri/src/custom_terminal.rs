@@ -428,7 +428,19 @@ impl CustomTerminalConnection {
 		thread::spawn(move || {
 			// Forward events from the parser to the frontend until the PTY reader
 			// thread finishes and the sender side of the channel is dropped.
+			let mut event_count = 0;
+			let mut last_benchmark = std::time::Instant::now();
+			
 			for events in event_rx {
+				event_count += 1;
+				
+				// Benchmark: Log event frequency every 2 seconds
+				if last_benchmark.elapsed().as_secs() >= 2 {
+					println!("[BENCHMARK] Terminal {} - Events sent in last 2s: {}", id_clone, event_count);
+					event_count = 0;
+					last_benchmark = std::time::Instant::now();
+				}
+				
 				if app
 					.emit(&format!("custom-terminal-event-{id_clone}"), &events)
 					.is_err()
