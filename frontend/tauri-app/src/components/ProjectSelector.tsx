@@ -265,6 +265,18 @@ export function ProjectSelector({ onProjectCreated }: ProjectSelectorProps) {
 				osSession 
 			});
 
+			// Create initial commit to ensure HEAD exists
+			try {
+				await invoke("git_commit", {
+					directory: projectPath,
+					message: "Initial commit",
+					osSession
+				});
+			} catch (error) {
+				// If commit fails (e.g., no changes), that's okay for empty repos
+				console.log("Initial commit not needed or failed:", error);
+			}
+
 			// Create GitProject with the OsSession as root
 			const gitProject = new GitProject(osSession, sanitizedName);
 			const projectId = store.addGitProject(gitProject);
@@ -323,6 +335,18 @@ export function ProjectSelector({ onProjectCreated }: ProjectSelectorProps) {
 				const shouldInit = confirm("This directory is not a git repository. Would you like to initialize git?");
 				if (shouldInit) {
 					await invoke("git_init_repository", { directory: path, osSession });
+					
+					// Create initial commit to ensure HEAD exists
+					try {
+						await invoke("git_commit", {
+							directory: path,
+							message: "Initial commit",
+							osSession
+						});
+					} catch (error) {
+						// If commit fails (e.g., no changes), that's okay for empty repos
+						console.log("Initial commit not needed or failed:", error);
+					}
 				}
 			}
 		} catch (error) {

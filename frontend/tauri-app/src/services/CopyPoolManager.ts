@@ -88,7 +88,7 @@ export class CopyPoolManager {
         const currentRootHash = await this.getGitHash(rootPath, rootOsSession);
         
         if (!currentRootHash) {
-            console.warn('[CopyPoolManager] Could not get root git hash');
+            console.log('[CopyPoolManager] No commits in root repository yet, skipping sync check');
             return;
         }
         
@@ -158,8 +158,21 @@ export class CopyPoolManager {
         const rootBranch = await this.getCurrentBranch(rootPath, rootOsSession);
         const rootHash = await this.getGitHash(rootPath, rootOsSession);
         
-        if (!rootBranch || !rootHash) {
-            throw new Error('Cannot determine root git state');
+        if (!rootBranch) {
+            throw new Error('Cannot determine root git branch');
+        }
+        
+        if (!rootHash) {
+            console.log(`[CopyPoolManager] No commits found in root repository, initializing fresh copy without sync`);
+            // For new repositories with no commits, just create working branch
+            await invoke('execute_command_with_os_session', {
+                command: 'git',
+                args: ['checkout', '-b', copy.branchName],
+                directory: copyPath,
+                osSession: copyOsSession
+            });
+            console.log(`[CopyPoolManager] Copy ${copy.id} initialized with fresh branch ${copy.branchName}`);
+            return;
         }
 
         // Switch to root branch
