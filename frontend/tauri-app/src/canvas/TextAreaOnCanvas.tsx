@@ -379,19 +379,20 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 										readOnly
 										spellCheck={false}
 										className={cn(
-											"w-full font-mono border-none text-base resize-none bg-transparent",
+											"w-[calc(100%-40px)] font-mono border-none text-base resize-none bg-transparent",
 											task.isReverted 
 												? "text-[var(--base-500-50)] line-through" 
 												: task.commitHash 
 													? "text-[var(--positive-500-50)]"
 													: "text-[var(--base-600-50)]", // Different color for no-change tasks
 											"cursor-default",
+											"whitespace-pre-wrap break-words overflow-wrap-anywhere",
 											"scrollbar-thin scrollbar-thumb-[var(--base-400)] scrollbar-track-transparent",
 										)}
 										rows={Math.max(1, task.prompt.split("\n").length)}
 									/>
 									<div className="absolute flex items-center gap-1" style={{
-										left: `${task.prompt.split("\n").reduce((max, line) => Math.max(max, line.length), 0) * 9.7 + 10}px`,
+										left: `${Math.min(task.prompt.split("\n").reduce((max, line) => Math.max(max, line.length), 0) * 9.7 + 10, cell.width - 120)}px`,
 										top: `${Math.max(0, task.prompt.split("\n").length - 1) * 24 + 2}px`
 									}}>
 										<span className="text-base">
@@ -435,9 +436,10 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 									readOnly
 									spellCheck={false}
 									className={cn(
-										"w-full font-mono border-none text-base resize-none bg-transparent",
+										"w-[calc(100%-40px)] font-mono border-none text-base resize-none bg-transparent",
 										"text-[var(--base-500-50)] animate-pulse",
 										"cursor-default",
+										"whitespace-pre-wrap break-words overflow-wrap-anywhere",
 										"scrollbar-thin scrollbar-thumb-[var(--base-400)] scrollbar-track-transparent",
 									)}
 									rows={Math.max(1, currentInProgressTask.prompt.split("\n").length)}
@@ -474,10 +476,11 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 								}
 								spellCheck={false}
 								className={cn(
-									"w-full h-fit font-bl font-mono border-none text-base resize-none",
+									"w-[calc(100%-40px)] h-fit font-bl font-mono border-none text-base resize-none",
 									"text-[var(--base-500)]",
 									"focus:text-[var(--base-500)]",
 									"placeholder:text-[var(--base-600-50)]",
+									"whitespace-pre-wrap break-words overflow-wrap-anywhere",
 									(currentInProgressTask || !canEdit) && "opacity-60 cursor-not-allowed",
 									!canEdit && "bg-[var(--base-200-20)]",
 									"scrollbar-thin scrollbar-thumb-[var(--base-400)] scrollbar-track-transparent",
@@ -505,7 +508,7 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 								<motion.div
 									className="absolute left-0 flex justify-end"
 									animate={{
-										left: `${currentPrompt.split("\n").reduce((max, line) => (line.length > max ? line.length : max), 0) * 9.7}px`,
+										left: `${Math.min(currentPrompt.split("\n").reduce((max, line) => (line.length > max ? line.length : max), 0) * 9.7, cell.width - 120)}px`,
 										top: `${(currentPrompt.split("\n").length + 0.6) * 24}px`,
 									}}
 									transition={{ type: "tween", duration: 0.05, ease: "linear" }}
