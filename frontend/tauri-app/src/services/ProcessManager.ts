@@ -114,4 +114,16 @@ export class ProcessManager {
 			terminalConnections: this.terminalConnections.size
 		};
 	}
+
+	/**
+	 * Log memory usage periodically
+	 */
+	static startMemoryLogging(): void {
+		// Disabled to reduce console spam
+		// setInterval(() => {
+		//   console.log(`[MEMORY] ProcessManager:`);
+		//   console.log(`  - active processes: ${this.activeProcesses.size}`);
+		//   console.log(`  - terminal connections: ${this.terminalConnections.size}`);
+		// }, 5000);
+	}
 }

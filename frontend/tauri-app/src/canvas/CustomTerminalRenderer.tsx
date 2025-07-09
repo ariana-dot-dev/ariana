@@ -44,6 +44,7 @@ class TerminalConnectionManager {
 		TerminalConnectionManager.screenStates.delete(elementId);
 	}
 
+
 	static hasConnection(elementId: string): boolean {
 		return TerminalConnectionManager.connections.has(elementId);
 	}
@@ -109,6 +110,7 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 	const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 	const isResizingRef = useRef<boolean>(false);
 	const hasScrolledRef = useRef<boolean>(false);
+
 
 	// Persist state whenever it changes
 	useEffect(() => {
@@ -251,10 +253,7 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 				) < 5;
 
 			if (isAtBottom) {
-				// Use requestAnimationFrame for smoother scrolling
-				requestAnimationFrame(() => {
-					scrollableDiv.scrollTop = scrollableDiv.scrollHeight;
-				});
+				scrollableDiv.scrollTop = scrollableDiv.scrollHeight;
 			}
 		};
 		inner();
@@ -263,20 +262,6 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 	}, []);
 
 	const handleTerminalEvent = useCallback((events: TerminalEvent[]) => {
-		// Benchmark: Log if we're getting too many events
-		const now = Date.now();
-		if (window.terminalEventCount === undefined) {
-			window.terminalEventCount = 0;
-			window.lastTerminalBenchmark = now;
-		}
-		window.terminalEventCount++;
-		
-		if (now - window.lastTerminalBenchmark >= 2000) {
-			console.log(`[BENCHMARK] CustomTerminalRenderer - Events processed in last 2s: ${window.terminalEventCount}`);
-			window.terminalEventCount = 0;
-			window.lastTerminalBenchmark = now;
-		}
-
 		// Batch multiple events together to reduce React renders
 		const screenUpdates = events.filter((e) => {
 			return (

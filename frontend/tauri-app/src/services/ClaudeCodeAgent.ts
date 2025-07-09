@@ -50,10 +50,6 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	private eventQueue: TerminalEvent[][] = [];
 	private lastActivityTime: number = 0;
 	private completionTimeoutId: NodeJS.Timeout | null = null;
-	private lastScreenUpdateTime: number = 0;
-	private readonly SCREEN_UPDATE_THROTTLE_MS = 50; // Throttle screen updates to 20fps - more responsive
-	private eventCount: number = 0;
-	private lastBenchmarkTime: number = Date.now();
 
 	constructor() {
 		super();
@@ -226,15 +222,20 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	 * Clean up resources
 	 */
 	async cleanup(): Promise<void> {
+		console.log(`${this.logPrefix} Starting cleanup...`);
+		
 		if (this.terminalId) {
 			try {
+				console.log(`${this.logPrefix} Killing terminal ${this.terminalId}`);
 				await this.killTerminal(this.terminalId);
 			} catch (error) {
-				console.error("Error killing terminal:", error);
+				console.error(`${this.logPrefix} Error killing terminal:`, error);
 			}
 		}
 
+		console.log(`${this.logPrefix} Calling super.cleanup()`);
 		super.cleanup();
+		
 		this.isRunning = false;
 		this.currentTask = null;
 		this.currentPrompt = null;
@@ -244,20 +245,20 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		this.isProcessingEvents = false;
 		this.eventQueue = [];
 		this.lastActivityTime = 0;
+		
 		if (this.completionTimeoutId) {
 			clearTimeout(this.completionTimeoutId);
 			this.completionTimeoutId = null;
 		}
+		
 		this.removeAllListeners();
+		console.log(`${this.logPrefix} Cleanup completed`);
 	}
 
 	// Private methods
 
 	private setupTerminalListeners(): void {
-		if (!this.terminalId) {
-			console.error(this.logPrefix, "❌ No terminalId available for setting up listeners");
-			return;
-		}
+		if (!this.terminalId) return;
 
 		try {
 			this.onTerminalEvent(this.terminalId, (events: TerminalEvent[]) => {
@@ -271,20 +272,10 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 
 	private queueEventBatch(events: TerminalEvent[]): void {
 		this.eventQueue.push(events);
-		
-		// Benchmark: Count events received
-		this.eventCount++;
-		const now = Date.now();
-		if (now - this.lastBenchmarkTime >= 2000) { // Every 2 seconds
-			console.log(`[BENCHMARK] ClaudeCodeAgent ${this.logPrefix} - Events processed in last 2s: ${this.eventCount}`);
-			this.eventCount = 0;
-			this.lastBenchmarkTime = now;
-		}
-		
 		this.processEventQueue();
 	}
 
-	private processEventQueue(): void {
+	private async processEventQueue(): Promise<void> {
 		if (this.isProcessingEvents || this.eventQueue.length === 0) {
 			return;
 		}
@@ -292,10 +283,9 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		this.isProcessingEvents = true;
 
 		try {
-			// Process all queued events synchronously to avoid blocking
 			while (this.eventQueue.length > 0) {
 				const events = this.eventQueue.shift()!;
-				this.handleTerminalEvents(events);
+				await this.handleTerminalEvents(events);
 			}
 		} catch (error) {
 			console.error(this.logPrefix, "Error processing event queue:", error);
@@ -304,28 +294,18 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		}
 	}
 
-	private handleTerminalEvents(events: TerminalEvent[]): void {
-		// console.log(this.logPrefix, "Received", events.length, "terminal events");
-
+	private async handleTerminalEvents(events: TerminalEvent[]): Promise<void> {
 		for (const event of events) {
-			// console.log(this.logPrefix, "Processing event:", event.type);
-
 			switch (event.type) {
 				case "screenUpdate":
 					if (event.screen) {
-						// Direct reference instead of copying to avoid blocking
-						this.screenLines = event.screen;
+						this.screenLines = [...event.screen];
 					}
 					break;
 
 				case "newLines":
 					if (event.lines) {
-						// Use more efficient array concatenation for large arrays
-						if (event.lines.length > 10) {
-							this.screenLines = this.screenLines.concat(event.lines);
-						} else {
-							this.screenLines.push(...event.lines);
-						}
+						this.screenLines.push(...event.lines);
 					}
 					break;
 
@@ -335,8 +315,7 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 						while (this.screenLines.length <= event.line) {
 							this.screenLines.push([]);
 						}
-						// Direct assignment instead of copying
-						this.screenLines[event.line] = event.items;
+						this.screenLines[event.line] = [...event.items];
 					}
 					break;
 			}
@@ -348,16 +327,11 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 
 		// Get current TUI lines for CLI agents library
 		const tuiLines = this.getCurrentTuiLines();
-		
-		// Throttle screen update events to prevent excessive re-renders
-		const now = Date.now();
-		if (now - this.lastScreenUpdateTime >= this.SCREEN_UPDATE_THROTTLE_MS) {
-			this.lastScreenUpdateTime = now;
-			this.emit("screenUpdate", tuiLines);
-		}
+		// Emit screen update event
+		this.emit("screenUpdate", tuiLines);
 
-		// Process TUI interactions based on new lines (async but don't block event processing)
-		setTimeout(() => this.processTuiInteraction(tuiLines), 0);
+		// Process TUI interactions based on new lines
+		await this.processTuiInteraction(tuiLines);
 	}
 
 	private async initializeClaudeCode(): Promise<void> {
@@ -496,9 +470,6 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	private async processTuiInteraction(tuiLines: TuiLine[]): Promise<void> {
 		if (!this.terminalId) return;
 
-		// Benchmark: Time TUI interaction processing
-		const startTime = performance.now();
-
 		// Extract all new line content from the events
 		let newLines: string[] = tuiLines.map((tuiLine) => tuiLine.content);
 
@@ -524,10 +495,8 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 				this.logPrefix,
 				"Found trust confirmation prompt, sending Enter...",
 			);
-			// Use setTimeout to delay without blocking event processing
-			setTimeout(async () => {
-				await this.sendRawInput(this.terminalId!, "\r");
-			}, Math.random() * 500 + 500);
+			await this.delay(Math.random() * 500 + 500);
+			await this.sendRawInput(this.terminalId, "\r");
 			this.hasSeenTrustPrompt = true;
 			return;
 		}
@@ -541,10 +510,8 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 				this.logPrefix,
 				"Found '1. Yes'",
 			);
-			// Use setTimeout to delay without blocking event processing
-			setTimeout(async () => {
-				await this.sendRawInput(this.terminalId!, "\r");
-			}, Math.random() * 500 + 500);
+			await this.delay(Math.random() * 500 + 500);
+			await this.sendRawInput(this.terminalId, "\r");
 			return;
 		}
 
@@ -557,32 +524,19 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 				this.currentPrompt,
 			);
 			this.hasSeenTryPrompt = true;
-			
-			// Use setTimeout to send prompt in chunks with delays to ensure reliability
-			setTimeout(async () => {
-				const chunkSize = 20; // Send 20 characters at a time
-				for (let i = 0; i < this.currentPrompt!.length; i += chunkSize) {
-					const chunk = this.currentPrompt!.slice(i, i + chunkSize);
-					let processedChunk = "";
-					
-					for (const char of chunk) {
-						if (char === "\n") {
-							processedChunk += "\\\r";
-						} else {
-							processedChunk += char;
-						}
-					}
-					
-					await this.sendRawInput(this.terminalId!, processedChunk);
-					
-					// Small delay between chunks to prevent input corruption
-					if (i + chunkSize < this.currentPrompt!.length) {
-						await this.delay(50);
-					}
+			// Send the prompt key by key, simulating typing
+			for (const char of this.currentPrompt) {
+				if (char === "\n") {
+					await this.sendRawInput(this.terminalId, "\\");
+					await this.delay(Math.random() * 50 + 50);
+					await this.sendRawInput(this.terminalId, "\r");
+				} else {
+					await this.sendRawInput(this.terminalId, char);
 				}
-				await this.delay(200); // Final delay before Enter
-				await this.sendRawInput(this.terminalId!, "\r");
-			}, Math.random() * 500 + 500);
+				await this.delay(Math.random() * 50 + 50);
+			}
+			await this.delay(Math.random() * 500 + 500);
+			await this.sendRawInput(this.terminalId, "\r");
 			return;
 		}
 
@@ -593,12 +547,6 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		if (hasEscToInterrupt) {
 			// console.log(this.logPrefix, "Found 'esc to interrupt', waiting...");
 			return;
-		}
-
-		// Benchmark: Log TUI processing time if it takes > 1ms
-		const processingTime = performance.now() - startTime;
-		if (processingTime > 1) {
-			console.log(`[BENCHMARK] TUI interaction processing took ${processingTime.toFixed(2)}ms`);
 		}
 	}
 
