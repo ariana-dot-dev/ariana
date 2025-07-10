@@ -261,10 +261,19 @@ export function GitProjectProvider({ children, gitProject }: GitProjectProviderP
 		cancelBackgroundAgent: async (agentId: string) => {
 			if (!gitProject) return;
 			
-			// Cancel agent gracefully (preserves agent for status display)
+			// Cancel agent and unlock any locked canvases
 			const agent = gitProject.getBackgroundAgent(agentId);
 			if (agent) {
+				// Cancel the agent
 				agent.cancel();
+				
+				// Unlock any canvases locked by this agent
+				gitProject.canvases.forEach(canvas => {
+					if (canvas.lockingAgentId === agentId) {
+						gitProject.unlockCanvas(canvas.id, agentId);
+					}
+				});
+				
 				updateGitProject(gitProject.id);
 			}
 		},

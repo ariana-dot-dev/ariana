@@ -406,12 +406,12 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 												? "text-[var(--base-500-50)] line-through" 
 												: task.commitHash 
 													? "text-[var(--positive-500-50)]"
-													: "text-[var(--base-600-50)]", // Different color for no-change tasks
+													: "text-[var(--base-600-50)]",
 											"cursor-default",
 											"whitespace-pre-wrap break-words overflow-wrap-anywhere",
 											"scrollbar-thin scrollbar-thumb-[var(--base-400)] scrollbar-track-transparent",
 										)}
-										rows={Math.max(1, task.prompt.split("\n").length)}
+										rows={Math.max(1, task.prompt.split("\n").length+2)}
 									/>
 									<div className="absolute flex items-center gap-1" style={{
 										left: `${Math.min(task.prompt.split("\n").reduce((max, line) => Math.max(max, line.length), 0) * 9.7 + 10, cell.width - 120)}px`,
@@ -472,7 +472,7 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 										"whitespace-pre-wrap break-words overflow-wrap-anywhere",
 										"scrollbar-thin scrollbar-thumb-[var(--base-400)] scrollbar-track-transparent",
 									)}
-									rows={Math.max(1, currentInProgressTask.prompt.split("\n").length)}
+									rows={Math.max(1, currentInProgressTask.prompt.split("\n").length+2)}
 								/>
 							</div>
 						)}
@@ -520,7 +520,7 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 									!canEdit && "bg-[var(--base-200-20)]",
 									"scrollbar-thin scrollbar-thumb-[var(--base-400)] scrollbar-track-transparent",
 								)}
-								rows={Math.max(1, currentPrompt.split("\n").length)}
+								rows={Math.max(1, currentPrompt.split("\n").length+2)}
 							/>
 							{!currentInProgressTask && currentPrompt.trim().length > 0 && (
 								<motion.div

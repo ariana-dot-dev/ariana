@@ -78,9 +78,19 @@ const generateCanvasName = (canvas: GitProjectCanvas, canvasIndex: number): stri
 	return `Canvas ${canvasIndex + 1}`;
 };
 
-const getCanvasTaskInfo = (canvas: GitProjectCanvas): { prompt: string; isLoading: boolean; isCompleted: boolean } => {
+const getCanvasTaskInfo = (canvas: GitProjectCanvas): { prompt: string; isLoading: boolean; isCompleted: boolean; isPrompting: boolean } => {
 	try {
-		// Check for in-progress prompts first
+		const tasks = canvas.taskManager.getTasks();
+		
+		// Check if there's an in-progress task (actual running task)
+		const inProgressTask = tasks.find(task => task.status === 'in_progress');
+		if (inProgressTask) {
+			let prompt = inProgressTask.prompt.trim();
+			prompt = prompt.replace(/\([^)]*\)/g, '').trim();
+			return { prompt, isLoading: true, isCompleted: false, isPrompting: false };
+		}
+		
+		// Check for in-progress prompts (user typing)
 		if (canvas.inProgressPrompts && canvas.inProgressPrompts.size > 0) {
 			// Get the most recent in-progress prompt
 			for (const prompt of canvas.inProgressPrompts.values()) {
@@ -88,19 +98,9 @@ const getCanvasTaskInfo = (canvas: GitProjectCanvas): { prompt: string; isLoadin
 					let cleanPrompt = prompt.trim();
 					// Remove content in parentheses
 					cleanPrompt = cleanPrompt.replace(/\([^)]*\)/g, '').trim();
-					return { prompt: cleanPrompt, isLoading: true, isCompleted: false };
+					return { prompt: cleanPrompt, isLoading: false, isCompleted: false, isPrompting: true };
 				}
 			}
-		}
-		
-		const tasks = canvas.taskManager.getTasks();
-		
-		// Check if there's an in-progress task
-		const inProgressTask = tasks.find(task => task.status === 'in_progress');
-		if (inProgressTask) {
-			let prompt = inProgressTask.prompt.trim();
-			prompt = prompt.replace(/\([^)]*\)/g, '').trim();
-			return { prompt, isLoading: true, isCompleted: false };
 		}
 		
 		// Get the last completed task
@@ -109,14 +109,14 @@ const getCanvasTaskInfo = (canvas: GitProjectCanvas): { prompt: string; isLoadin
 			const lastTask = completedTasks[completedTasks.length - 1];
 			let prompt = lastTask.prompt.trim();
 			prompt = prompt.replace(/\([^)]*\)/g, '').trim();
-			return { prompt, isLoading: false, isCompleted: true };
+			return { prompt, isLoading: false, isCompleted: true, isPrompting: false };
 		}
 		
 		// No tasks
-		return { prompt: '', isLoading: false, isCompleted: false };
+		return { prompt: '', isLoading: false, isCompleted: false, isPrompting: false };
 	} catch (error) {
 		console.error('Error getting canvas task info:', error);
-		return { prompt: '', isLoading: false, isCompleted: false };
+		return { prompt: '', isLoading: false, isCompleted: false, isPrompting: false };
 	}
 };
 
@@ -243,7 +243,7 @@ export const UnifiedCanvasAgentList: React.FC<UnifiedCanvasAgentListProps> = ({
 
 								const taskInfo = getCanvasTaskInfo(canvas);
 								const isHovered = hoveredCanvasId === item.id;
-								const shouldShowMarquee = !!(taskInfo.prompt && (taskInfo.isLoading || isHovered));
+								const shouldShowMarquee = !!(taskInfo.prompt && (taskInfo.isLoading || taskInfo.isPrompting || isHovered));
 								
 								return (
 									<div 
@@ -271,6 +271,8 @@ export const UnifiedCanvasAgentList: React.FC<UnifiedCanvasAgentListProps> = ({
 												<LockStateIndicator lockState={canvas.lockState} />
 											) : taskInfo.isLoading ? (
 												<div className="animate-spin h-3 w-3 border-2 border-[var(--acc-600)] border-t-transparent rounded-full" />
+											) : taskInfo.isPrompting ? (
+												<span className="text-[var(--acc-600)] text-xs">Prompting...</span>
 											) : taskInfo.isCompleted ? (
 												<span className="text-[var(--positive-600)] text-xs">✓</span>
 											) : null}

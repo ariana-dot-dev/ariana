@@ -130,9 +130,20 @@ export class GitProject {
 	public setupAgentCleanupMonitoring(agent: BackgroundAgent): void {
 		// Import the BackgroundAgentManager to avoid circular imports
 		import('../services/BackgroundAgentManager').then(({ BackgroundAgentManager }) => {
-			// If agent is already in terminal state, schedule immediate cleanup
+			// If agent is already in terminal state, handle cleanup and unlock
 			if (['completed', 'failed', 'cancelled'].includes(agent.status)) {
 				console.log(`[GitProject] Agent ${agent.id.slice(0, 8)} is already in terminal state (${agent.status}), scheduling cleanup`);
+				
+				// For failed/cancelled agents, unlock any canvases they may have locked
+				if (['failed', 'cancelled'].includes(agent.status)) {
+					this.canvases.forEach(canvas => {
+						if (canvas.lockingAgentId === agent.id) {
+							console.log(`[GitProject] Unlocking canvas ${canvas.id} from ${agent.status} agent ${agent.id.slice(0, 8)}`);
+							this.unlockCanvas(canvas.id, agent.id);
+						}
+					});
+				}
+				
 				BackgroundAgentManager.onAgentStatusChanged(agent, this);
 			} else {
 				// Subscribe to status changes for active agents
