@@ -54,7 +54,13 @@ impl GitManager {
                 if stderr.contains("nothing to commit") {
                     Err("NO_CHANGES_TO_COMMIT".to_string())
                 } else {
-                    Err(format!("Git commit failed: {}", stderr))
+                    // Log the full error for debugging but return a clean message
+                    eprintln!("[GitManager] Git commit stderr: '{}'", stderr);
+                    if stderr.trim().is_empty() {
+                        Err("Git commit failed: Unknown error (no stderr output)".to_string())
+                    } else {
+                        Err(stderr.trim().to_string()) // Return just the stderr, not wrapped with "Git commit failed:"
+                    }
                 }
             }
         }

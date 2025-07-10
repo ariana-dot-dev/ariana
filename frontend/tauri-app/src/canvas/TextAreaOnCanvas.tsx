@@ -8,6 +8,7 @@ import { useGitProject } from "../contexts/GitProjectContext";
 import { ProcessManager } from "../services/ProcessManager";
 import { ProcessState } from "../types/GitProject";
 import { GitService } from "../services/GitService";
+import { osSessionGetWorkingDirectory } from "../bindings/os";
 
 interface TextAreaOnCanvasProps {
 	layout: ElementLayout;
@@ -288,12 +289,46 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 	const handleRevertTask = async (taskId: string) => {
 		try {
 			const task = taskManager?.getTask(taskId);
+			console.log(`[handleRevertTask] Task:`, task);
 			if (!task || task.status !== 'completed' || !task.commitHash || task.commitHash === "NO_CHANGES") {
+				console.log(`[handleRevertTask] Early return - invalid task state`);
 				return;
 			}
 
-			const targetCommitHash = taskManager?.getRevertTargetCommit(taskId);
-			if (!targetCommitHash) return;
+			const allTasks = taskManager?.getTasks();
+			const completedTasks = taskManager?.getCompletedTasks();
+			console.log(`[handleRevertTask] All tasks:`, allTasks);
+			console.log(`[handleRevertTask] Completed tasks:`, completedTasks);
+			
+			let targetCommitHash = taskManager?.getRevertTargetCommit(taskId);
+			console.log(`[handleRevertTask] Target commit hash from task manager:`, targetCommitHash);
+			
+			// If no task-based target, fall back to git-based revert (previous commit)
+			if (!targetCommitHash && task.commitHash) {
+				try {
+					// Use git to find the previous commit
+					const { invoke } = await import("@tauri-apps/api/core");
+					const gitLog = await invoke<string>('execute_command_with_os_session', {
+						command: 'git',
+						args: ['log', '--oneline', '-n', '2', '--format=%H'],
+						directory: osSessionGetWorkingDirectory(textAreaOsSession || { Local: "." }),
+						osSession: textAreaOsSession || { Local: "." }
+					});
+					
+					const commits = gitLog.trim().split('\n');
+					if (commits.length >= 2) {
+						targetCommitHash = commits[1]; // Previous commit
+						console.log(`[handleRevertTask] Using git-based revert to commit:`, targetCommitHash);
+					}
+				} catch (error) {
+					console.error(`[handleRevertTask] Failed to get git log:`, error);
+				}
+			}
+			
+			if (!targetCommitHash) {
+				console.log(`[handleRevertTask] No target commit hash available, cannot revert`);
+				return;
+			}
 			
 			await GitService.revertToCommit(textAreaOsSession || { Local: "." }, targetCommitHash);
 			revertTask(taskId);
@@ -393,16 +428,24 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 											}
 										</span>
 										
-										{task.commitHash && task.commitHash !== "NO_CHANGES" && (
+										{/* Only show revert/restore button when:
+										    1. Task has a valid commit hash (not NO_CHANGES, GIT_ERROR, or empty)
+										    2. Canvas is not locked (no merging, merged state)
+										    3. No task is currently running
+										    4. User can edit the canvas */}
+										{task.commitHash && 
+										 task.commitHash !== "NO_CHANGES" && 
+										 task.commitHash !== "GIT_ERROR" &&
+										 task.commitHash.length > 0 &&
+										 canEdit && 
+										 canvasLockState === 'normal' &&
+										 !currentInProgressTask && (
 											<button
 												onClick={() => task.isReverted ? handleRestoreTask(task.id) : handleRevertTask(task.id)}
-												disabled={!canEdit}
 												className={cn(
 													"px-2 py-0.5 text-xs rounded transition-all",
 													"opacity-0 group-hover:opacity-100",
-													!canEdit 
-														? "cursor-not-allowed opacity-10"
-														: "cursor-pointer",
+													"cursor-pointer",
 													task.isReverted
 														? "bg-[var(--positive-400)] text-[var(--blackest)] hover:bg-[var(--positive-300)]"
 														: "bg-[var(--base-400)] text-[var(--blackest)] hover:bg-[var(--base-300)]"

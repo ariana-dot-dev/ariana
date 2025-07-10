@@ -21,8 +21,15 @@ export class GitService {
 			console.log(`[GitService] Created commit: ${commitHash} with message: "${message}"`);
 			return commitHash;
 		} catch (error) {
-			console.error('[GitService] Failed to create commit:', error);
-			throw new Error(`Failed to create git commit: ${error}`);
+			// Extract the actual error message, not the entire error object
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			console.error('[GitService] Failed to create commit:', errorMessage);
+			
+			// Re-throw with the actual error message
+			if (errorMessage === "NO_CHANGES_TO_COMMIT") {
+				throw errorMessage; // Preserve special error codes
+			}
+			throw new Error(errorMessage); // Return just the error message, not wrapped
 		}
 	}
 

@@ -52,6 +52,7 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	private lastActivityTime: number = 0;
 	private completionTimeoutId: NodeJS.Timeout | null = null;
 	private osSession: OsSession | null = null;
+	private isCompletingTask: boolean = false;
 
 	constructor() {
 		super();
@@ -248,6 +249,7 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		this.isProcessingEvents = false;
 		this.eventQueue = [];
 		this.lastActivityTime = 0;
+		this.isCompletingTask = false;
 		
 		if (this.completionTimeoutId) {
 			clearTimeout(this.completionTimeoutId);
@@ -444,17 +446,47 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	}
 
 	private async handleTaskCompletion(): Promise<void> {
-		if (!this.terminalId || !this.hasSeenTryPrompt) return;
+		if (!this.terminalId || !this.hasSeenTryPrompt || this.isCompletingTask) {
+			console.log(this.logPrefix, `Skipping task completion - terminalId: ${this.terminalId}, hasSeenTryPrompt: ${this.hasSeenTryPrompt}, isCompletingTask: ${this.isCompletingTask}`);
+			return;
+		}
+
+		this.isCompletingTask = true;
 
 		console.log(
 			this.logPrefix,
-			"Task appears to be complete after 5 seconds of inactivity, sending Ctrl+D twice...",
+			"Task appears to be complete after 5 seconds of inactivity, draining event queue...",
 		);
+
+		// Wait for any pending events to be processed
+		let drainAttempts = 0;
+		const maxDrainAttempts = 50; // 5 seconds max
+		while (this.eventQueue.length > 0 && drainAttempts < maxDrainAttempts) {
+			console.log(this.logPrefix, `Draining events, queue length: ${this.eventQueue.length}, attempt: ${drainAttempts + 1}`);
+			await this.delay(100);
+			drainAttempts++;
+		}
+		
+		// Force process any remaining events
+		if (this.eventQueue.length > 0) {
+			console.warn(this.logPrefix, `Forcing final event processing, ${this.eventQueue.length} events remaining`);
+			await this.processEventQueue();
+		}
+
+		console.log(this.logPrefix, "Event queue drained, sending Ctrl+D...");
 
 		try {
 			await this.sendCtrlD(this.terminalId);
-			await this.delay(Math.random() * 500 + 500);
+			await this.delay(Math.random() * 50 + 50);
 			await this.sendCtrlD(this.terminalId);
+			await this.delay(Math.random() * 50 + 50);
+			await this.sendCtrlD(this.terminalId);
+			await this.delay(Math.random() * 50 + 50);
+			await this.sendCtrlD(this.terminalId);
+
+			// Additional delay to let terminal settle after Ctrl+D
+			console.log(this.logPrefix, "Waiting for terminal to settle...");
+			await this.delay(2000);
 
 			const elapsed = Date.now() - this.startTime;
 			
@@ -490,9 +522,9 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 							return;
 						}
 						
-						// For other git errors, still fail the task
-						this.emit("taskError", new Error(`Cannot complete task: Git commit failed - ${errorString}`));
-						return;
+						// For other git errors, log but don't fail the task
+						console.error(this.logPrefix, `Git error (non-fatal): ${errorString}`);
+						commitHash = "GIT_ERROR";
 					}
 				}
 			}
@@ -502,12 +534,14 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 				elapsed,
 				commitHash
 			});
+			this.isCompletingTask = false;
 		} catch (error) {
 			console.error(
 				this.logPrefix,
 				"Error sending completion sequence:",
 				error,
 			);
+			this.isCompletingTask = false;
 		}
 	}
 
@@ -519,32 +553,6 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 
 		newLines = newLines.map((line) => line.replaceAll(" ", " "));
 
-		// console.log(this.logPrefix, "Analyzing new lines for TUI interactions:");
-		// newLines.forEach((line, i) => {
-		// 	if (line.trim()) {
-		// 		console.log(this.logPrefix, `  Line ${i}:`, JSON.stringify(line));
-		// 	}
-		// });
-
-		// // Check for trust folder confirmation
-		// const hasEnterToConfirm = newLines.some((line) =>
-		// 	line.includes("Enter to confirm"),
-		// );
-		// const hasTrustQuestion = newLines.some((line) =>
-		// 	line.includes("Do you trust the files in this folder?"),
-		// );
-
-		// if (hasEnterToConfirm && hasTrustQuestion && !this.hasSeenTrustPrompt) {
-		// 	console.log(
-		// 		this.logPrefix,
-		// 		"Found trust confirmation prompt, sending Enter...",
-		// 	);
-		// 	await this.delay(Math.random() * 50 + 50);
-		// 	await this.sendRawInput(this.terminalId, "\r");
-		// 	this.hasSeenTrustPrompt = true;
-		// 	return;
-		// }
-
 		// Check for "Yes, and don't ask again this session (shift+tab)"
 		const hasShiftTabOption = newLines.some((line) =>
 			line.includes("1. Yes"),
@@ -555,9 +563,9 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 				"Found '1. Yes'",
 			);
 			await this.delay(1000);
-			await this.sendRawInput(this.terminalId, "\r");
-			await this.sendRawInput(this.terminalId, "\r");
-			await this.sendRawInput(this.terminalId, "\r");
+			await this.sendRawInput(this.terminalId, "\x0d");
+			// await this.sendRawInput(this.terminalId, "\r");
+			// await this.sendRawInput(this.terminalId, "\r");
 			return;
 		}
 
@@ -574,15 +582,16 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 			for (const char of this.currentPrompt) {
 				if (char === "\n") {
 					await this.sendRawInput(this.terminalId, "\\");
-					await this.delay(Math.random() * 50 + 50);
-					await this.sendRawInput(this.terminalId, "\r");
+					await this.delay(Math.random() * 5 + 5);
+					await this.sendRawInput(this.terminalId, "\r\n");
 				} else {
 					await this.sendRawInput(this.terminalId, char);
 				}
-				await this.delay(Math.random() * 50 + 50);
+				await this.delay(Math.random() * 5 + 5);
 			}
-			await this.delay(Math.random() * 50 + 50);
-			await this.sendRawInput(this.terminalId, "\r");
+			await this.delay(1000);
+			await this.sendRawInput(this.terminalId, "\x0d");
+			// await this.sendRawInput(this.terminalId, "\x0d");
 			return;
 		}
 
@@ -591,7 +600,10 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 			line.includes("esc to interrupt"),
 		);
 		if (hasEscToInterrupt) {
-			// console.log(this.logPrefix, "Found 'esc to interrupt', waiting...");
+			// send `x0d` and then delete
+			// await this.sendRawInput(this.terminalId, "\x0d");
+			// await this.delay(500);
+			// await this.sendRawInput(this.terminalId, "\x08");
 			return;
 		}
 	}
