@@ -1,8 +1,41 @@
-import { BackgroundAgent, MergeAgent, MergeAgentContext, MergeResult } from "../types/BackgroundAgent";
+import { BackgroundAgent, BackgroundAgentType, MergeAgent, MergeAgentContext, MergeResult } from "../types/BackgroundAgent";
 import { OsSession, osSessionGetWorkingDirectory } from "../bindings/os";
 import type { GitProject } from "../types/GitProject";
 
 export class BackgroundAgentManager {
+	/**
+	 * Check if there are any running agents of the same type that require serialization
+	 */
+	private static hasRunningSerializedAgent(agentType: BackgroundAgentType, gitProject: GitProject): boolean {
+		return gitProject.backgroundAgents.some(agent => 
+			agent.type === agentType && 
+			agent.requiresSerialization &&
+			['preparation', 'running'].includes(agent.status)
+		);
+	}
+
+	/**
+	 * Start the next queued agent of the same type if any exist
+	 */
+	private static startNextQueuedAgent(agentType: BackgroundAgentType, gitProject: GitProject): void {
+		const nextAgent = gitProject.backgroundAgents.find(agent => 
+			agent.type === agentType && 
+			agent.requiresSerialization &&
+			agent.status === 'queued'
+		);
+
+		if (nextAgent) {
+			console.log(`[BackgroundAgentManager] Starting next queued ${agentType} agent:`, nextAgent.id);
+			this.executeAgent(nextAgent, gitProject, (nextAgent as any).context.canvasId).catch(error => {
+				console.error(`[BackgroundAgentManager] Queued agent ${nextAgent.id} failed:`, error);
+				nextAgent.updateStatus('failed', undefined, error.message);
+				if ((nextAgent as any).context?.canvasId) {
+					gitProject.unlockCanvas((nextAgent as any).context.canvasId, nextAgent.id);
+				}
+			});
+		}
+	}
+
 	/**
 	 * Create a merge agent to merge canvas changes back to root
 	 */
@@ -33,9 +66,16 @@ export class BackgroundAgentManager {
 		// Create merge agent
 		const agent = new MergeAgent(agentId, workspaceOsSession, context);
 		
-		// Add to GitProject and start execution
+		// Add to GitProject
 		gitProject.addBackgroundAgent(agent);
 		
+		// Check if another merge agent is already running
+		if (this.hasRunningSerializedAgent('merge', gitProject)) {
+			console.log(`[BackgroundAgentManager] Merge agent ${agentId} queued - another merge is in progress`);
+			agent.updateStatus('queued', 'Waiting for other merge operations to complete...');
+			return agentId;
+		}
+
 		// Lock canvas during merge
 		const lockSuccess = gitProject.lockCanvas(canvasId, 'merging', agentId);
 		if (!lockSuccess) {
@@ -86,6 +126,11 @@ export class BackgroundAgentManager {
 			gitProject.lockCanvas(canvasId, 'merged', agent.id);
 			console.log(`[BackgroundAgentManager] Agent ${agent.id} completed successfully`);
 
+			// Start next queued agent of the same type if any
+			if (agent.requiresSerialization) {
+				this.startNextQueuedAgent(agent.type, gitProject);
+			}
+
 		} catch (error: any) {
 			if (agent.cancellationToken.isCancelled) {
 				console.log(`[BackgroundAgentManager] Agent ${agent.id} was cancelled`);
@@ -100,6 +145,11 @@ export class BackgroundAgentManager {
 			
 			// Cleanup workspace
 			await this.cleanupWorkspace(agent.workspaceOsSession);
+
+			// Start next queued agent of the same type if any
+			if (agent.requiresSerialization) {
+				this.startNextQueuedAgent(agent.type, gitProject);
+			}
 		}
 	}
 
@@ -128,6 +178,11 @@ export class BackgroundAgentManager {
 
 		// Cleanup workspace
 		await this.cleanupWorkspace(agent.workspaceOsSession);
+
+		// Start next queued agent of the same type if any
+		if (agent.requiresSerialization) {
+			this.startNextQueuedAgent(agent.type, gitProject);
+		}
 
 		// Remove from GitProject
 		gitProject.removeBackgroundAgent(agentId);

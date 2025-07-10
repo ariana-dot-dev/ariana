@@ -522,23 +522,6 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 								)}
 								rows={Math.max(1, currentPrompt.split("\n").length)}
 							/>
-
-							{isCanvasLocked && (
-								<div className="absolute right-5 top-5 flex items-center gap-1 text-base text-[var(--base-600)] bg-[var(--base-100)] px-3 py-1.5 rounded-lg">
-									{canvasLockState === 'merging' && (
-										<>
-											<div className="w-3 h-3 border border-[var(--acc-400)] border-t-transparent rounded-full animate-spin"></div>
-											<span>Merging</span>
-										</>
-									)}
-									{canvasLockState === 'merged' && (
-										<>
-											<span className="">✓</span>
-											<span>Merged</span>
-										</>
-									)}
-								</div>
-							)}
 							{!currentInProgressTask && currentPrompt.trim().length > 0 && (
 								<motion.div
 									className="absolute left-0 flex justify-end"

@@ -19,6 +19,7 @@ interface UnifiedCanvasAgentListProps {
 const StatusIndicator: React.FC<{ status: BackgroundAgentStatus }> = ({ status }) => {
 	const getStatusDisplay = () => {
 		switch (status) {
+			case 'queued': return { text: 'Queued', color: 'text-[var(--base-600)]' };
 			case 'preparation': return { text: 'Preparing...', color: 'text-[var(--acc-600)]' };
 			case 'running': return { text: 'Running...', color: 'text-[var(--positive-600)]' };
 			case 'completed': return { text: 'Completed', color: 'text-[var(--positive-600)]' };
@@ -61,7 +62,7 @@ const generateCanvasName = (canvas: GitProjectCanvas, canvasIndex: number): stri
 		
 		// Fall back to completed tasks
 		if (tasks.length === 0) {
-			return `Canvas ${canvasIndex + 1}`;
+			return `Agent ${canvasIndex + 1}`;
 		}
 
 		// Get the last task's prompt
@@ -73,12 +74,12 @@ const generateCanvasName = (canvas: GitProjectCanvas, canvasIndex: number): stri
 
 		// Take first 3 words
 		const words = prompt.split(/\s+/).filter(word => word.length > 0);
-		const firstThreeWords = words.slice(0, 3).join(' ');
+		const firstThreeWords = words.slice(2, 6).join(' ');
 
-		return firstThreeWords || `Canvas ${canvasIndex + 1}`;
+		return firstThreeWords || `Agent ${canvasIndex + 1}`;
 	} catch (error) {
 		console.error('Error generating canvas name:', error);
-		return `Canvas ${canvasIndex + 1}`;
+		return `Agent ${canvasIndex + 1}`;
 	}
 };
 
@@ -89,7 +90,7 @@ const LockStateIndicator: React.FC<{ lockState: CanvasLockState }> = ({ lockStat
 		case 'merging':
 			return <span className="text-xs text-[var(--acc-600)]">Merging...</span>;
 		case 'merged':
-			return <span className="text-xs text-[var(--positive-600)]">✓ Merged</span>;
+			return <span className="text-xs text-[var(--positive-600)]">Merged ✓</span>;
 		default:
 			return null;
 	}
@@ -184,11 +185,11 @@ export const UnifiedCanvasAgentList: React.FC<UnifiedCanvasAgentListProps> = ({
 	}
 
 	return (
-		<div className="flex flex-col w-fit max-w-full">
+		<div className="flex flex-col w-full max-w-full">
 			<SingleChoiceList
-				className=""
+				className="!w-full"
 				buttonProps={{
-					className: '!w-56 !max-w-full'
+					className: '!w-full !max-w-full'
 				}}
 				items={items}
 				selectedItemId={selectedItemId}
@@ -204,8 +205,8 @@ export const UnifiedCanvasAgentList: React.FC<UnifiedCanvasAgentListProps> = ({
 						return (
 							<div className="flex flex-col gap-1 w-full max-w-full">
 								<div className="flex items-center justify-between w-full max-w-full overflow-ellipsis">
-									<div className="overflow-ellipsis max-w-full text-[var(--base-600)]">
-										{canvasName.length > 17 ? canvasName.substring(0, 14) + '...' : canvasName}
+									<div className="overflow-ellipsis text-xs max-w-full text-[var(--base-600)]">
+										{canvasName.length > 25 ? canvasName.substring(0, 22) + '...' : canvasName}
 									</div>
 									<LockStateIndicator lockState={canvas.lockState} />
 								</div>
@@ -223,9 +224,9 @@ export const UnifiedCanvasAgentList: React.FC<UnifiedCanvasAgentListProps> = ({
 						const agent = item.data;
 
 						return (
-							<div className="flex flex-col gap-1">
+							<div className="flex flex-col gap-1 w-full max-w-full">
 								<div className="flex items-center justify-between">
-									<span className="text-[var(--base-600)] capitalize">
+									<span className="text-xs text-[var(--base-600)] capitalize">
 										{agent.type} Agent
 									</span>
 									<div className="flex items-center gap-2">
@@ -243,7 +244,8 @@ export const UnifiedCanvasAgentList: React.FC<UnifiedCanvasAgentListProps> = ({
 								</div>
 
 								{agent.progress && !['completed', 'failed', 'cancelled'].includes(agent.status) && (
-									<div className="text-xs text-[var(--base-500-70)]">
+									<div className="text-xs text-[var(--base-500-70)] flex items-center gap-1">
+										{agent.status === 'queued' && <span>⏳</span>}
 										{agent.progress}
 									</div>
 								)}

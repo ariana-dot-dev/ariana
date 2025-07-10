@@ -2,7 +2,7 @@ import { OsSession, osSessionGetWorkingDirectory } from "../bindings/os";
 
 export type BackgroundAgentType = 'merge' | 'deploy' | 'test' | 'analyze';
 
-export type BackgroundAgentStatus = 'preparation' | 'running' | 'completed' | 'failed' | 'cancelled';
+export type BackgroundAgentStatus = 'queued' | 'preparation' | 'running' | 'completed' | 'failed' | 'cancelled';
 
 export interface BackgroundAgentState {
 	id: string;
@@ -38,6 +38,7 @@ export function createCancellationToken(): CancellationToken {
 export abstract class BackgroundAgent<TContext = any> {
 	public readonly id: string;
 	public abstract readonly type: BackgroundAgentType;
+	public abstract readonly requiresSerialization: boolean; // True if only one agent of this type can run at a time
 	public status: BackgroundAgentStatus;
 	public readonly createdAt: number;
 	public lastUpdated: number;
@@ -52,7 +53,7 @@ export abstract class BackgroundAgent<TContext = any> {
 
 	constructor(id: string, workspaceOsSession: OsSession, context: TContext) {
 		this.id = id;
-		this.status = 'preparation';
+		this.status = this.requiresSerialization ? 'queued' : 'preparation';
 		this.createdAt = Date.now();
 		this.lastUpdated = Date.now();
 		this.workspaceOsSession = workspaceOsSession;
@@ -181,6 +182,7 @@ export interface MergeResult {
 
 export class MergeAgent extends BackgroundAgent<MergeAgentContext> {
 	public readonly type: BackgroundAgentType = 'merge';
+	public readonly requiresSerialization: boolean = true; // Merge agents must run one at a time
 
 	constructor(id: string, workspaceOsSession: OsSession, context: MergeAgentContext) {
 		super(id, workspaceOsSession, context);

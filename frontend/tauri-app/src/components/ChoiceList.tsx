@@ -31,10 +31,10 @@ export function SingleChoiceList<T>({
 						key={id}
 						onClick={() => onSelectItem?.(id)}
 						onContextMenu={(e) => onContextMenu?.(e, id)}
-						className={`${buttonProps.className} group relative w-fit flex flex-col text-left px-4 py-3 text-sm first:rounded-t-xl last:rounded-b-xl transition-colors border-[var(--base-300)] border-(length:--border) not-last:border-b-transparent not-first:border-t-transparent ${
+						className={`${buttonProps.className} group relative w-fit flex flex-col text-left px-4 py-3 text-sm first:rounded-t-xl last:rounded-b-xl transition-colors border-(length:--border) not-last:border-b-transparent not-first:border-t-transparent ${
 							isSelected
-								? "bg-[var(--acc-200-30)] opacity-100"
-								: "even:bg-[var(--base-100-40)] odd:bg-[var(--base-100-80)] cursor-pointer hover:border-solid border-dashed opacity-50 hover:opacity-100 hover:not-last:border-b-[var(--base-300)] hover:not-first:border-t-[var(--base-300)] hover:bg-[var(--acc-200-40)]"
+								? "bg-[var(--acc-200-30)] opacity-100 border-[var(--acc-300)]"
+								: "even:bg-[var(--base-100-40)] odd:bg-[var(--base-100-80)] cursor-pointer border-dashed opacity-50 hover:opacity-100 hover:border-[var(--acc-300)] hover:not-last:border-b-transparent hover:not-first:border-t-transparent hover:bg-[var(--acc-200-40)] border-[var(--base-300)]"
 						}`}
                         {...Object.fromEntries(Object.entries(buttonProps).filter(([key]) => key !== 'className'))}
 					>
