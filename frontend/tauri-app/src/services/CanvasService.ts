@@ -8,31 +8,6 @@ export interface CanvasOperationResult {
 
 export class CanvasService {
 	/**
-	 * Copies a directory from source to destination using the appropriate OS session
-	 */
-	static async copyDirectory(
-		source: string,
-		destination: string,
-		osSession: OsSession,
-		excludeGit?: boolean
-	): Promise<CanvasOperationResult> {
-		try {
-			await invoke("copy_files", {
-				source,
-				destination,
-				osSession,
-				excludeGit
-			});
-			return { success: true };
-		} catch (error) {
-			return {
-				success: false,
-				error: error as string
-			};
-		}
-	}
-
-	/**
 	 * Creates a new git branch in the specified directory
 	 */
 	static async createGitBranch(

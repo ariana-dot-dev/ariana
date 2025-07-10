@@ -23,6 +23,7 @@ export class BackgroundAgentManager {
 			rootOsSession,
 			canvasOsSession,
 			canvasId,
+			originalRootBranch: gitProject.getOriginalRootBranch(),
 			conflictFiles: [],
 			maxRetries: 3,
 			currentRetry: 0,

@@ -302,16 +302,13 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 							</div>
 						</div>
 						
-						<div className="flex flex-col h-full w-full overflow-y-auto">
-							<div className="px-3 mb-3">
-								<button
-									onClick={handleCreateCanvas}
-									className="w-full px-3 py-2 text-sm bg-[var(--acc-100)] cursor-pointer hover:bg-[var(--acc-200)] text-[var(--acc-800-70)] rounded-lg transition-colors flex items-center justify-center gap-2"
-								>
-									<span>+</span>
-									<span>New Edit</span>
-								</button>
-							</div>
+						<div className="flex flex-col gap-2 h-full w-full overflow-y-auto">
+							<button
+								onClick={handleCreateCanvas}
+								className="self-end w-fit px-3 py-2 text-sm border-[var(--base-300)] border-dashed hover:border-solid border-(length:--border) cursor-pointer hover:bg-[var(--acc-100-70)] text-[var(--acc-800-70)] rounded-lg transition-colors flex items-center justify-center gap-2"
+							>
+								<span>+ new edit</span>
+							</button>
 
 							{/* Unified Canvas and Agent List */}
 							<UnifiedCanvasAgentList

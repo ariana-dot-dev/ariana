@@ -71,7 +71,6 @@ pub fn run() {
 			cancel_git_directories_search,
 			list_available_os_session_kinds,
 			// Canvas management commands
-			copy_files,
 			copy_files_optimized,
 			get_copy_stats,
 			get_git_hash,
@@ -170,17 +169,6 @@ async fn get_file_tree(
 		.read_directory(&path)
 		.await
 		.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn copy_files(
-	source: String, 
-	destination: String, 
-	os_session: OsSession,
-	exclude_git: Option<bool>
-) -> Result<(), String> {
-	let should_exclude = exclude_git.unwrap_or(false);
-	filesystem::FileSystemManager::copy_files_with_exclusion(&source, &destination, &os_session, should_exclude)
 }
 
 #[tauri::command]

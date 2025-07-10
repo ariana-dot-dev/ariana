@@ -109,10 +109,10 @@ export function RecentProjectsList({ projects, onProjectSelect }: RecentProjects
 
 	return (
 		<div className="w-fit max-w-full">
-			<div className="flex items-center justify-between mb-4">
+			<div className="flex flex-col gap-2 mb-4">
 				<h2 className="text-lg font-medium text-[var(--base-700)]">Recent Projects</h2>
 				{isValidating && (
-					<div className="text-sm text-[var(--base-500)]">Validating...</div>
+					<div className="text-xs text-[var(--base-500)]">Loading...</div>
 				)}
 			</div>
 

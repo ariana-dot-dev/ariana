@@ -166,6 +166,7 @@ export interface MergeAgentContext {
 	canvasOsSession: OsSession;
 	canvasId: string;
 	originalRootCommitHash?: string; // Track root state at merge start
+	originalRootBranch: string; // The actual branch name from root (not hardcoded 'main')
 	conflictFiles: string[];
 	maxRetries: number;
 	currentRetry: number;
@@ -206,7 +207,7 @@ export class MergeAgent extends BackgroundAgent<MergeAgentContext> {
 		}
 
 		try {
-			// Step 1: Copy root to workspace (handle empty directories)
+			// Step 1: Copy root to workspace (handle git repositories properly)
 			const { CanvasService } = await import('../services/CanvasService');
 			const { invoke } = await import("@tauri-apps/api/core");
 			console.log(`[MergeAgent] Copying root from ${rootDir} to ${workingDir}`);
@@ -219,28 +220,40 @@ export class MergeAgent extends BackgroundAgent<MergeAgentContext> {
 				osSession: this.workspaceOsSession
 			});
 
-			// Try to copy files if root has any content
-			const copyResult = await CanvasService.copyDirectory(rootDir, workingDir, this.context.rootOsSession);
-			if (!copyResult.success) {
-				// If copy failed because root is empty, initialize as empty git repo
-				if (copyResult.error?.includes('No such file or directory') || copyResult.error?.includes('cannot stat')) {
-					console.log(`[MergeAgent] Root appears to be empty, initializing as git repository`);
-					await invoke('execute_command_with_os_session', {
-						command: 'git',
-						args: ['init'],
-						directory: workingDir,
-						osSession: this.workspaceOsSession
+			// Check if root is a git repository
+			let isGitRepo = false;
+			try {
+				isGitRepo = await invoke<boolean>('check_git_repository', {
+					directory: rootDir,
+					osSession: this.context.rootOsSession
+				});
+			} catch (error) {
+				console.log(`[MergeAgent] Failed to check if root is git repo: ${error}`);
+			}
+
+			if (isGitRepo) {
+				// Copy the git repository (including .git) using optimized copy
+				try {
+					await invoke('copy_files_optimized', {
+						source: rootDir,
+						destination: workingDir,
+						osSession: this.context.rootOsSession,
+						excludeGit: false // Include .git directory for git repos
 					});
-				} else {
-					throw new Error(`Failed to copy root: ${copyResult.error}`);
+				} catch (error) {
+					throw new Error(`Failed to copy git repository: ${error}`);
 				}
+			} else {
+				// Root is not a git repository, initialize workspace as git repo
+				console.error(`[MergeAgent] Root is not a git repository, initializing workspace as git repository`);
+				throw new Error('Root directory is not a git repository. Please initialize it as a git repository before merging.');
 			}
 
 			this.checkCancellation();
 
 			// Step 2: Record original root state for conflict detection
 			try {
-				this.context.originalRootCommitHash = await invoke<string>('git_get_current_commit_hash', {
+				this.context.originalRootCommitHash = await invoke<string>('get_git_hash', {
 					directory: rootDir,
 					osSession: this.context.rootOsSession
 				});
@@ -262,9 +275,15 @@ export class MergeAgent extends BackgroundAgent<MergeAgentContext> {
 
 			// Step 4: Apply canvas changes (excluding .git)
 			console.log(`[MergeAgent] Applying canvas changes from ${canvasDir}`);
-			const canvasCopyResult = await CanvasService.copyDirectory(canvasDir, workingDir, this.workspaceOsSession, true);
-			if (!canvasCopyResult.success) {
-				throw new Error(`Failed to apply canvas changes: ${canvasCopyResult.error}`);
+			try {
+				await invoke('copy_files_optimized', {
+					source: canvasDir,
+					destination: workingDir,
+					osSession: this.workspaceOsSession,
+					excludeGit: true // Exclude .git from canvas
+				});
+			} catch (error) {
+				throw new Error(`Failed to apply canvas changes: ${error}`);
 			}
 
 			// Step 5: Commit canvas changes
@@ -280,13 +299,25 @@ export class MergeAgent extends BackgroundAgent<MergeAgentContext> {
 
 			this.checkCancellation();
 
-			// Step 6: Switch back to main branch and attempt merge
-			await invoke('execute_command_with_os_session', {
-				command: 'git',
-				args: ['checkout', 'main'],
-				directory: workingDir,
-				osSession: this.workspaceOsSession
-			});
+			// Step 6: Switch back to root branch and attempt merge
+			// Use the actual root branch name instead of hardcoding 'main'
+			if (this.context.originalRootCommitHash !== '') {
+				// Repository has commits, checkout existing branch
+				await invoke('execute_command_with_os_session', {
+					command: 'git',
+					args: ['checkout', this.context.originalRootBranch],
+					directory: workingDir,
+					osSession: this.workspaceOsSession
+				});
+			} else {
+				// Empty repository, create the root branch
+				await invoke('execute_command_with_os_session', {
+					command: 'git',
+					args: ['checkout', '-b', this.context.originalRootBranch],
+					directory: workingDir,
+					osSession: this.workspaceOsSession
+				});
+			}
 
 		} catch (error) {
 			if (this.cancellationToken.isCancelled) {
@@ -315,7 +346,7 @@ export class MergeAgent extends BackgroundAgent<MergeAgentContext> {
 				await invoke('git_merge_branch', {
 					directory: workingDir,
 					sourceBranch: 'canvas-changes',
-					targetBranch: 'main',
+					targetBranch: this.context.originalRootBranch,
 					osSession: this.workspaceOsSession
 				});
 
@@ -414,21 +445,37 @@ export class MergeAgent extends BackgroundAgent<MergeAgentContext> {
 		try {
 			const { invoke } = await import("@tauri-apps/api/core");
 
-			// Check if root changed during merge
-			const currentRootHash = await invoke<string>('git_get_current_commit_hash', {
-				directory: rootDir,
-				osSession: this.context.rootOsSession
-			});
+			// Check if root changed during merge (only if original had commits)
+			if (this.context.originalRootCommitHash !== '') {
+				try {
+					const currentRootHash = await invoke<string>('get_git_hash', {
+						directory: rootDir,
+						osSession: this.context.rootOsSession
+					});
 
-			if (currentRootHash !== this.context.originalRootCommitHash) {
-				throw new Error('Root repository was modified during merge. Manual intervention required.');
+					if (currentRootHash !== this.context.originalRootCommitHash) {
+						throw new Error('Root repository was modified during merge. Manual intervention required.');
+					}
+				} catch (error) {
+					// If getting git hash fails, root might have become invalid
+					throw new Error(`Failed to verify root state during cleanup: ${error}`);
+				}
+			} else {
+				// Original root had no commits, verify it still has no commits
+				// or that it only has the commits we expect from this merge
+				console.log('[MergeAgent] Original root had no commits, skipping root change verification');
 			}
 
 			// Sync workspace back to root (atomic operation)
-			const { CanvasService } = await import('../services/CanvasService');
-			const syncResult = await CanvasService.copyDirectory(workingDir, rootDir, this.context.rootOsSession, true);
-			if (!syncResult.success) {
-				throw new Error(`Failed to sync back to root: ${syncResult.error}`);
+			try {
+				await invoke('copy_files_optimized', {
+					source: workingDir,
+					destination: rootDir,
+					osSession: this.context.rootOsSession,
+					excludeGit: true // Exclude .git when syncing back to root
+				});
+			} catch (error) {
+				throw new Error(`Failed to sync back to root: ${error}`);
 			}
 
 			// Update all copies in the pool

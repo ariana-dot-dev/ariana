@@ -250,7 +250,7 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 					scrollableDiv.scrollTop +
 						scrollableDiv.clientHeight -
 						scrollableDiv.scrollHeight,
-				) < 5;
+				) < 500;
 
 			if (isAtBottom) {
 				scrollableDiv.scrollTop = scrollableDiv.scrollHeight;
