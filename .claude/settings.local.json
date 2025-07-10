@@ -25,7 +25,8 @@
       "Bash(sed:*)",
       "Bash(timeout:*)",
       "Bash(ssh:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(npm install:*)"
     ],
     "deny": []
   }

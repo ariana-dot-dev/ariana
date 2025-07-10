@@ -34,6 +34,7 @@ tauri-plugin-fs = "2"
 walkdir = "2.5.0"
 tauri-plugin-os = "2"
 tauri-plugin-dialog = "2"
+tauri-plugin-shell = "2"
 
 [features]
 # this feature is used for production builds or when `devPath` points to the filesystem
