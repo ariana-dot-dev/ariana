@@ -176,7 +176,9 @@ export class TaskManager {
 			}
 		}
 		
-		return "HEAD~1"; // Fallback to git's previous commit
+		// If no previous commits found, cannot revert
+		// Return undefined to indicate revert is not possible
+		return undefined;
 	}
 
 	// Update task prompt (only for prompting tasks)

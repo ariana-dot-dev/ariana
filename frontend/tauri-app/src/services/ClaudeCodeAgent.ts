@@ -9,6 +9,7 @@ import { OsSession } from "../bindings/os";
 
 export interface ClaudeCodeTaskResult {
 	elapsed: number;
+	commitHash?: string;
 	tokens?: number;
 	diff: {
 		file_changes: Array<{
@@ -454,9 +455,44 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 			await this.sendCtrlD(this.terminalId);
 
 			const elapsed = Date.now() - this.startTime;
+			
+			// Create git commit as part of task completion
+			let commitHash = "";
+			if (this.osSession && this.currentPrompt) {
+				try {
+					const { GitService } = await import('./GitService');
+					commitHash = await GitService.createCommit(this.osSession, this.currentPrompt);
+					console.log(this.logPrefix, `Created commit: ${commitHash}`);
+				} catch (error) {
+					const errorString = String(error);
+					if (errorString === "NO_CHANGES_TO_COMMIT" || errorString.toLowerCase().includes("nothing to commit")) {
+						// Legitimate case: task ran but made no file changes
+						commitHash = "NO_CHANGES";
+						console.log(this.logPrefix, "No changes to commit");
+					} else {
+						// Real git error - this indicates a repository or git configuration problem
+						console.error(this.logPrefix, "Git commit failed with error:", error);
+						
+						// Check for common git repository issues
+						if (errorString.includes("unknown revision") || 
+						    errorString.includes("ambiguous argument") || 
+						    errorString.includes("not a git repository") ||
+						    errorString.includes("detected dubious ownership")) {
+							this.emit("taskError", new Error(`Cannot complete task: Git repository error - ${errorString}`));
+							return;
+						}
+						
+						// For other git errors, still fail the task
+						this.emit("taskError", new Error(`Cannot complete task: Git commit failed - ${errorString}`));
+						return;
+					}
+				}
+			}
+
 			this.emit("taskCompleted", {
 				prompt: this.currentPrompt,
 				elapsed,
+				commitHash
 			});
 		} catch (error) {
 			console.error(

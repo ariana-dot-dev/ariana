@@ -244,17 +244,7 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 			const scrollableDiv = scrollableRef.current;
 			if (!scrollableDiv) return;
 
-			// Check if user is already at the bottom before auto-scrolling
-			const isAtBottom =
-				Math.abs(
-					scrollableDiv.scrollTop +
-						scrollableDiv.clientHeight -
-						scrollableDiv.scrollHeight,
-				) < 500;
-
-			if (isAtBottom) {
-				scrollableDiv.scrollTop = scrollableDiv.scrollHeight;
-			}
+			scrollableDiv.scrollTop = scrollableDiv.scrollHeight;
 		};
 		inner();
 		setTimeout(inner, 10);

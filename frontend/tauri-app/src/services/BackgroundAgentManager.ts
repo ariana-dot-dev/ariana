@@ -110,15 +110,21 @@ export class BackgroundAgentManager {
 		const agent = gitProject.getBackgroundAgent(agentId);
 		if (!agent) return;
 
-		// Cancel the agent
-		agent.cancel();
+		// Only cancel if agent is not already in a final state
+		if (!['completed', 'failed', 'cancelled'].includes(agent.status)) {
+			// Cancel the agent
+			agent.cancel();
 
-		// Unlock any locked canvases
-		gitProject.canvases.forEach(canvas => {
-			if (canvas.lockingAgentId === agentId) {
-				gitProject.unlockCanvas(canvas.id, agentId);
-			}
-		});
+			// Unlock any locked canvases for non-completed agents
+			gitProject.canvases.forEach(canvas => {
+				if (canvas.lockingAgentId === agentId) {
+					gitProject.unlockCanvas(canvas.id, agentId);
+				}
+			});
+		} else {
+			// For completed agents, preserve the canvas state and just clean up
+			console.log(`[BackgroundAgentManager] Removing completed agent ${agentId} without state changes`);
+		}
 
 		// Cleanup workspace
 		await this.cleanupWorkspace(agent.workspaceOsSession);
@@ -126,7 +132,7 @@ export class BackgroundAgentManager {
 		// Remove from GitProject
 		gitProject.removeBackgroundAgent(agentId);
 
-		console.log(`[BackgroundAgentManager] Agent ${agentId} cancelled and removed`);
+		console.log(`[BackgroundAgentManager] Agent ${agentId} removed`);
 	}
 
 	/**

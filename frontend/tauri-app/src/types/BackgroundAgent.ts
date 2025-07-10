@@ -478,6 +478,18 @@ export class MergeAgent extends BackgroundAgent<MergeAgentContext> {
 				throw new Error(`Failed to sync back to root: ${error}`);
 			}
 
+			// Commit the merged changes to the root repository
+			try {
+				const mergeCommitHash = await invoke<string>('git_commit', {
+					directory: rootDir,
+					message: `Merge canvas changes from canvas ${this.context.canvasId}`,
+					osSession: this.context.rootOsSession
+				});
+				console.log(`[MergeAgent] Created merge commit in root: ${mergeCommitHash}`);
+			} catch (commitError) {
+				console.log('[MergeAgent] No changes to commit in root after merge');
+			}
+
 			// Update all copies in the pool
 			const { CopyPoolManager } = await import('../services/CopyPoolManager');
 			const copyPool = CopyPoolManager.getInstance();

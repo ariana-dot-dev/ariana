@@ -318,7 +318,9 @@ export const UnifiedCanvasAgentList: React.FC<UnifiedCanvasAgentListProps> = ({
 								onClick={() => handleForceRemoveAgent(contextMenu.item.id)}
 								className="w-fit min-w-full cursor-pointer px-3 py-2 text-left text-sm hover:bg-[var(--negative-200)] text-[var(--negative-600)] hover:text-[var(--negative-700)] transition-colors"
 							>
-								🗑️ Force Remove
+								{['completed', 'failed', 'cancelled'].includes(contextMenu.item.data.status) 
+									? '🗑️ Remove' 
+									: '🗑️ Force Remove'}
 							</button>
 						</>
 					)}

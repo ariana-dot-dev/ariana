@@ -34,6 +34,15 @@ export class GitService {
 	static async revertToCommit(osSession: OsSession, commitHash: string): Promise<void> {
 		const directory = osSessionGetWorkingDirectory(osSession);
 		
+		// Validate commitHash before attempting revert
+		if (!commitHash || commitHash.trim() === '') {
+			throw new Error('Cannot revert: no target commit specified');
+		}
+		
+		if (commitHash === 'HEAD~1') {
+			throw new Error('Cannot revert: repository has no previous commits to revert to');
+		}
+		
 		try {
 			await invoke<void>('git_revert_to_commit', {
 				directory,
@@ -44,6 +53,15 @@ export class GitService {
 			console.log(`[GitService] Reverted to commit: ${commitHash}`);
 		} catch (error) {
 			console.error('[GitService] Failed to revert to commit:', error);
+			
+			// Provide more helpful error messages
+			const errorStr = String(error);
+			if (errorStr.includes('unknown revision')) {
+				throw new Error('Cannot revert: the target commit does not exist in this repository');
+			} else if (errorStr.includes('ambiguous argument')) {
+				throw new Error('Cannot revert: repository has insufficient commit history');
+			}
+			
 			throw new Error(`Failed to revert to commit: ${error}`);
 		}
 	}
