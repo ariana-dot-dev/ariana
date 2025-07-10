@@ -96,9 +96,6 @@ class AuthService {
 		this.notifyListeners();
 	}
 
-	public logout(): void {
-		this.clearAuthState();
-	}
 
 	public async validateToken(): Promise<boolean> {
 		if (!this.authState.token) {
@@ -158,6 +155,48 @@ class AuthService {
 		}
 
 		return response.json();
+	}
+
+	public async getActiveSessions(): Promise<any[]> {
+		return this.apiRequest('https://api2.ariana.dev/api/sessions');
+	}
+
+	public async revokeSession(sessionId: string): Promise<boolean> {
+		try {
+			await this.apiRequest(`https://api2.ariana.dev/api/sessions/${sessionId}`, {
+				method: 'DELETE',
+			});
+			return true;
+		} catch (error) {
+			console.error('Failed to revoke session:', error);
+			return false;
+		}
+	}
+
+	public async revokeAllOtherSessions(): Promise<number> {
+		try {
+			const result = await this.apiRequest<{ revokedCount: number }>('https://api2.ariana.dev/api/sessions', {
+				method: 'DELETE',
+			});
+			return result.revokedCount;
+		} catch (error) {
+			console.error('Failed to revoke sessions:', error);
+			return 0;
+		}
+	}
+
+	public async logout(): Promise<void> {
+		try {
+			// Call backend logout to revoke the session
+			await this.apiRequest('https://api2.ariana.dev/auth/logout', {
+				method: 'POST',
+			});
+		} catch (error) {
+			console.error('Backend logout failed:', error);
+		} finally {
+			// Always clear local auth state
+			this.clearAuthState();
+		}
 	}
 }
 
