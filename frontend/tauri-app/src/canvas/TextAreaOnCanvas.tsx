@@ -7,6 +7,7 @@ import { ClaudeCodeAgent } from "../services/ClaudeCodeAgent";
 import { useGitProject } from "../contexts/GitProjectContext";
 import { ProcessManager } from "../services/ProcessManager";
 import { ProcessState } from "../types/GitProject";
+import { GitService } from "../services/GitService";
 
 interface TextAreaOnCanvasProps {
 	layout: ElementLayout;
@@ -283,23 +284,6 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 			}
 		};
 	}, [elementId]); // Only depend on elementId, not claudeAgent
-
-	const handleStopClick = async () => {
-		if (claudeAgent) {
-			await claudeAgent.stopTask();
-			setClaudeAgent(null);
-		}
-		
-		const existingProcess = getProcessByElementId(elementId);
-		if (existingProcess) {
-			removeProcess(existingProcess.processId);
-			ProcessManager.unregisterProcess(existingProcess.processId);
-			ProcessManager.removeTerminalConnection(elementId);
-		}
-		
-		setShowTerminal(false);
-		setTerminalId(null);
-	};
 
 	const handleRevertTask = async (taskId: string) => {
 		try {

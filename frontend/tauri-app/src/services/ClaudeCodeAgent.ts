@@ -51,6 +51,7 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	private eventQueue: TerminalEvent[][] = [];
 	private lastActivityTime: number = 0;
 	private completionTimeoutId: NodeJS.Timeout | null = null;
+	private osSession: OsSession | null = null;
 
 	constructor() {
 		super();
@@ -111,6 +112,7 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		this.isRunning = true;
 		this.currentTask = prompt;
 		this.currentPrompt = prompt;
+		this.osSession = osSession;
 		this.startTime = Date.now();
 		this.screenLines = [];
 		this.hasSeenTryPrompt = false;
@@ -460,15 +462,21 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 			let commitHash = "";
 			if (this.osSession && this.currentPrompt) {
 				try {
+					// Add delay to ensure file system operations complete
+					await this.delay(1000);
+					
 					const { GitService } = await import('./GitService');
+					console.log(this.logPrefix, `Attempting to commit changes...`);
 					commitHash = await GitService.createCommit(this.osSession, this.currentPrompt);
-					console.log(this.logPrefix, `Created commit: ${commitHash}`);
+					console.log(this.logPrefix, `Successfully created commit: ${commitHash}`);
 				} catch (error) {
 					const errorString = String(error);
+					console.log(this.logPrefix, `Git commit error: ${errorString}`);
+					
 					if (errorString === "NO_CHANGES_TO_COMMIT" || errorString.toLowerCase().includes("nothing to commit")) {
-						// Legitimate case: task ran but made no file changes
+						// Check if there are actually changes that weren't detected
+						console.warn(this.logPrefix, "Git reports no changes but task completed - possible timing issue");
 						commitHash = "NO_CHANGES";
-						console.log(this.logPrefix, "No changes to commit");
 					} else {
 						// Real git error - this indicates a repository or git configuration problem
 						console.error(this.logPrefix, "Git commit failed with error:", error);
@@ -518,24 +526,24 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		// 	}
 		// });
 
-		// Check for trust folder confirmation
-		const hasEnterToConfirm = newLines.some((line) =>
-			line.includes("Enter to confirm"),
-		);
-		const hasTrustQuestion = newLines.some((line) =>
-			line.includes("Do you trust the files in this folder?"),
-		);
+		// // Check for trust folder confirmation
+		// const hasEnterToConfirm = newLines.some((line) =>
+		// 	line.includes("Enter to confirm"),
+		// );
+		// const hasTrustQuestion = newLines.some((line) =>
+		// 	line.includes("Do you trust the files in this folder?"),
+		// );
 
-		if (hasEnterToConfirm && hasTrustQuestion && !this.hasSeenTrustPrompt) {
-			console.log(
-				this.logPrefix,
-				"Found trust confirmation prompt, sending Enter...",
-			);
-			await this.delay(Math.random() * 500 + 500);
-			await this.sendRawInput(this.terminalId, "\r");
-			this.hasSeenTrustPrompt = true;
-			return;
-		}
+		// if (hasEnterToConfirm && hasTrustQuestion && !this.hasSeenTrustPrompt) {
+		// 	console.log(
+		// 		this.logPrefix,
+		// 		"Found trust confirmation prompt, sending Enter...",
+		// 	);
+		// 	await this.delay(Math.random() * 50 + 50);
+		// 	await this.sendRawInput(this.terminalId, "\r");
+		// 	this.hasSeenTrustPrompt = true;
+		// 	return;
+		// }
 
 		// Check for "Yes, and don't ask again this session (shift+tab)"
 		const hasShiftTabOption = newLines.some((line) =>
@@ -546,13 +554,15 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 				this.logPrefix,
 				"Found '1. Yes'",
 			);
-			await this.delay(Math.random() * 500 + 500);
+			await this.delay(1000);
+			await this.sendRawInput(this.terminalId, "\r");
+			await this.sendRawInput(this.terminalId, "\r");
 			await this.sendRawInput(this.terminalId, "\r");
 			return;
 		}
 
 		// Check for "│ > Try" prompt (first time only)
-		const hasTryPrompt = newLines.some((line) => line.includes("│ > Try"));
+		const hasTryPrompt = newLines.some((line) => line.includes("│ >"));
 		if (hasTryPrompt && !this.hasSeenTryPrompt && this.currentPrompt) {
 			console.log(
 				this.logPrefix,
@@ -571,7 +581,7 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 				}
 				await this.delay(Math.random() * 50 + 50);
 			}
-			await this.delay(Math.random() * 500 + 500);
+			await this.delay(Math.random() * 50 + 50);
 			await this.sendRawInput(this.terminalId, "\r");
 			return;
 		}
