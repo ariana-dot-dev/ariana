@@ -387,7 +387,7 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 					)}
 					style={{
 						backgroundImage:
-							"radial-gradient(circle at 3px 3px, var(--base-400-30) 1.4px, transparent 0)",
+							"radial-gradient(circle at 3px 3px, var(--base-400-30) 1px, transparent 0)",
 						backgroundSize: "24px 24px",
 						backgroundPosition: "10px 20px",
 					}}
@@ -570,7 +570,7 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 							onTerminalError={(error) => {
 								console.error("Claude terminal error:", error);
 							}}
-							fontSize="base"
+							fontSize="xs"
 						/>
 					</div>
 				)}

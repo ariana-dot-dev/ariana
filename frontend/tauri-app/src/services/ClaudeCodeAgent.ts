@@ -437,8 +437,8 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 			clearTimeout(this.completionTimeoutId);
 		}
 
-		// Only set timeout if we've seen the Try prompt (task has started)
-		if (this.hasSeenTryPrompt) {
+		// Only set timeout if we've seen the Try prompt and aren't already completing
+		if (this.hasSeenTryPrompt && !this.isCompletingTask) {
 			this.completionTimeoutId = setTimeout(() => {
 				this.handleTaskCompletion();
 			}, 5000); // 5 seconds of inactivity
@@ -534,7 +534,10 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 				elapsed,
 				commitHash
 			});
-			this.isCompletingTask = false;
+			
+			// Critical: Clean up terminal and event listeners after completion
+			console.log(this.logPrefix, "Task completed, starting cleanup...");
+			await this.cleanup();
 		} catch (error) {
 			console.error(
 				this.logPrefix,
@@ -542,6 +545,8 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 				error,
 			);
 			this.isCompletingTask = false;
+			// Also cleanup on error to prevent resource leaks
+			await this.cleanup();
 		}
 	}
 

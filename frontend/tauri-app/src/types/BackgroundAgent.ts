@@ -564,11 +564,15 @@ The system will automatically commit your changes.`.trim();
 
 			const onTaskComplete = () => {
 				clearInterval(cancellationInterval);
+				claudeAgent.off('taskCompleted', onTaskComplete);
+				claudeAgent.off('taskError', onTaskError);
 				resolve();
 			};
 
 			const onTaskError = (error: any) => {
 				clearInterval(cancellationInterval);
+				claudeAgent.off('taskCompleted', onTaskComplete);
+				claudeAgent.off('taskError', onTaskError);
 				reject(new Error(`Claude Code task failed: ${error}`));
 			};
 

@@ -7,11 +7,18 @@ export class BackgroundAgentManager {
 	 * Check if there are any running agents of the same type that require serialization
 	 */
 	private static hasRunningSerializedAgent(agentType: BackgroundAgentType, gitProject: GitProject): boolean {
-		return gitProject.backgroundAgents.some(agent => 
+		const runningAgents = gitProject.backgroundAgents.filter(agent => 
 			agent.type === agentType && 
 			agent.requiresSerialization &&
 			['preparation', 'running'].includes(agent.status)
 		);
+		
+		if (runningAgents.length > 0) {
+			console.log(`[BackgroundAgentManager] Found ${runningAgents.length} running ${agentType} agents:`, 
+				runningAgents.map(a => `${a.id} (${a.status})`));
+		}
+		
+		return runningAgents.length > 0;
 	}
 
 	/**
@@ -63,14 +70,19 @@ export class BackgroundAgentManager {
 			allHistoricalPrompts
 		};
 
+		// Check if another merge agent is already running BEFORE creating new agent
+		console.log(`[BackgroundAgentManager] Checking for running merge agents. Current agents:`, 
+			gitProject.backgroundAgents.map(a => `${a.id.slice(0, 8)} (${a.type}/${a.status})`));
+		
+		const shouldQueue = this.hasRunningSerializedAgent('merge', gitProject);
+		
 		// Create merge agent
 		const agent = new MergeAgent(agentId, workspaceOsSession, context);
 		
 		// Add to GitProject
 		gitProject.addBackgroundAgent(agent);
 		
-		// Check if another merge agent is already running
-		if (this.hasRunningSerializedAgent('merge', gitProject)) {
+		if (shouldQueue) {
 			console.log(`[BackgroundAgentManager] Merge agent ${agentId} queued - another merge is in progress`);
 			agent.updateStatus('queued', 'Waiting for other merge operations to complete...');
 			return agentId;
