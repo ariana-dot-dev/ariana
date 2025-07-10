@@ -20,7 +20,12 @@
       "Bash(npm run:*)",
       "Bash(npx typescript:*)",
       "Bash(rg:*)",
-      "Bash(cp:*)"
+      "Bash(cp:*)",
+      "Bash(./connect.sh)",
+      "Bash(sed:*)",
+      "Bash(timeout:*)",
+      "Bash(ssh:*)",
+      "Bash(curl:*)"
     ],
     "deny": []
   }
