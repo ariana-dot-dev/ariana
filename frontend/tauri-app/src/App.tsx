@@ -281,17 +281,6 @@ function App() {
 						</div>
 					</div>
 
-					{/* Show interpreter loading status */}
-					{!interpreter && (
-						<div
-							className={cn(
-								"absolute top-16 right-4 bg-[var(--base-800)]/90 text-[var(--acc-300)] px-3 py-2 rounded-md text-sm",
-							)}
-						>
-							Initializing interpreter...
-						</div>
-					)}
-
 					{/* Show ProjectSelector if no selected project, otherwise show CanvasView */}
 					{selectedGitProjectId === null ? (
 						<div className="z-10 h-fit w-full max-h-full flex flex-col overflow-hidden gap-12">

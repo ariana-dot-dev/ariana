@@ -488,7 +488,6 @@ export function ProjectSelector({ onProjectCreated }: ProjectSelectorProps) {
 				</div>
 			)}
 
-			{/* Recent Projects Section - only show when not creating project */}
 			{!isCreatingProject && (
 				<RecentProjectsList 
 					projects={store.gitProjects} 

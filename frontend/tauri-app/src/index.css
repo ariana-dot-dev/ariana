@@ -162,6 +162,7 @@
 * {
 	box-sizing: border-box;
 	--border: 1.5px;
+	--border-big: calc(4 * var(--border));
 }
 
 body {
