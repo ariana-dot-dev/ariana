@@ -3,6 +3,7 @@ import { SingleChoiceList } from './ChoiceList';
 import { UnifiedListItem, isCanvasItem, isBackgroundAgentItem, createCanvasItem, createBackgroundAgentItem } from '../types/UnifiedListTypes';
 import { GitProjectCanvas, CanvasLockState } from '../types/GitProject';
 import { BackgroundAgent, BackgroundAgentStatus } from '../types/BackgroundAgent';
+import { BackgroundAgentsList } from './BackgroundAgentsList';
 
 interface UnifiedCanvasAgentListProps {
 	canvases: GitProjectCanvas[];
@@ -74,7 +75,7 @@ const generateCanvasName = (canvas: GitProjectCanvas, canvasIndex: number): stri
 
 		// Take first 3 words
 		const words = prompt.split(/\s+/).filter(word => word.length > 0);
-		const firstThreeWords = words.slice(2, 6).join(' ');
+		const firstThreeWords = words.slice(0, 3).join(' ');
 
 		return firstThreeWords || `Agent ${canvasIndex + 1}`;
 	} catch (error) {
@@ -110,11 +111,9 @@ export const UnifiedCanvasAgentList: React.FC<UnifiedCanvasAgentListProps> = ({
 	const [contextMenu, setContextMenu] = useState<{x: number, y: number, item: UnifiedListItem} | null>(null);
 	const contextMenuRef = useRef<HTMLDivElement>(null);
 
-	// Create unified list items
-	const items: UnifiedListItem[] = [
-		...canvases.map(createCanvasItem),
-		...backgroundAgents.map(createBackgroundAgentItem)
-	];
+	// Create separate lists
+	const canvasItems: UnifiedListItem[] = canvases.map(createCanvasItem);
+	const agentItems: UnifiedListItem[] = backgroundAgents.map(createBackgroundAgentItem);
 
 	// Handle clicks outside context menu
 	useEffect(() => {
@@ -135,7 +134,7 @@ export const UnifiedCanvasAgentList: React.FC<UnifiedCanvasAgentListProps> = ({
 	const handleContextMenu = (e: React.MouseEvent, itemId: string) => {
 		e.preventDefault();
 		e.stopPropagation();
-		const item = items.find(i => i.id === itemId);
+		const item = [...canvasItems, ...agentItems].find(i => i.id === itemId);
 		if (item) {
 			setContextMenu({
 				x: e.clientX,
@@ -180,87 +179,58 @@ export const UnifiedCanvasAgentList: React.FC<UnifiedCanvasAgentListProps> = ({
 		setContextMenu(null);
 	};
 
-	if (items.length === 0) {
+	if (canvasItems.length === 0 && agentItems.length === 0) {
 		return null;
 	}
 
 	return (
-		<div className="flex flex-col w-full max-w-full">
-			<SingleChoiceList
-				className="!w-full"
-				buttonProps={{
-					className: '!w-full !max-w-full'
-				}}
-				items={items}
-				selectedItemId={selectedItemId}
-				onSelectItem={onSelectItem}
-				getItemId={(item) => item.id}
+		<div className="flex flex-col w-full max-w-full gap-4">
+			{/* Canvases List */}
+			{canvasItems.length > 0 && (
+				<div className="flex flex-col gap-2">
+					<SingleChoiceList
+						className="!w-full"
+						buttonProps={{
+							className: '!w-full !max-w-full'
+						}}
+						items={canvasItems.reverse()}
+						selectedItemId={selectedItemId}
+						onSelectItem={onSelectItem}
+						getItemId={(item) => item.id}
+						onContextMenu={handleContextMenu}
+						renderItem={(item, isSelected) => {
+							if (isCanvasItem(item)) {
+								const canvas = item.data;
+								const canvasIndex = canvases.indexOf(canvas);
+								const canvasName = generateCanvasName(canvas, canvasIndex);
+
+								return (
+									<div className="flex flex-col gap-1 w-full max-w-full">
+										<div className="flex items-center justify-between w-full max-w-full overflow-ellipsis">
+											<div className="overflow-ellipsis text-xs max-w-full text-[var(--base-600)]">
+												{canvasName.length > 22 ? canvasName.substring(0, 19) + '...' : canvasName}
+											</div>
+											<LockStateIndicator lockState={canvas.lockState} />
+										</div>
+										
+										{canvas.copyProgress && canvas.copyProgress.percentage < 100 && (
+											<div className="text-xs text-[var(--base-500-70)]">
+												{canvas.copyProgress.percentage}% ready
+											</div>
+										)}
+									</div>
+								);
+							}
+							return null;
+						}}
+					/>
+				</div>
+			)}
+
+			{/* Background Agents List */}
+			<BackgroundAgentsList 
+				agentItems={agentItems}
 				onContextMenu={handleContextMenu}
-				renderItem={(item, isSelected) => {
-					if (isCanvasItem(item)) {
-						const canvas = item.data;
-						const canvasIndex = canvases.indexOf(canvas);
-						const canvasName = generateCanvasName(canvas, canvasIndex);
-
-						return (
-							<div className="flex flex-col gap-1 w-full max-w-full">
-								<div className="flex items-center justify-between w-full max-w-full overflow-ellipsis">
-									<div className="overflow-ellipsis text-xs max-w-full text-[var(--base-600)]">
-										{canvasName.length > 25 ? canvasName.substring(0, 22) + '...' : canvasName}
-									</div>
-									<LockStateIndicator lockState={canvas.lockState} />
-								</div>
-								
-								{canvas.copyProgress && canvas.copyProgress.percentage < 100 && (
-									<div className="text-xs text-[var(--base-500-70)]">
-										{canvas.copyProgress.percentage}% ready
-									</div>
-								)}
-							</div>
-						);
-					} 
-					
-					else if (isBackgroundAgentItem(item)) {
-						const agent = item.data;
-
-						return (
-							<div className="flex flex-col gap-1 w-full max-w-full">
-								<div className="flex items-center justify-between">
-									<span className="text-xs text-[var(--base-600)] capitalize">
-										{agent.type} Agent
-									</span>
-									<div className="flex items-center gap-2">
-										<StatusIndicator status={agent.status} />
-										{agent.status === 'completed' && (
-											<span className="text-[var(--positive-600)] text-xs">✓</span>
-										)}
-										{agent.status === 'failed' && (
-											<span className="text-[var(--negative-600)] text-xs">✗</span>
-										)}
-										{agent.status === 'cancelled' && (
-											<span className="text-[var(--base-500)] text-xs">⊗</span>
-										)}
-									</div>
-								</div>
-
-								{agent.progress && !['completed', 'failed', 'cancelled'].includes(agent.status) && (
-									<div className="text-xs text-[var(--base-500-70)] flex items-center gap-1">
-										{agent.status === 'queued' && <span>⏳</span>}
-										{agent.progress}
-									</div>
-								)}
-
-								{agent.errorMessage && (
-									<div className="text-xs text-[var(--negative-600)] bg-[var(--negative-100-20)] p-1 rounded">
-										Error: {agent.errorMessage}
-									</div>
-								)}
-							</div>
-						);
-					}
-
-					return null;
-				}}
 			/>
 
 			{/* Context Menu */}

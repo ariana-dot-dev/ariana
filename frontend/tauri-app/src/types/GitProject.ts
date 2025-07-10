@@ -122,6 +122,29 @@ export class GitProject {
 		this.backgroundAgents.push(agent);
 		this.lastModified = Date.now();
 		this.notifyListeners('backgroundAgents');
+		
+		// Set up automatic cleanup monitoring for this agent
+		this.setupAgentCleanupMonitoring(agent);
+	}
+
+	public setupAgentCleanupMonitoring(agent: BackgroundAgent): void {
+		// Import the BackgroundAgentManager to avoid circular imports
+		import('../services/BackgroundAgentManager').then(({ BackgroundAgentManager }) => {
+			// If agent is already in terminal state, schedule immediate cleanup
+			if (['completed', 'failed', 'cancelled'].includes(agent.status)) {
+				console.log(`[GitProject] Agent ${agent.id.slice(0, 8)} is already in terminal state (${agent.status}), scheduling cleanup`);
+				BackgroundAgentManager.onAgentStatusChanged(agent, this);
+			} else {
+				// Subscribe to status changes for active agents
+				const unsubscribe = agent.subscribe(() => {
+					if (['completed', 'failed', 'cancelled'].includes(agent.status)) {
+						console.log(`[GitProject] Agent ${agent.id.slice(0, 8)} reached terminal state (${agent.status}), scheduling cleanup`);
+						BackgroundAgentManager.onAgentStatusChanged(agent, this);
+						unsubscribe(); // Only need to detect the first terminal state
+					}
+				});
+			}
+		});
 	}
 
 	getBackgroundAgent(agentId: string): BackgroundAgent | undefined {
@@ -548,11 +571,16 @@ export class GitProject {
 		project.currentCanvasIndex = data.currentCanvasIndex >= 0 ? data.currentCanvasIndex : (project.canvases.length > 0 ? 0 : -1);
 		
 		// Restore background agents
-		project.backgroundAgents = [];
 		if (data.backgroundAgents && Array.isArray(data.backgroundAgents)) {
-			project.backgroundAgents = data.backgroundAgents.map((agentData: BackgroundAgentState) => 
+			const restoredAgents = data.backgroundAgents.map((agentData: BackgroundAgentState) => 
 				BackgroundAgent.fromJSON(agentData)
 			);
+			
+			// Set up cleanup monitoring for each restored agent
+			restoredAgents.forEach(agent => {
+				project.backgroundAgents.push(agent);
+				project.setupAgentCleanupMonitoring(agent);
+			});
 		}
 		
 		project.createdAt = data.createdAt || Date.now();

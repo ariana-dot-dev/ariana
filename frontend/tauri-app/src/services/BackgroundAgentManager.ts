@@ -3,6 +3,106 @@ import { OsSession, osSessionGetWorkingDirectory } from "../bindings/os";
 import type { GitProject } from "../types/GitProject";
 
 export class BackgroundAgentManager {
+	private static cleanupTimers = new Map<string, NodeJS.Timeout>();
+	private static readonly CLEANUP_DELAY_MS = 20000; // 20 seconds
+
+	/**
+	 * Initialize automatic cleanup for all existing agents in a GitProject
+	 * Call this when the app starts or when a GitProject is loaded
+	 */
+	static initializeCleanupMonitoring(gitProject: GitProject): void {
+		console.log(`[BackgroundAgentManager] Initializing cleanup monitoring for ${gitProject.backgroundAgents.length} agents in project ${gitProject.name}`);
+		
+		gitProject.backgroundAgents.forEach(agent => {
+			console.log(`[BackgroundAgentManager] Agent ${agent.id.slice(0, 8)} (${agent.type}): status=${agent.status}, terminal=${this.isTerminalState(agent.status)}`);
+			
+			if (this.isTerminalState(agent.status)) {
+				// Agent is already in terminal state, schedule immediate cleanup
+				console.log(`[BackgroundAgentManager] Agent ${agent.id.slice(0, 8)} is in terminal state, scheduling cleanup`);
+				this.scheduleAgentCleanup(agent.id, gitProject);
+			} else {
+				// Agent is still active, set up monitoring
+				console.log(`[BackgroundAgentManager] Agent ${agent.id.slice(0, 8)} is active, setting up monitoring`);
+				this.setupAgentMonitoring(agent, gitProject);
+			}
+		});
+	}
+	/**
+	 * Check if an agent is in a terminal state and should be scheduled for cleanup
+	 */
+	private static isTerminalState(status: string): boolean {
+		return ['completed', 'failed', 'cancelled'].includes(status);
+	}
+
+	/**
+	 * Schedule an agent for automatic cleanup after the delay
+	 */
+	private static scheduleAgentCleanup(agentId: string, gitProject: GitProject): void {
+		// Cancel any existing cleanup timer for this agent
+		this.cancelCleanupTimer(agentId);
+
+		console.log(`[BackgroundAgentManager] Scheduling cleanup for agent ${agentId.slice(0, 8)} in ${this.CLEANUP_DELAY_MS}ms`);
+		
+		const timer = setTimeout(async () => {
+			try {
+				const agent = gitProject.getBackgroundAgent(agentId);
+				console.log(`[BackgroundAgentManager] Cleanup timer triggered for agent ${agentId.slice(0, 8)}, agent exists: ${!!agent}, status: ${agent?.status}`);
+				
+				if (agent && this.isTerminalState(agent.status)) {
+					console.log(`[BackgroundAgentManager] Auto-removing completed agent ${agentId.slice(0, 8)} (${agent.type}/${agent.status})`);
+					await this.cancelAgent(agentId, gitProject);
+				} else {
+					console.log(`[BackgroundAgentManager] Skipping cleanup for agent ${agentId.slice(0, 8)} - agent not found or not in terminal state`);
+				}
+			} catch (error) {
+				console.error(`[BackgroundAgentManager] Error during auto-cleanup of agent ${agentId.slice(0, 8)}:`, error);
+			} finally {
+				this.cleanupTimers.delete(agentId);
+			}
+		}, this.CLEANUP_DELAY_MS);
+
+		this.cleanupTimers.set(agentId, timer);
+		console.log(`[BackgroundAgentManager] Timer set for agent ${agentId.slice(0, 8)}, total active timers: ${this.cleanupTimers.size}`);
+	}
+
+	/**
+	 * Cancel a scheduled cleanup timer for an agent
+	 */
+	private static cancelCleanupTimer(agentId: string): void {
+		const timer = this.cleanupTimers.get(agentId);
+		if (timer) {
+			clearTimeout(timer);
+			this.cleanupTimers.delete(agentId);
+			console.log(`[BackgroundAgentManager] Cancelled cleanup timer for agent ${agentId}`);
+		}
+	}
+
+	/**
+	 * Set up automatic cleanup monitoring for an agent
+	 */
+	private static setupAgentMonitoring(agent: BackgroundAgent, gitProject: GitProject): void {
+		// Subscribe to status changes
+		const unsubscribe = agent.subscribe(() => {
+			if (this.isTerminalState(agent.status)) {
+				// Agent reached terminal state, schedule cleanup
+				this.scheduleAgentCleanup(agent.id, gitProject);
+				// Unsubscribe since we only need to detect the first terminal state
+				unsubscribe();
+			}
+		});
+	}
+
+	/**
+	 * Called automatically when an agent status changes to handle cleanup
+	 * This should be called by the agent itself when updateStatus is called
+	 */
+	static onAgentStatusChanged(agent: BackgroundAgent, gitProject: GitProject): void {
+		if (this.isTerminalState(agent.status)) {
+			console.log(`[BackgroundAgentManager] Agent ${agent.id.slice(0, 8)} reached terminal state (${agent.status}), scheduling cleanup`);
+			this.scheduleAgentCleanup(agent.id, gitProject);
+		}
+	}
+
 	/**
 	 * Check if there are any running agents of the same type that require serialization
 	 */
@@ -82,6 +182,9 @@ export class BackgroundAgentManager {
 		// Add to GitProject
 		gitProject.addBackgroundAgent(agent);
 		
+		// Set up automatic cleanup monitoring
+		this.setupAgentMonitoring(agent, gitProject);
+		
 		if (shouldQueue) {
 			console.log(`[BackgroundAgentManager] Merge agent ${agentId} queued - another merge is in progress`);
 			agent.updateStatus('queued', 'Waiting for other merge operations to complete...');
@@ -138,6 +241,9 @@ export class BackgroundAgentManager {
 			gitProject.lockCanvas(canvasId, 'merged', agent.id);
 			console.log(`[BackgroundAgentManager] Agent ${agent.id} completed successfully`);
 
+			// Schedule automatic cleanup for completed agent
+			this.onAgentStatusChanged(agent, gitProject);
+
 			// Start next queued agent of the same type if any
 			if (agent.requiresSerialization) {
 				this.startNextQueuedAgent(agent.type, gitProject);
@@ -151,6 +257,9 @@ export class BackgroundAgentManager {
 				console.error(`[BackgroundAgentManager] Agent ${agent.id} failed:`, error);
 				agent.updateStatus('failed', undefined, error.message);
 			}
+
+			// Schedule automatic cleanup for failed/cancelled agent
+			this.onAgentStatusChanged(agent, gitProject);
 			
 			// Unlock canvas on failure/cancellation
 			gitProject.unlockCanvas(canvasId, agent.id);
@@ -171,6 +280,9 @@ export class BackgroundAgentManager {
 	static async cancelAgent(agentId: string, gitProject: GitProject): Promise<void> {
 		const agent = gitProject.getBackgroundAgent(agentId);
 		if (!agent) return;
+
+		// Cancel any pending cleanup timer
+		this.cancelCleanupTimer(agentId);
 
 		// Only cancel if agent is not already in a final state
 		if (!['completed', 'failed', 'cancelled'].includes(agent.status)) {
