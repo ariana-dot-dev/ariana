@@ -4,6 +4,41 @@ import { UnifiedListItem, isCanvasItem, isBackgroundAgentItem, createCanvasItem,
 import { GitProjectCanvas, CanvasLockState } from '../types/GitProject';
 import { BackgroundAgent, BackgroundAgentStatus } from '../types/BackgroundAgent';
 import { BackgroundAgentsList } from './BackgroundAgentsList';
+import { Task } from '../types/Task';
+
+// Marquee component for scrolling text
+const Marquee: React.FC<{ text: string; isActive: boolean; className?: string }> = ({ text, isActive, className = '' }) => {
+	const [shouldAnimate, setShouldAnimate] = useState(false);
+	const textRef = useRef<HTMLDivElement>(null);
+	const containerRef = useRef<HTMLDivElement>(null);
+
+	useEffect(() => {
+		if (!textRef.current || !containerRef.current) return;
+		
+		const textWidth = textRef.current.scrollWidth;
+		const containerWidth = containerRef.current.clientWidth;
+		
+		// Only animate if text overflows and marquee is active
+		setShouldAnimate(isActive && textWidth > containerWidth);
+	}, [text, isActive]);
+
+	return (
+		<div ref={containerRef} className={`relative overflow-hidden ${className}`}>
+			<div
+				ref={textRef}
+				className={`whitespace-nowrap ${
+					shouldAnimate ? 'animate-marquee' : ''
+				}`}
+				style={{
+					animationDuration: shouldAnimate ? `${text.length * 0.1}s` : undefined,
+				}}
+			>
+				{text}
+				{shouldAnimate && <span className="px-8">{text}</span>}
+			</div>
+		</div>
+	);
+};
 
 interface UnifiedCanvasAgentListProps {
 	canvases: GitProjectCanvas[];
@@ -40,47 +75,48 @@ const hasCompletedTasks = (canvas: GitProjectCanvas): boolean => {
 };
 
 const generateCanvasName = (canvas: GitProjectCanvas, canvasIndex: number): string => {
+	return `Canvas ${canvasIndex + 1}`;
+};
+
+const getCanvasTaskInfo = (canvas: GitProjectCanvas): { prompt: string; isLoading: boolean; isCompleted: boolean } => {
 	try {
-		const tasks = canvas.taskManager.getTasks();
-		
 		// Check for in-progress prompts first
 		if (canvas.inProgressPrompts && canvas.inProgressPrompts.size > 0) {
-			// Get the most recent in-progress prompt (first non-empty one)
+			// Get the most recent in-progress prompt
 			for (const prompt of canvas.inProgressPrompts.values()) {
 				if (prompt.trim()) {
 					let cleanPrompt = prompt.trim();
 					// Remove content in parentheses
 					cleanPrompt = cleanPrompt.replace(/\([^)]*\)/g, '').trim();
-					// Take first 3 words
-					const words = cleanPrompt.split(/\s+/).filter(word => word.length > 0);
-					const firstThreeWords = words.slice(0, 3).join(' ');
-					if (firstThreeWords) {
-						return firstThreeWords;
-					}
+					return { prompt: cleanPrompt, isLoading: true, isCompleted: false };
 				}
 			}
 		}
 		
-		// Fall back to completed tasks
-		if (tasks.length === 0) {
-			return `Agent ${canvasIndex + 1}`;
+		const tasks = canvas.taskManager.getTasks();
+		
+		// Check if there's an in-progress task
+		const inProgressTask = tasks.find(task => task.status === 'in_progress');
+		if (inProgressTask) {
+			let prompt = inProgressTask.prompt.trim();
+			prompt = prompt.replace(/\([^)]*\)/g, '').trim();
+			return { prompt, isLoading: true, isCompleted: false };
 		}
-
-		// Get the last task's prompt
-		const lastTask = tasks[tasks.length - 1];
-		let prompt = lastTask.prompt.trim();
-
-		// Remove content in parentheses
-		prompt = prompt.replace(/\([^)]*\)/g, '').trim();
-
-		// Take first 3 words
-		const words = prompt.split(/\s+/).filter(word => word.length > 0);
-		const firstThreeWords = words.slice(0, 3).join(' ');
-
-		return firstThreeWords || `Agent ${canvasIndex + 1}`;
+		
+		// Get the last completed task
+		const completedTasks = tasks.filter(task => task.status === 'completed');
+		if (completedTasks.length > 0) {
+			const lastTask = completedTasks[completedTasks.length - 1];
+			let prompt = lastTask.prompt.trim();
+			prompt = prompt.replace(/\([^)]*\)/g, '').trim();
+			return { prompt, isLoading: false, isCompleted: true };
+		}
+		
+		// No tasks
+		return { prompt: '', isLoading: false, isCompleted: false };
 	} catch (error) {
-		console.error('Error generating canvas name:', error);
-		return `Agent ${canvasIndex + 1}`;
+		console.error('Error getting canvas task info:', error);
+		return { prompt: '', isLoading: false, isCompleted: false };
 	}
 };
 
@@ -110,6 +146,7 @@ export const UnifiedCanvasAgentList: React.FC<UnifiedCanvasAgentListProps> = ({
 }) => {
 	const [contextMenu, setContextMenu] = useState<{x: number, y: number, item: UnifiedListItem} | null>(null);
 	const contextMenuRef = useRef<HTMLDivElement>(null);
+	const [hoveredCanvasId, setHoveredCanvasId] = useState<string | null>(null);
 
 	// Create separate lists
 	const canvasItems: UnifiedListItem[] = canvases.map(createCanvasItem);
@@ -204,20 +241,40 @@ export const UnifiedCanvasAgentList: React.FC<UnifiedCanvasAgentListProps> = ({
 								const canvasIndex = canvases.indexOf(canvas);
 								const canvasName = generateCanvasName(canvas, canvasIndex);
 
+								const taskInfo = getCanvasTaskInfo(canvas);
+								const isHovered = hoveredCanvasId === item.id;
+								const shouldShowMarquee = !!(taskInfo.prompt && (taskInfo.isLoading || isHovered));
+								
 								return (
-									<div className="flex flex-col gap-1 w-full max-w-full">
-										<div className="flex items-center justify-between w-full max-w-full overflow-ellipsis">
-											<div className="overflow-ellipsis text-xs max-w-full text-[var(--base-600)]">
-												{canvasName.length > 22 ? canvasName.substring(0, 19) + '...' : canvasName}
-											</div>
-											<LockStateIndicator lockState={canvas.lockState} />
+									<div 
+										className="flex items-center gap-2 w-full"
+										onMouseEnter={() => setHoveredCanvasId(item.id)}
+										onMouseLeave={() => setHoveredCanvasId(null)}
+									>
+										<div className="flex-1 min-w-0">
+											{taskInfo.prompt ? (
+												<Marquee 
+													text={taskInfo.prompt}
+													isActive={shouldShowMarquee}
+													className="text-xs text-[var(--base-600)]"
+												/>
+											) : (
+												<div className="text-xs text-[var(--base-600)]">
+													{canvasName}
+												</div>
+											)}
 										</div>
 										
-										{canvas.copyProgress && canvas.copyProgress.percentage < 100 && (
-											<div className="text-xs text-[var(--base-500-70)]">
-												{canvas.copyProgress.percentage}% ready
-											</div>
-										)}
+										{/* Status indicator */}
+										<div className="flex-shrink-0">
+											{canvas.lockState !== 'normal' ? (
+												<LockStateIndicator lockState={canvas.lockState} />
+											) : taskInfo.isLoading ? (
+												<div className="animate-spin h-3 w-3 border-2 border-[var(--acc-600)] border-t-transparent rounded-full" />
+											) : taskInfo.isCompleted ? (
+												<span className="text-[var(--positive-600)] text-xs">✓</span>
+											) : null}
+										</div>
 									</div>
 								);
 							}

@@ -577,7 +577,7 @@ export class GitProject {
 			);
 			
 			// Set up cleanup monitoring for each restored agent
-			restoredAgents.forEach(agent => {
+			restoredAgents.forEach((agent: BackgroundAgent) => {
 				project.backgroundAgents.push(agent);
 				project.setupAgentCleanupMonitoring(agent);
 			});

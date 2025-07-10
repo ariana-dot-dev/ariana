@@ -51,9 +51,9 @@ export abstract class BackgroundAgent<TContext = any> {
 	// Reactive listeners for UI updates
 	private listeners: Set<() => void> = new Set();
 
-	constructor(id: string, workspaceOsSession: OsSession, context: TContext) {
+	constructor(id: string, workspaceOsSession: OsSession, context: TContext, requiresSerialization: boolean = false) {
 		this.id = id;
-		this.status = this.requiresSerialization ? 'queued' : 'preparation';
+		this.status = requiresSerialization ? 'queued' : 'preparation';
 		this.createdAt = Date.now();
 		this.lastUpdated = Date.now();
 		this.workspaceOsSession = workspaceOsSession;
@@ -185,7 +185,7 @@ export class MergeAgent extends BackgroundAgent<MergeAgentContext> {
 	public readonly requiresSerialization: boolean = true; // Merge agents must run one at a time
 
 	constructor(id: string, workspaceOsSession: OsSession, context: MergeAgentContext) {
-		super(id, workspaceOsSession, context);
+		super(id, workspaceOsSession, context, true);
 	}
 
 	/**

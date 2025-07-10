@@ -209,5 +209,19 @@ body {
 	animation: fadeIn 0.5s ease-out forwards;
 }
 
+/* Marquee animation for canvas agent list */
+@keyframes marquee {
+	0% {
+		transform: translateX(0);
+	}
+	100% {
+		transform: translateX(-50%);
+	}
+}
+
+.animate-marquee {
+	animation: marquee linear infinite;
+}
+
 
 @plugin 'tailwind-scrollbar';
