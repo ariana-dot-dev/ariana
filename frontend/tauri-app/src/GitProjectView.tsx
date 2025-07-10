@@ -4,9 +4,8 @@ import CanvasView from "./CanvasView";
 import { useGitProject } from "./contexts/GitProjectContext";
 import { cn } from "./utils";
 import { useStore } from "./state";
-import { BackgroundAgentsList } from "./components/BackgroundAgentsList";
-import { BackgroundAgentTerminalView } from "./components/BackgroundAgentTerminalView";
-import { CanvasesList } from "./components/CanvasesList";
+import { UnifiedCanvasAgentList } from "./components/UnifiedCanvasAgentList";
+import { osSessionGetWorkingDirectory } from "./bindings/os";
 
 interface GitProjectViewProps {
 	onGoHome?: () => void;
@@ -20,6 +19,7 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 		mergeCanvasToRoot,
 		getBackgroundAgents,
 		removeBackgroundAgent,
+		cancelBackgroundAgent,
 		forceRemoveBackgroundAgent,
 		getCanvasLockState,
 		canEditCanvas
@@ -27,11 +27,49 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 	const { updateGitProject, removeGitProject } = useStore();
 	const [showCanvases, setShowCanvases] = useState(true);
 	const [mergingCanvases, setMergingCanvases] = useState<Set<string>>(new Set());
-	const [viewingAgent, setViewingAgent] = useState<string | null>(null);
+	const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
 
 	const canvasesHoveredRef = useRef(false);
 
 	// Handle canvas merge to root
+	const handleShowInExplorer = async (itemId: string) => {
+		if (!selectedGitProject) return;
+
+		// Check if it's a canvas
+		const canvas = selectedGitProject.canvases.find(c => c.id === itemId);
+		if (canvas && canvas.osSession) {
+			const path = osSessionGetWorkingDirectory(canvas.osSession);
+			if (path) {
+				try {
+					await invoke("open_path_in_explorer_with_os_session", {
+						path: path,
+						osSession: canvas.osSession
+					});
+				} catch (error) {
+					console.error("Failed to open canvas in explorer:", error);
+				}
+			}
+			return;
+		}
+
+		// Check if it's a background agent
+		const agent = getBackgroundAgents().find(a => a.id === itemId);
+		if (agent && agent.workspaceOsSession) {
+			const path = osSessionGetWorkingDirectory(agent.workspaceOsSession);
+			if (path) {
+				try {
+					await invoke("open_path_in_explorer_with_os_session", {
+						path: path,
+						osSession: agent.workspaceOsSession
+					});
+				} catch (error) {
+					console.error("Failed to open agent workspace in explorer:", error);
+				}
+			}
+			return;
+		}
+	};
+
 	const handleMergeCanvas = async (canvasId: string) => {
 		setMergingCanvases(prev => new Set(prev).add(canvasId));
 		
@@ -67,6 +105,8 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 		if (result.success && result.canvasId) {
 			selectedGitProject.setCurrentCanvasIndex(selectedGitProject.canvases.length - 1);
 			console.log("New canvas copy created with ID:", result.canvasId);
+			// Auto-select the new canvas
+			setSelectedItemId(result.canvasId);
 			// Trigger state update to save to disk
 			updateGitProject(selectedGitProject.id);
 		} else {
@@ -75,11 +115,33 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 		}
 	};
 
-	// Handle canvas selection
-	const handleCanvasSelect = (index: number) => {
-		selectedGitProject!.setCurrentCanvasIndex(index);
-		// Trigger state update to save to disk
-		updateGitProject(selectedGitProject!.id);
+	// Handle unified item selection (canvas or background agent)
+	const handleItemSelect = (itemId: string | null) => {
+		if (!itemId || !selectedGitProject) {
+			setSelectedItemId(null);
+			return;
+		}
+
+		// Check if it's a canvas
+		const canvasIndex = selectedGitProject.canvases.findIndex(c => c.id === itemId);
+		if (canvasIndex !== -1) {
+			// It's a canvas - switch to it
+			selectedGitProject.setCurrentCanvasIndex(canvasIndex);
+			updateGitProject(selectedGitProject.id);
+			setSelectedItemId(itemId);
+			return;
+		}
+
+		// Check if it's a background agent
+		const agent = getBackgroundAgents().find(a => a.id === itemId);
+		if (agent) {
+			// It's a background agent - just select it for status display
+			setSelectedItemId(itemId);
+			return;
+		}
+
+		// Unknown item
+		setSelectedItemId(null);
 	};
 
 	// Get the directory name from the project root
@@ -187,17 +249,6 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 		}
 	};
 
-	console.log("GitProjectView render:", {
-		selectedGitProject: selectedGitProject?.name,
-		currentCanvas: currentCanvas?.name,
-		canvasCount: selectedGitProject?.canvases.length,
-		currentCanvasElements: currentCanvas?.elements.length || 0,
-		canvasTaskCounts: selectedGitProject?.canvases.map((c, index) => ({
-			index: index,
-			counts: getCanvasTaskCounts(c.id)
-		})) || []
-	});
-
 	// Auto-create first canvas if none exist
 	useEffect(() => {
 		if (selectedGitProject && selectedGitProject.canvases.length === 0) {
@@ -211,6 +262,13 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 			}
 		}
 	}, [selectedGitProject?.id, selectedGitProject?.canvases.length, updateGitProject]);
+
+	// Sync selectedItemId with current canvas
+	useEffect(() => {
+		if (currentCanvas && selectedItemId !== currentCanvas.id) {
+			setSelectedItemId(currentCanvas.id);
+		}
+	}, [currentCanvas?.id, selectedItemId]);
 
 	return selectedGitProject ? (
 		<div className="w-full h-full flex gap-1.5">
@@ -245,65 +303,33 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 						</div>
 						
 						<div className="flex flex-col h-full w-full overflow-y-auto">
-							<div className="flex flex-col w-full">
-								<CanvasesList
-									canvases={selectedGitProject.canvases}
-									currentCanvasId={currentCanvas?.id || null}
-									onCanvasSelect={handleCanvasSelect}
-									onCreateCanvas={handleCreateCanvas}
-									onMergeCanvas={handleMergeCanvas}
-									getCanvasTaskCounts={getCanvasTaskCounts}
-									getCanvasLockState={getCanvasLockState}
-									mergingCanvases={mergingCanvases}
-									onShowInExplorer={showWorkspaceInExplorer}
-									onDeleteWorkspace={deleteWorkspace}
-								/>
+							<div className="px-3 mb-3">
+								<button
+									onClick={handleCreateCanvas}
+									className="w-full px-3 py-2 text-sm bg-[var(--acc-100)] cursor-pointer hover:bg-[var(--acc-200)] text-[var(--acc-800-70)] rounded-lg transition-colors flex items-center justify-center gap-2"
+								>
+									<span>+</span>
+									<span>New Edit</span>
+								</button>
 							</div>
 
-							{/* Background Agents List */}
-							<BackgroundAgentsList 
-								agents={getBackgroundAgents()} 
-								onRemoveAgent={removeBackgroundAgent}
+							{/* Unified Canvas and Agent List */}
+							<UnifiedCanvasAgentList
+								canvases={selectedGitProject.canvases}
+								backgroundAgents={getBackgroundAgents()}
+								selectedItemId={selectedItemId}
+								onSelectItem={handleItemSelect}
+								onRemoveCanvas={deleteWorkspace}
+								onCancelAgent={cancelBackgroundAgent}
 								onForceRemoveAgent={forceRemoveBackgroundAgent}
-								onSelectAgent={setViewingAgent}
-								selectedAgentId={viewingAgent}
+								onMergeCanvas={handleMergeCanvas}
+								onShowInExplorer={handleShowInExplorer}
 							/>
 						</div>
 					</>
 				)}
 			</div>
-			{viewingAgent ? (
-				// Show background agent terminal view
-				(() => {
-					const agent = getBackgroundAgents().find(a => a.id === viewingAgent);
-					return agent ? (
-						<div className="w-full h-full animate-fade-in opacity-100" key={`agent-${agent.id}`}>
-							<BackgroundAgentTerminalView 
-								agent={agent}
-								onClose={() => setViewingAgent(null)}
-							/>
-						</div>
-					) : (
-						<div className="w-full h-full flex items-center justify-center relative z-10">
-							<div className="text-center text-[var(--base-600)]">
-								<div className="text-lg">Agent not found</div>
-								<button 
-									onClick={(e) => {
-										console.log('Back to Canvases clicked');
-										e.preventDefault();
-										e.stopPropagation();
-										setViewingAgent(null);
-									}}
-									className="mt-2 px-3 py-1 bg-[var(--base-200)] rounded hover:bg-[var(--base-300)] cursor-pointer transition-colors border border-[var(--base-400)] text-[var(--base-700)] hover:text-[var(--base-800)] active:bg-[var(--base-400)] select-none"
-									style={{ pointerEvents: 'auto' }}
-								>
-									Close
-								</button>
-							</div>
-						</div>
-					);
-				})()
-			) : currentCanvas ? (
+			{currentCanvas ? (
 				<div className="w-full h-full animate-fade-in opacity-100" key={currentCanvas.id}>
 					{currentCanvas.lockState === 'loading' ? (
 						<div className="w-full h-full flex items-center justify-center">

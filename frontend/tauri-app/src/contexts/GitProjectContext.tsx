@@ -33,6 +33,7 @@ interface GitProjectContextValue {
 	mergeCanvasToRoot: (canvasId: string) => Promise<MergeResult>;
 	getBackgroundAgents: () => BackgroundAgent[];
 	removeBackgroundAgent: (agentId: string) => void;
+	cancelBackgroundAgent: (agentId: string) => Promise<void>;
 	forceRemoveBackgroundAgent: (agentId: string) => Promise<void>;
 	// Canvas locking management
 	lockCanvas: (canvasId: string, lockState: CanvasLockState, agentId: string) => boolean;
@@ -40,6 +41,10 @@ interface GitProjectContextValue {
 	isCanvasLocked: (canvasId: string) => boolean;
 	getCanvasLockState: (canvasId: string) => CanvasLockState | null;
 	canEditCanvas: (canvasId: string) => boolean;
+	// In-progress prompt management
+	setInProgressPrompt: (canvasId: string, elementId: string, prompt: string) => boolean;
+	getInProgressPrompt: (canvasId: string, elementId: string) => string | undefined;
+	clearInProgressPrompt: (canvasId: string, elementId: string) => boolean;
 }
 
 const GitProjectContext = createContext<GitProjectContextValue | null>(null);
@@ -253,11 +258,22 @@ export function GitProjectProvider({ children, gitProject }: GitProjectProviderP
 			updateGitProject(gitProject.id);
 		},
 
+		cancelBackgroundAgent: async (agentId: string) => {
+			if (!gitProject) return;
+			
+			// Cancel agent gracefully (preserves agent for status display)
+			const agent = gitProject.getBackgroundAgent(agentId);
+			if (agent) {
+				agent.cancel();
+				updateGitProject(gitProject.id);
+			}
+		},
+
 		forceRemoveBackgroundAgent: async (agentId: string) => {
 			if (!gitProject) return;
 			
-			// Remove from BackgroundAgentManager and cleanup filesystem
-			await BackgroundAgentManager.forceRemoveAgent(agentId, gitProject);
+			// Cancel and remove agent with cleanup
+			await BackgroundAgentManager.cancelAgent(agentId, gitProject);
 			
 			// Agent is already removed from GitProject by BackgroundAgentManager
 			updateGitProject(gitProject.id);
@@ -291,6 +307,26 @@ export function GitProjectProvider({ children, gitProject }: GitProjectProviderP
 		canEditCanvas: (canvasId: string) => {
 			if (!gitProject) return false;
 			return gitProject.canEditCanvas(canvasId);
+		},
+
+		// In-progress prompt management
+		setInProgressPrompt: (canvasId: string, elementId: string, prompt: string) => {
+			if (!gitProject) return false;
+			const result = gitProject.setInProgressPrompt(canvasId, elementId, prompt);
+			if (result) updateGitProject(gitProject.id);
+			return result;
+		},
+
+		getInProgressPrompt: (canvasId: string, elementId: string) => {
+			if (!gitProject) return undefined;
+			return gitProject.getInProgressPrompt(canvasId, elementId);
+		},
+
+		clearInProgressPrompt: (canvasId: string, elementId: string) => {
+			if (!gitProject) return false;
+			const result = gitProject.clearInProgressPrompt(canvasId, elementId);
+			if (result) updateGitProject(gitProject.id);
+			return result;
 		},
 	};
 

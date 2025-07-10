@@ -33,6 +33,7 @@ export interface GitProjectCanvas {
 	lockingAgentId?: string; // ID of background agent that locked this canvas
 	lockedAt?: number; // Timestamp when locked
 	copyProgress?: CopyProgress; // Progress of copy operation if loading
+	inProgressPrompts?: Map<string, string>; // Map of element ID to in-progress prompt text
 }
 
 export class GitProject {
@@ -163,6 +164,7 @@ export class GitProject {
 			lockState: canvas?.lockState || 'normal',
 			lockingAgentId: canvas?.lockingAgentId,
 			lockedAt: canvas?.lockedAt,
+			inProgressPrompts: canvas?.inProgressPrompts || new Map(),
 		};
 
 		this.canvases.push(newCanvas);
@@ -351,9 +353,9 @@ export class GitProject {
 			const agentId = await BackgroundAgentManager.createMergeAgent(
 				this.root,
 				canvas.osSession,
+				canvasId,
 				allPrompts,
-				this, // Pass GitProject instance
-				canvasId
+				this // Pass GitProject instance
 			);
 
 			return { success: true, agentId };
@@ -517,7 +519,8 @@ export class GitProject {
 			root: this.root,
 			canvases: this.canvases.map(canvas => ({
 				...canvas,
-				taskManager: canvas.taskManager.toJSON()
+				taskManager: canvas.taskManager.toJSON(),
+				inProgressPrompts: canvas.inProgressPrompts ? Array.from(canvas.inProgressPrompts.entries()) : []
 			})),
 			currentCanvasIndex: this.currentCanvasIndex,
 			backgroundAgents: this.backgroundAgents.map(agent => agent.toJSON()),
@@ -540,6 +543,7 @@ export class GitProject {
 			lockState: canvas.lockState || 'normal',
 			lockingAgentId: canvas.lockingAgentId,
 			lockedAt: canvas.lockedAt,
+			inProgressPrompts: canvas.inProgressPrompts ? new Map(canvas.inProgressPrompts) : new Map(),
 		}));
 		project.currentCanvasIndex = data.currentCanvasIndex >= 0 ? data.currentCanvasIndex : (project.canvases.length > 0 ? 0 : -1);
 		
@@ -584,7 +588,8 @@ export class GitProject {
 			taskManager: new TaskManager(),
 			createdAt: Date.now(),
 			lastModified: Date.now(),
-			lockState: 'normal'
+			lockState: 'normal',
+			inProgressPrompts: new Map()
 		};
 	}
 
@@ -645,5 +650,44 @@ export class GitProject {
 	getProcessByElementId(canvasId: string, elementId: string): ProcessState | undefined {
 		const canvas = this.canvases.find(c => c.id === canvasId);
 		return canvas?.runningProcesses?.find(p => p.elementId === elementId);
+	}
+
+	// In-progress prompt management
+	setInProgressPrompt(canvasId: string, elementId: string, prompt: string): boolean {
+		const canvas = this.canvases.find(c => c.id === canvasId);
+		if (!canvas) return false;
+
+		if (!canvas.inProgressPrompts) {
+			canvas.inProgressPrompts = new Map();
+		}
+
+		if (prompt.trim()) {
+			canvas.inProgressPrompts.set(elementId, prompt);
+		} else {
+			canvas.inProgressPrompts.delete(elementId);
+		}
+
+		canvas.lastModified = Date.now();
+		this.lastModified = Date.now();
+		this.notifyListeners('canvases');
+		return true;
+	}
+
+	getInProgressPrompt(canvasId: string, elementId: string): string | undefined {
+		const canvas = this.canvases.find(c => c.id === canvasId);
+		return canvas?.inProgressPrompts?.get(elementId);
+	}
+
+	clearInProgressPrompt(canvasId: string, elementId: string): boolean {
+		const canvas = this.canvases.find(c => c.id === canvasId);
+		if (!canvas?.inProgressPrompts) return false;
+
+		const deleted = canvas.inProgressPrompts.delete(elementId);
+		if (deleted) {
+			canvas.lastModified = Date.now();
+			this.lastModified = Date.now();
+			this.notifyListeners('canvases');
+		}
+		return deleted;
 	}
 }

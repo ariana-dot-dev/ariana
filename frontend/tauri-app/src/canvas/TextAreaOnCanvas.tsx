@@ -44,7 +44,10 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 		restoreTask,
 		currentCanvas,
 		getCanvasLockState,
-		canEditCanvas
+		canEditCanvas,
+		getInProgressPrompt,
+		clearInProgressPrompt,
+		setInProgressPrompt
 	} = useGitProject();
 	
 	const taskManager = getCurrentTaskManager();
@@ -64,6 +67,17 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 	const currentInProgressTask = taskManager?.getCurrentInProgressTask();
 	const completedTasks = taskManager?.getCompletedTasks() || [];
 	const elementId = element.id;
+	
+	// Initialize prompt from persistent storage
+	useEffect(() => {
+		if (currentCanvas && !currentPrompt) {
+			const persistedPrompt = getInProgressPrompt(currentCanvas.id, elementId);
+			if (persistedPrompt) {
+				setCurrentPrompt(persistedPrompt);
+				setText(persistedPrompt);
+			}
+		}
+	}, [currentCanvas, elementId, getInProgressPrompt, currentPrompt]);
 	const textAreaRef = useRef<HTMLTextAreaElement>(null);
 	const textAreaOsSession = (element.kind as TextAreaKind).textArea.osSession; 
 	
@@ -236,6 +250,11 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 			completeTask(inProgressTask.id, commitHash);
 			setCurrentPrompt("");
 			setText("");
+			
+			// Clear the persistent prompt
+			if (currentCanvas) {
+				clearInProgressPrompt(currentCanvas.id, elementId);
+			}
 			
 			const existingProcess = getProcessByElementId(elementId);
 			if (existingProcess) {
@@ -454,6 +473,11 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 									if (!currentInProgressTask && canEdit) {
 										setCurrentPrompt(e.target.value);
 										setText(e.target.value);
+										
+										// Persist prompt to GitProject immediately
+										if (currentCanvas) {
+											setInProgressPrompt(currentCanvas.id, elementId, e.target.value);
+										}
 										
 										if (autoGoRemaining > 0) {
 											setAutoGoRemaining(0);

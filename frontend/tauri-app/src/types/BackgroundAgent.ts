@@ -1,10 +1,8 @@
 import { OsSession, osSessionGetWorkingDirectory } from "../bindings/os";
-import { CanvasService } from "../services/CanvasService";
-import { invoke } from "@tauri-apps/api/core";
 
-export type BackgroundAgentType = 'merge';
+export type BackgroundAgentType = 'merge' | 'deploy' | 'test' | 'analyze';
 
-export type BackgroundAgentStatus = 'initializing' | 'checking' | 'running' | 'completed' | 'failed';
+export type BackgroundAgentStatus = 'preparation' | 'running' | 'completed' | 'failed' | 'cancelled';
 
 export interface BackgroundAgentState {
 	id: string;
@@ -12,67 +10,125 @@ export interface BackgroundAgentState {
 	status: BackgroundAgentStatus;
 	createdAt: number;
 	lastUpdated: number;
-	osSession: OsSession; // Working directory for this agent
+	workspaceOsSession: OsSession; // Isolated workspace for this agent
 	context: any; // Type-specific context data
 	progress?: string; // Current status message
-	claudeCodeProcessId?: string; // Active Claude Code process
 	errorMessage?: string; // Error details if failed
+	cancellationToken: CancellationToken;
 }
 
 export interface CompletionCheckResult {
 	isComplete: boolean;
-	newContext?: any; // Updated context for retry
-	instructions?: string; // Instructions for Claude Code on retry
+	retryContext?: any; // Updated context for retry with more specific instructions
+}
+
+export interface CancellationToken {
+	isCancelled: boolean;
+	cancel(): void;
+}
+
+export function createCancellationToken(): CancellationToken {
+	let cancelled = false;
+	return {
+		get isCancelled() { return cancelled; },
+		cancel() { cancelled = true; }
+	};
 }
 
 export abstract class BackgroundAgent<TContext = any> {
-	public id: string;
+	public readonly id: string;
 	public abstract readonly type: BackgroundAgentType;
 	public status: BackgroundAgentStatus;
-	public createdAt: number;
+	public readonly createdAt: number;
 	public lastUpdated: number;
-	public osSession: OsSession;
+	public readonly workspaceOsSession: OsSession;
 	public context: TContext;
 	public progress?: string;
-	public claudeCodeProcessId?: string;
 	public errorMessage?: string;
-	constructor(id: string, osSession: OsSession, context: TContext) {
+	public readonly cancellationToken: CancellationToken;
+
+	// Reactive listeners for UI updates
+	private listeners: Set<() => void> = new Set();
+
+	constructor(id: string, workspaceOsSession: OsSession, context: TContext) {
 		this.id = id;
-		this.status = 'initializing';
+		this.status = 'preparation';
 		this.createdAt = Date.now();
 		this.lastUpdated = Date.now();
-		this.osSession = osSession;
+		this.workspaceOsSession = workspaceOsSession;
 		this.context = context;
+		this.cancellationToken = createCancellationToken();
 	}
 
 	/**
-	 * Agent-specific setup code after directory is copied
+	 * Phase 1: Prepare isolated workspace and setup
+	 * For merge: copy root, apply canvas changes, create git branches
 	 */
-	abstract setup(): Promise<void>;
+	abstract prepare(): Promise<void>;
 
 	/**
-	 * Check if the agent's task is completed
-	 * Called before first run and after each Claude Code completion
+	 * Phase 2: Check if the task is completed
+	 * For merge: check for git conflict markers in files
+	 * Returns completion status and optional retry context for more specific instructions
 	 */
 	abstract checkCompletion(): Promise<CompletionCheckResult>;
 
 	/**
-	 * Generate the prompt for Claude Code based on current context
+	 * Phase 3: Run the agent to make progress toward completion
+	 * For merge: run Claude Code to resolve conflicts (edit files only, no git commands)
+	 * Takes optional retry context for more targeted resolution
 	 */
-	abstract generatePrompt(retryContext?: string): string;
+	abstract runAgent(retryContext?: any): Promise<void>;
 
 	/**
-	 * Finalize the agent's work (e.g., merge back to root)
+	 * Phase 4: Cleanup and finalize
+	 * For merge: sync resolved changes back to root, update copy pool
 	 */
-	abstract finalize(): Promise<void>;
+	abstract cleanup(): Promise<void>;
 
+	/**
+	 * Update agent status and notify listeners
+	 */
 	updateStatus(status: BackgroundAgentStatus, progress?: string, errorMessage?: string): void {
 		this.status = status;
 		this.lastUpdated = Date.now();
 		if (progress !== undefined) this.progress = progress;
 		if (errorMessage !== undefined) this.errorMessage = errorMessage;
+		this.notifyListeners();
 	}
 
+	/**
+	 * Subscribe to agent state changes
+	 */
+	subscribe(callback: () => void): () => void {
+		this.listeners.add(callback);
+		return () => this.listeners.delete(callback);
+	}
+
+	private notifyListeners(): void {
+		this.listeners.forEach(callback => callback());
+	}
+
+	/**
+	 * Cancel the agent at any point
+	 */
+	cancel(): void {
+		this.cancellationToken.cancel();
+		this.updateStatus('cancelled', 'Operation cancelled by user');
+	}
+
+	/**
+	 * Check if agent was cancelled
+	 */
+	checkCancellation(): void {
+		if (this.cancellationToken.isCancelled) {
+			throw new Error('Operation was cancelled');
+		}
+	}
+
+	/**
+	 * Serialization for persistence
+	 */
 	toJSON(): BackgroundAgentState {
 		return {
 			id: this.id,
@@ -80,366 +136,409 @@ export abstract class BackgroundAgent<TContext = any> {
 			status: this.status,
 			createdAt: this.createdAt,
 			lastUpdated: this.lastUpdated,
-			osSession: this.osSession,
+			workspaceOsSession: this.workspaceOsSession,
 			context: this.context,
 			progress: this.progress,
-			claudeCodeProcessId: this.claudeCodeProcessId,
 			errorMessage: this.errorMessage,
+			cancellationToken: this.cancellationToken,
 		};
 	}
 
+	/**
+	 * Factory method for creating agents from JSON
+	 */
 	static fromJSON(data: BackgroundAgentState): BackgroundAgent {
 		switch (data.type) {
 			case 'merge':
-				return MergeBackgroundAgent.fromJSON(data);
+				return MergeAgent.fromJSON(data);
 			default:
 				throw new Error(`Unknown background agent type: ${data.type}`);
 		}
 	}
 }
 
+// =============================================================================
+// MERGE AGENT IMPLEMENTATION
+// =============================================================================
+
 export interface MergeAgentContext {
 	rootOsSession: OsSession;
-	canvasToMergeOsSession: OsSession;
-	allHistoricalPrompts: string[];
+	canvasOsSession: OsSession;
+	canvasId: string;
+	originalRootCommitHash?: string; // Track root state at merge start
 	conflictFiles: string[];
-	mergeAttempts: number;
-	maxAttempts: number;
-	rootBranchName: string; // The root's branch name  
-	canvasBranchName: string; // The canvas's branch name
+	maxRetries: number;
+	currentRetry: number;
+	allHistoricalPrompts: string[];
 }
 
-export type MergeResult = 
-  | { success: true; agentId: string }
-  | { success: false; error: string };
+export interface MergeResult {
+	success: boolean;
+	agentId?: string;
+	error?: string;
+}
 
-export class MergeBackgroundAgent extends BackgroundAgent<MergeAgentContext> {
+export class MergeAgent extends BackgroundAgent<MergeAgentContext> {
 	public readonly type: BackgroundAgentType = 'merge';
 
-	constructor(id: string, osSession: OsSession, context: MergeAgentContext) {
-		super(id, osSession, context);
+	constructor(id: string, workspaceOsSession: OsSession, context: MergeAgentContext) {
+		super(id, workspaceOsSession, context);
 	}
 
-	async setup(): Promise<void> {
-		this.updateStatus('initializing', 'Setting up merge environment...');
+	/**
+	 * Phase 1: Prepare merge workspace
+	 */
+	async prepare(): Promise<void> {
+		this.checkCancellation();
+		this.updateStatus('preparation', 'Setting up merge workspace...');
 
-		// Step 1: Create a NEW temporary copy of ROOT (like creating a canvas)
+		const workingDir = osSessionGetWorkingDirectory(this.workspaceOsSession);
 		const rootDir = osSessionGetWorkingDirectory(this.context.rootOsSession);
-		const workingDir = osSessionGetWorkingDirectory(this.osSession);
-		const canvasDir = osSessionGetWorkingDirectory(this.context.canvasToMergeOsSession);
+		const canvasDir = osSessionGetWorkingDirectory(this.context.canvasOsSession);
 
-		// SAFETY CHECK: Ensure working directory is not the same as root directory
-		if (rootDir === workingDir) {
-			throw new Error(`SAFETY: Working directory cannot be the same as root directory. This would corrupt the main repository.`);
+		if (!workingDir || !rootDir || !canvasDir) {
+			throw new Error('Invalid directory paths for merge operation');
 		}
 
-		// Validate directories exist
-		if (!rootDir) {
-			throw new Error('Root directory is undefined');
-		}
-		if (!workingDir) {
-			throw new Error('Working directory is undefined');
-		}
-		if (!canvasDir) {
-			throw new Error('Canvas directory is undefined');
+		// Safety check: workspace must be isolated
+		if (workingDir === rootDir || workingDir === canvasDir) {
+			throw new Error('Merge workspace must be isolated from root and canvas');
 		}
 
-		console.log(`Agent setup: Validating canvas directory ${canvasDir}`);
-		// Validate that the canvas directory exists before proceeding
 		try {
+			// Step 1: Copy root to workspace (handle empty directories)
+			const { CanvasService } = await import('../services/CanvasService');
+			const { invoke } = await import("@tauri-apps/api/core");
+			console.log(`[MergeAgent] Copying root from ${rootDir} to ${workingDir}`);
+			
+			// First, try to create the working directory
 			await invoke('execute_command_with_os_session', {
-				command: 'test',
-				args: ['-d', canvasDir],
+				command: 'mkdir',
+				args: ['-p', workingDir],
 				directory: '/',
-				osSession: this.context.canvasToMergeOsSession
+				osSession: this.workspaceOsSession
 			});
-		} catch (error) {
-			throw new Error(`Canvas directory no longer exists: ${canvasDir}. The canvas may have been deleted.`);
-		}
 
-		console.log(`Agent setup: Copying ROOT from ${rootDir} to ${workingDir}`);
-		const copyResult = await CanvasService.copyDirectory(rootDir, workingDir, this.context.rootOsSession);
-		if (!copyResult.success) {
-			throw new Error(`Failed to copy root directory: ${copyResult.error}`);
-		}
-
-		// Step 2: Check what branch we're actually on in the working directory
-		let currentBranch: string;
-		try {
-			currentBranch = await invoke<string>('git_get_current_branch', {
-				directory: workingDir,
-				osSession: this.osSession
-			});
-			console.log(`Agent setup: Currently on branch ${currentBranch} in working directory`);
-		} catch (error) {
-			console.log(`Agent setup: Failed to detect current branch, assuming we're on ${this.context.rootBranchName}`);
-			currentBranch = this.context.rootBranchName;
-		}
-
-		// Only checkout if we're not already on the root branch
-		if (currentBranch !== this.context.rootBranchName) {
-			console.log(`Agent setup: Switching from ${currentBranch} to root branch ${this.context.rootBranchName}`);
-			try {
-				await invoke('execute_command_with_os_session', {
-					command: 'git',
-					args: ['checkout', this.context.rootBranchName],
-					directory: workingDir,
-					osSession: this.osSession
-				});
-			} catch (checkoutError) {
-				console.log(`Agent setup: Failed to checkout ${this.context.rootBranchName}, staying on ${currentBranch}`);
-				// Update our context to use the actual branch we're on
-				this.context.rootBranchName = currentBranch;
+			// Try to copy files if root has any content
+			const copyResult = await CanvasService.copyDirectory(rootDir, workingDir, this.context.rootOsSession);
+			if (!copyResult.success) {
+				// If copy failed because root is empty, initialize as empty git repo
+				if (copyResult.error?.includes('No such file or directory') || copyResult.error?.includes('cannot stat')) {
+					console.log(`[MergeAgent] Root appears to be empty, initializing as git repository`);
+					await invoke('execute_command_with_os_session', {
+						command: 'git',
+						args: ['init'],
+						directory: workingDir,
+						osSession: this.workspaceOsSession
+					});
+				} else {
+					throw new Error(`Failed to copy root: ${copyResult.error}`);
+				}
 			}
-		}
 
-		// Step 3: Create a "canvas-changes" branch for applying canvas content
-		console.log(`Agent setup: Creating canvas-changes branch`);
-		await invoke('execute_command_with_os_session', {
-			command: 'git',
-			args: ['checkout', '-b', 'canvas-changes'],
-			directory: workingDir,
-			osSession: this.osSession
-		});
+			this.checkCancellation();
 
-		// Step 4: Copy canvas files over the working directory (excluding .git)
-		// This applies the canvas changes to the canvas-changes branch
-		console.log(`Agent setup: Applying canvas changes from ${canvasDir}`);
-		const canvasCopyResult = await CanvasService.copyDirectory(canvasDir, workingDir, this.osSession, true);
-		if (!canvasCopyResult.success) {
-			throw new Error(`Failed to copy canvas changes: ${canvasCopyResult.error}`);
-		}
+			// Step 2: Record original root state for conflict detection
+			try {
+				this.context.originalRootCommitHash = await invoke<string>('git_get_current_commit_hash', {
+					directory: rootDir,
+					osSession: this.context.rootOsSession
+				});
+			} catch (error) {
+				// Root has no commits yet - set to empty string to track this state
+				console.log(`[MergeAgent] Root has no commits yet, tracking as initial state`);
+				this.context.originalRootCommitHash = '';
+			}
 
-		// Step 5: Commit the canvas changes 
-		try {
-			console.log(`Agent setup: Committing canvas changes`);
-			await invoke('git_commit', {
-				directory: workingDir,
-				message: `Apply changes from canvas branch ${this.context.canvasBranchName}`,
-				osSession: this.osSession
-			});
-		} catch (error) {
-			console.log('No changes to commit from canvas:', error);
-		}
-
-		// Step 6: Switch back to root branch for merge check
-		console.log(`Agent setup: Switching back to root branch ${this.context.rootBranchName}`);
-		try {
+			// Step 3: Create and switch to canvas-changes branch
 			await invoke('execute_command_with_os_session', {
 				command: 'git',
-				args: ['checkout', this.context.rootBranchName],
+				args: ['checkout', '-b', 'canvas-changes'],
 				directory: workingDir,
-				osSession: this.osSession
+				osSession: this.workspaceOsSession
 			});
-		} catch (checkoutError) {
-			console.log(`Agent setup: Failed to checkout ${this.context.rootBranchName}, trying to create it`);
-			// If checkout fails, the branch might not exist - try to create it
-			try {
-				await invoke('execute_command_with_os_session', {
-					command: 'git',
-					args: ['checkout', '-b', this.context.rootBranchName],
-					directory: workingDir,
-					osSession: this.osSession
-				});
-				console.log(`Agent setup: Created and switched to ${this.context.rootBranchName}`);
-			} catch (createError) {
-				console.log(`Agent setup: Failed to create ${this.context.rootBranchName}, staying on current branch`);
-				// Find out what branch we're actually on and use that
-				const actualBranch = await invoke<string>('git_get_current_branch', {
-					directory: workingDir,
-					osSession: this.osSession
-				});
-				console.log(`Agent setup: Using actual branch ${actualBranch} instead of ${this.context.rootBranchName}`);
-				this.context.rootBranchName = actualBranch;
-			}
-		}
 
-		this.updateStatus('checking', 'Checking for merge conflicts...');
-	}
+			this.checkCancellation();
 
-	async checkCompletion(): Promise<CompletionCheckResult> {
-		try {
-			const workingDir = osSessionGetWorkingDirectory(this.osSession);
-			if (!workingDir) {
-				throw new Error('Working directory is undefined');
-			}
-			console.log(`Agent checkCompletion: Starting in directory ${workingDir}`);
-
-			// Try to perform the git merge first
-			try {
-				console.log(`Agent checkCompletion: Attempting merge of canvas-changes into ${this.context.rootBranchName}`);
-				await invoke('git_merge_branch', {
-					directory: workingDir,
-					sourceBranch: 'canvas-changes',
-					targetBranch: this.context.rootBranchName,
-					osSession: this.osSession
-				});
-				
-				// If merge succeeded without conflicts, we're done
-				console.log(`Agent checkCompletion: Merge completed successfully`);
-				return { isComplete: true };
-				
-			} catch (mergeError) {
-				console.log(`Agent checkCompletion: Merge failed with conflicts:`, mergeError);
-				
-				// Merge failed due to conflicts - get the conflict files
-				const conflictFiles = await invoke<string[]>('git_get_conflict_files', {
-					directory: workingDir,
-					osSession: this.osSession
-				});
-
-				if (conflictFiles.length === 0) {
-					// No conflicts detected, merge failed for other reasons
-					throw new Error(`Merge failed but no conflicts detected: ${mergeError}`);
-				}
-
-				// Update context with current conflict state
-				const newContext: MergeAgentContext = {
-					...this.context,
-					conflictFiles,
-					mergeAttempts: this.context.mergeAttempts + 1
-				};
-
-				const instructions = `Merge conflicts detected in: ${conflictFiles.join(', ')}. Please resolve all conflicts in these files by editing them directly. Do NOT run any git commands - only edit the files to resolve conflicts.`;
-
-				return {
-					isComplete: false,
-					newContext,
-					instructions
-				};
+			// Step 4: Apply canvas changes (excluding .git)
+			console.log(`[MergeAgent] Applying canvas changes from ${canvasDir}`);
+			const canvasCopyResult = await CanvasService.copyDirectory(canvasDir, workingDir, this.workspaceOsSession, true);
+			if (!canvasCopyResult.success) {
+				throw new Error(`Failed to apply canvas changes: ${canvasCopyResult.error}`);
 			}
 
-		} catch (error) {
-			throw new Error(`Failed to check merge completion: ${error}`);
-		}
-	}
-
-	generatePrompt(retryContext?: string): string {
-		const basePrompt = `
-You are resolving merge conflicts in a collaborative coding environment.
-
-HISTORICAL CONTEXT (all previous work that led to this merge):
-${this.context.allHistoricalPrompts.map((p, i) => `${i + 1}. ${p}`).join('\n')}
-
-CURRENT TASK:
-Git has attempted to merge changes from a canvas workspace into the main branch, but merge conflicts were detected.
-Your job is to resolve these conflicts by editing the affected files directly.
-
-CONFLICT FILES TO RESOLVE:
-${this.context.conflictFiles.map(file => `- ${file}`).join('\n')}
-
-${retryContext || 'Please resolve all merge conflicts while preserving the intent of both versions.'}
-
-IMPORTANT INSTRUCTIONS:
-- DO NOT run any git commands (git merge, git add, git commit, etc.)
-- ONLY edit the conflicted files to resolve the conflicts
-- Look for conflict markers like <<<<<<< HEAD, =======, and >>>>>>> 
-- Remove the conflict markers and integrate both changes appropriately
-- Focus on preserving functionality from both the original code and the canvas changes
-- The system will automatically commit your changes after you resolve the conflicts
-
-FILES WITH CONFLICTS: ${this.context.conflictFiles.join(', ')}
-
-Attempt ${this.context.mergeAttempts + 1} of ${this.context.maxAttempts}.
-		`.trim();
-
-		return basePrompt;
-	}
-
-	async finalize(): Promise<void> {
-		this.updateStatus('completed', 'Finalizing merge...');
-
-		const workingDir = osSessionGetWorkingDirectory(this.osSession);
-		const rootDir = osSessionGetWorkingDirectory(this.context.rootOsSession);
-		
-		// Validate directories exist
-		if (!workingDir) {
-			throw new Error('Working directory is undefined');
-		}
-		if (!rootDir) {
-			throw new Error('Root directory is undefined');
-		}
-		
-		try {
-			// The merge should already be completed by checkCompletion()
-			// But if there were conflicts that Claude resolved, we need to commit them
-			console.log(`Agent finalize: Committing any resolved conflicts`);
+			// Step 5: Commit canvas changes
 			try {
 				await invoke('git_commit', {
 					directory: workingDir,
-					message: `Merge canvas changes: resolved conflicts automatically`,
-					osSession: this.osSession
+					message: `Apply canvas changes for merge`,
+					osSession: this.workspaceOsSession
 				});
-			} catch (commitError) {
-				// It's OK if there's nothing to commit
-				console.log('Nothing to commit after conflict resolution:', commitError);
+			} catch (error) {
+				console.log('[MergeAgent] No changes to commit from canvas');
 			}
 
-			// Step 2: Only after successful merge, sync back to the real root
-			console.log(`Agent finalize: Syncing merged result back to real root ${rootDir}`);
-			const finalCopyResult = await CanvasService.copyDirectory(workingDir, rootDir, this.context.rootOsSession, true);
-			if (!finalCopyResult.success) {
-				throw new Error(`Failed to sync result back to root: ${finalCopyResult.error}`);
-			}
+			this.checkCancellation();
 
-			// Step 3: Sync all existing copies to new root state
-			const { CopyPoolManager } = await import('../services/CopyPoolManager');
-			const copyPool = CopyPoolManager.getInstance();
-			await copyPool.syncAllToRoot(rootDir, this.context.rootOsSession);
-			console.log('Synced all copy pool entries to new root state');
+			// Step 6: Switch back to main branch and attempt merge
+			await invoke('execute_command_with_os_session', {
+				command: 'git',
+				args: ['checkout', 'main'],
+				directory: workingDir,
+				osSession: this.workspaceOsSession
+			});
 
-			this.updateStatus('completed', 'Merge completed successfully');
-			
-			// Return the merge workspace to the copy pool for reuse
-			await this.returnToPool();
 		} catch (error) {
-			throw new Error(`Finalize failed: ${error}`);
+			if (this.cancellationToken.isCancelled) {
+				throw error; // Re-throw cancellation
+			}
+			throw new Error(`Preparation failed: ${error}`);
 		}
 	}
 
 	/**
-	 * Returns the completed merge workspace to the copy pool for reuse
+	 * Phase 2: Check for completion (conflicts resolved)
 	 */
-	private async returnToPool(): Promise<void> {
+	async checkCompletion(): Promise<CompletionCheckResult> {
+		this.checkCancellation();
+
+		const workingDir = osSessionGetWorkingDirectory(this.workspaceOsSession);
+		if (!workingDir) {
+			throw new Error('Working directory is undefined');
+		}
+
 		try {
-			const workingDir = osSessionGetWorkingDirectory(this.osSession);
-			const rootDir = osSessionGetWorkingDirectory(this.context.rootOsSession);
-			
-			if (!workingDir || !rootDir) {
-				console.warn('Cannot return to pool: missing directory paths');
-				return;
+			const { invoke } = await import("@tauri-apps/api/core");
+
+			// Attempt merge to detect conflicts
+			try {
+				await invoke('git_merge_branch', {
+					directory: workingDir,
+					sourceBranch: 'canvas-changes',
+					targetBranch: 'main',
+					osSession: this.workspaceOsSession
+				});
+
+				// Merge succeeded - we're done!
+				return { isComplete: true };
+
+			} catch (mergeError) {
+				// Get conflict files
+				const conflictFiles = await invoke<string[]>('git_get_conflict_files', {
+					directory: workingDir,
+					osSession: this.workspaceOsSession
+				});
+
+				if (conflictFiles.length === 0) {
+					throw new Error(`Merge failed but no conflicts detected: ${mergeError}`);
+				}
+
+				// Update context with current conflicts for targeted resolution
+				this.context.conflictFiles = conflictFiles;
+				
+				return {
+					isComplete: false,
+					retryContext: {
+						conflictFiles,
+						retryNumber: this.context.currentRetry + 1,
+						specificFiles: conflictFiles.join(', ')
+					}
+				};
 			}
-
-			// Import the copy pool manager (dynamic import to avoid circular dependencies)
-			const { CopyPoolManager } = await import('../services/CopyPoolManager');
-			const copyPool = CopyPoolManager.getInstance();
-			
-			// Create a copy pool entry for this merge workspace
-			const copyEntry = {
-				id: this.id,
-				path: workingDir,
-				osSession: this.osSession,
-				branchName: `merge-${this.id}`,
-				createdAt: new Date()
-			};
-
-			await copyPool.returnCopy(copyEntry, rootDir, this.context.rootOsSession);
-			console.log(`Returned merge workspace ${workingDir} to copy pool`);
 		} catch (error) {
-			console.warn('Failed to return merge workspace to pool:', error);
+			if (this.cancellationToken.isCancelled) {
+				throw error;
+			}
+			throw new Error(`Completion check failed: ${error}`);
 		}
 	}
 
-	static fromJSON(data: BackgroundAgentState): MergeBackgroundAgent {
+	/**
+	 * Phase 3: Run Claude Code to resolve conflicts
+	 */
+	async runAgent(retryContext?: any): Promise<void> {
+		this.checkCancellation();
+		this.updateStatus('running', `Resolving conflicts (attempt ${this.context.currentRetry + 1}/${this.context.maxRetries})...`);
+
+		const prompt = this.generateConflictResolutionPrompt(retryContext);
+
+		try {
+			// Use existing Claude Code infrastructure
+			const { ClaudeCodeAgent } = await import('../services/ClaudeCodeAgent');
+			const claudeAgent = new ClaudeCodeAgent();
+
+			// Start Claude Code task
+			await claudeAgent.startTask(this.workspaceOsSession, prompt);
+
+			// Wait for completion with cancellation support
+			await this.waitForClaudeCompletion(claudeAgent);
+
+			// Commit Claude's changes
+			const workingDir = osSessionGetWorkingDirectory(this.workspaceOsSession);
+			const { invoke } = await import("@tauri-apps/api/core");
+			
+			try {
+				await invoke('git_commit', {
+					directory: workingDir,
+					message: `Resolve merge conflicts - attempt ${this.context.currentRetry + 1}`,
+					osSession: this.workspaceOsSession
+				});
+			} catch (commitError) {
+				console.log('[MergeAgent] No changes to commit after Claude resolution');
+			}
+
+			this.context.currentRetry++;
+
+		} catch (error) {
+			if (this.cancellationToken.isCancelled) {
+				throw error;
+			}
+			throw new Error(`Agent execution failed: ${error}`);
+		}
+	}
+
+	/**
+	 * Phase 4: Sync resolved changes back to root
+	 */
+	async cleanup(): Promise<void> {
+		this.checkCancellation();
+		this.updateStatus('completed', 'Syncing changes back to root...');
+
+		const workingDir = osSessionGetWorkingDirectory(this.workspaceOsSession);
+		const rootDir = osSessionGetWorkingDirectory(this.context.rootOsSession);
+
+		if (!workingDir || !rootDir) {
+			throw new Error('Invalid directory paths for cleanup');
+		}
+
+		try {
+			const { invoke } = await import("@tauri-apps/api/core");
+
+			// Check if root changed during merge
+			const currentRootHash = await invoke<string>('git_get_current_commit_hash', {
+				directory: rootDir,
+				osSession: this.context.rootOsSession
+			});
+
+			if (currentRootHash !== this.context.originalRootCommitHash) {
+				throw new Error('Root repository was modified during merge. Manual intervention required.');
+			}
+
+			// Sync workspace back to root (atomic operation)
+			const { CanvasService } = await import('../services/CanvasService');
+			const syncResult = await CanvasService.copyDirectory(workingDir, rootDir, this.context.rootOsSession, true);
+			if (!syncResult.success) {
+				throw new Error(`Failed to sync back to root: ${syncResult.error}`);
+			}
+
+			// Update all copies in the pool
+			const { CopyPoolManager } = await import('../services/CopyPoolManager');
+			const copyPool = CopyPoolManager.getInstance();
+			await copyPool.syncAllToRoot(rootDir, this.context.rootOsSession);
+
+			this.updateStatus('completed', 'Merge completed successfully');
+
+		} catch (error) {
+			if (this.cancellationToken.isCancelled) {
+				throw error;
+			}
+			throw new Error(`Cleanup failed: ${error}`);
+		}
+	}
+
+	/**
+	 * Generate targeted conflict resolution prompt
+	 */
+	private generateConflictResolutionPrompt(retryContext?: any): string {
+		const baseContext = `
+You are resolving merge conflicts in a collaborative coding environment.
+
+HISTORICAL CONTEXT:
+${this.context.allHistoricalPrompts.map((p, i) => `${i + 1}. ${p}`).join('\n')}
+
+CURRENT TASK:
+Resolve merge conflicts in the following files by editing them directly.
+`;
+
+		const retryInstructions = retryContext ? `
+SPECIFIC CONFLICTS TO RESOLVE:
+${retryContext.specificFiles}
+
+This is attempt ${retryContext.retryNumber} of ${this.context.maxRetries}.
+${retryContext.retryNumber > 1 ? 'Previous attempts failed - please be more thorough in conflict resolution.' : ''}
+` : `
+CONFLICT FILES:
+${this.context.conflictFiles.join(', ')}
+`;
+
+		return `${baseContext}${retryInstructions}
+
+INSTRUCTIONS:
+- Edit the conflicted files to resolve all merge conflicts
+- Look for conflict markers: <<<<<<< HEAD, =======, >>>>>>> 
+- Remove conflict markers and integrate both changes appropriately
+- DO NOT run any git commands - only edit files
+- Preserve functionality from both the original code and canvas changes
+- Focus on making the code work correctly after merging
+
+The system will automatically commit your changes.`.trim();
+	}
+
+	/**
+	 * Wait for Claude Code completion with cancellation support
+	 */
+	private async waitForClaudeCompletion(claudeAgent: any): Promise<void> {
+		return new Promise((resolve, reject) => {
+			if (!claudeAgent.isTaskRunning) {
+				reject(new Error('Claude Code agent not running'));
+				return;
+			}
+
+			const checkCancellation = () => {
+				if (this.cancellationToken.isCancelled) {
+					claudeAgent.stopTask();
+					reject(new Error('Operation was cancelled'));
+				}
+			};
+
+			const onTaskComplete = () => {
+				clearInterval(cancellationInterval);
+				resolve();
+			};
+
+			const onTaskError = (error: any) => {
+				clearInterval(cancellationInterval);
+				reject(new Error(`Claude Code task failed: ${error}`));
+			};
+
+			claudeAgent.on('taskCompleted', onTaskComplete);
+			claudeAgent.on('taskError', onTaskError);
+
+			// Check for cancellation every second
+			const cancellationInterval = setInterval(checkCancellation, 1000);
+
+			// Timeout after 30 minutes
+			setTimeout(() => {
+				clearInterval(cancellationInterval);
+				claudeAgent.off('taskCompleted', onTaskComplete);
+				claudeAgent.off('taskError', onTaskError);
+				claudeAgent.stopTask();
+				reject(new Error('Claude Code process timed out'));
+			}, 30 * 60 * 1000);
+		});
+	}
+
+	/**
+	 * Create MergeAgent from JSON state
+	 */
+	static fromJSON(data: BackgroundAgentState): MergeAgent {
 		const context = data.context as MergeAgentContext;
-		const agent = new MergeBackgroundAgent(data.id, data.osSession, context);
+		const agent = new MergeAgent(data.id, data.workspaceOsSession, context);
 		
 		// Restore state
 		agent.status = data.status;
-		agent.createdAt = data.createdAt;
 		agent.lastUpdated = data.lastUpdated;
 		agent.progress = data.progress;
-		agent.claudeCodeProcessId = data.claudeCodeProcessId;
 		agent.errorMessage = data.errorMessage;
 
 		return agent;
