@@ -110,9 +110,33 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 
 			const updatedItem = await backlogService.updateBacklogItem(id, apiUpdates);
 			
+			console.log('Updated item from server:', updatedItem);
+			console.log('Updates sent:', updates);
+			console.log('Available users:', availableUsers);
+			
 			// Update local state with the response from server
 			setBacklogItems(prev => 
-				prev.map(item => item.id === id ? updatedItem : item)
+				prev.map(item => {
+					if (item.id === id) {
+						// If owner was changed, make sure to update owner info from available users
+						if (updates.owner) {
+							const newOwner = availableUsers.find(user => user.id === updates.owner);
+							console.log('Found new owner:', newOwner);
+							if (newOwner) {
+								const finalItem = {
+									...updatedItem,
+									owner: updates.owner,
+									owner_name: newOwner.name,
+									owner_email: newOwner.email
+								};
+								console.log('Final item:', finalItem);
+								return finalItem;
+							}
+						}
+						return updatedItem;
+					}
+					return item;
+				})
 			);
 			
 			// Clear editing state - note: this is handled by saveCellEdit() now
@@ -312,11 +336,9 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 	// Format date
 	const formatDate = (dateString: string) => {
 		return new Date(dateString).toLocaleDateString('en-US', {
-			month: 'short',
+			month: 'numeric',
 			day: 'numeric',
-			year: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit'
+			year: '2-digit'
 		});
 	};
 
@@ -467,46 +489,52 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 					/* Backlog Table */
 					<div className="bg-[var(--base-100)] rounded-lg border border-[var(--base-300)] overflow-hidden">
 						<div className="overflow-x-auto">
-							<table className="w-full text-sm">
+							<table className="w-full text-sm table-fixed">
 								<thead className="bg-[var(--base-200)] border-b border-[var(--base-300)]">
 									<tr>
 										<th 
 											className="px-4 py-3 text-left font-medium text-[var(--base-700)] cursor-pointer hover:bg-[var(--base-300)] transition-colors"
 											onClick={() => handleSort('task')}
+											style={{ width: '43%' }}
 										>
 											Task {sortConfig.key === 'task' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
 										</th>
 										<th 
 											className="px-4 py-3 text-left font-medium text-[var(--base-700)] cursor-pointer hover:bg-[var(--base-300)] transition-colors"
 											onClick={() => handleSort('status')}
+											style={{ width: '10%' }}
 										>
 											Status {sortConfig.key === 'status' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
 										</th>
 										<th 
 											className="px-4 py-3 text-left font-medium text-[var(--base-700)] cursor-pointer hover:bg-[var(--base-300)] transition-colors"
 											onClick={() => handleSort('owner_name')}
+											style={{ width: '15%' }}
 										>
 											Owner {sortConfig.key === 'owner_name' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
 										</th>
 										<th 
 											className="px-4 py-3 text-left font-medium text-[var(--base-700)] cursor-pointer hover:bg-[var(--base-300)] transition-colors"
 											onClick={() => handleSort('created_at')}
+											style={{ width: '8%' }}
 										>
 											Created {sortConfig.key === 'created_at' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
 										</th>
 										<th 
 											className="px-4 py-3 text-left font-medium text-[var(--base-700)] cursor-pointer hover:bg-[var(--base-300)] transition-colors"
 											onClick={() => handleSort('priority')}
+											style={{ width: '8%' }}
 										>
 											Priority {sortConfig.key === 'priority' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
 										</th>
 										<th 
 											className="px-4 py-3 text-left font-medium text-[var(--base-700)] cursor-pointer hover:bg-[var(--base-300)] transition-colors"
 											onClick={() => handleSort('due_date')}
+											style={{ width: '8%' }}
 										>
 											Due Date {sortConfig.key === 'due_date' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
 										</th>
-										<th className="px-4 py-3 text-left font-medium text-[var(--base-700)]">
+										<th className="px-4 py-3 text-left font-medium text-[var(--base-700)]" style={{ width: '8%' }}>
 											Actions
 										</th>
 									</tr>
@@ -535,13 +563,13 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 														/>
 													) : (
 														<div 
-															className="max-w-xs cursor-pointer hover:bg-[var(--base-100)] rounded px-2 py-1 -mx-2 -my-1"
+															className="cursor-pointer hover:bg-[var(--base-100)] rounded px-2 py-1 -mx-2 -my-1"
 															onClick={() => startCellEdit(item, 'task')}
 														>
-															<div className="font-medium text-[var(--base-800)] truncate">
+															<div className="font-medium text-[var(--base-800)] break-words line-clamp-4">
 																{item.task}
 															</div>
-															<div className="text-xs text-[var(--base-500)] truncate">
+															<div className="text-xs text-[var(--base-500)] break-all truncate">
 																{item.git_repository_url}
 															</div>
 														</div>
@@ -592,17 +620,15 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 														</select>
 													) : (
 														<div 
-															className="flex items-center gap-2 cursor-pointer hover:bg-[var(--base-100)] rounded px-2 py-1 -mx-2 -my-1"
+															className="cursor-pointer hover:bg-[var(--base-100)] rounded px-2 py-1 -mx-2 -my-1"
 															onClick={() => startCellEdit(item, 'owner')}
 														>
-															<div>
-																<div className="font-medium text-[var(--base-800)]">
-																	{item.owner_name}
-																	{currentUser && item.owner === currentUser.id && <span className="ml-1 text-xs text-[var(--acc-600)]">(You)</span>}
-																</div>
-																<div className="text-xs text-[var(--base-500)]">
-																	{item.owner_email}
-																</div>
+															<div className="font-medium text-[var(--base-800)] break-words line-clamp-2">
+																{item.owner_name}
+																{currentUser && item.owner === currentUser.id && <span className="ml-1 text-xs text-[var(--acc-600)]">(You)</span>}
+															</div>
+															<div className="text-xs text-[var(--base-500)] break-words line-clamp-1">
+																{item.owner_email}
 															</div>
 														</div>
 													)}
