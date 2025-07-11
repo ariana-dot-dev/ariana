@@ -321,12 +321,76 @@ export const db = {
         COUNT(CASE WHEN status = 'open' THEN 1 END) as open_tasks,
         COUNT(CASE WHEN status = 'in_progress' THEN 1 END) as in_progress_tasks,
         COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_tasks,
+        COUNT(CASE WHEN due_date < now() AND status != 'completed' THEN 1 END) as overdue_tasks,
+        COUNT(CASE WHEN DATE(due_date) = CURRENT_DATE AND status != 'completed' THEN 1 END) as due_today_tasks,
+        COUNT(CASE WHEN priority <= 2 THEN 1 END) as high_priority_tasks,
         COUNT(DISTINCT git_repository_url) as repositories_with_tasks
       FROM backlog 
       WHERE owner = $1
     `;
     const result = await this.query(query, [userId]);
     return result.rows[0];
+  },
+
+  // New functions for priority and due date management
+  async getOverdueBacklogItems(userId = null) {
+    let query = `
+      SELECT b.*, u.name as owner_name, u.email as owner_email
+      FROM backlog b
+      JOIN users u ON b.owner = u.id
+      WHERE b.due_date < now() AND b.status != 'completed'
+    `;
+    const params = [];
+    
+    if (userId) {
+      query += ` AND b.owner = $1`;
+      params.push(userId);
+    }
+    
+    query += ` ORDER BY b.due_date ASC, b.priority ASC`;
+    
+    const result = await this.query(query, params);
+    return result.rows;
+  },
+
+  async getDueTodayBacklogItems(userId = null) {
+    let query = `
+      SELECT b.*, u.name as owner_name, u.email as owner_email
+      FROM backlog b
+      JOIN users u ON b.owner = u.id
+      WHERE DATE(b.due_date) = CURRENT_DATE AND b.status != 'completed'
+    `;
+    const params = [];
+    
+    if (userId) {
+      query += ` AND b.owner = $1`;
+      params.push(userId);
+    }
+    
+    query += ` ORDER BY b.priority ASC, b.due_date ASC`;
+    
+    const result = await this.query(query, params);
+    return result.rows;
+  },
+
+  async getBacklogItemsByPriority(priority, userId = null) {
+    let query = `
+      SELECT b.*, u.name as owner_name, u.email as owner_email
+      FROM backlog b
+      JOIN users u ON b.owner = u.id
+      WHERE b.priority = $1
+    `;
+    const params = [priority];
+    
+    if (userId) {
+      query += ` AND b.owner = $2`;
+      params.push(userId);
+    }
+    
+    query += ` ORDER BY b.due_date ASC, b.created_at DESC`;
+    
+    const result = await this.query(query, params);
+    return result.rows;
   }
 };
 
