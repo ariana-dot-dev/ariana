@@ -206,6 +206,7 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 			return;
 		}
 
+
 		// Check if it's a canvas
 		const canvasIndex = selectedGitProject.canvases.findIndex(c => c.id === itemId);
 		if (canvasIndex !== -1) {

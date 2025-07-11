@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { GitProjectCanvas, CanvasLockState } from '../types/GitProject';
 import { BackgroundAgent, BackgroundAgentStatus } from '../types/BackgroundAgent';
 import { Task, TaskStatus } from '../types/Task';
+import { CollectiveBacklogManagement } from './CollectiveBacklogManagement';
 
 interface AgentOverviewProps {
 	canvases: GitProjectCanvas[];
@@ -426,8 +427,8 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 					</div>
 				</div>
 				
-				{/* Create New Agent Button */}
-				<div className="flex justify-end">
+				{/* Action Buttons */}
+				<div className="flex justify-end items-center">
 					<button
 						onClick={onCreateAgent}
 						className="flex items-center gap-2 px-4 py-2 bg-[var(--positive-500)] hover:bg-[var(--positive-600)] text-white rounded transition-colors text-sm font-medium"
@@ -439,6 +440,11 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 						</svg>
 						Create New Agent
 					</button>
+				</div>
+				
+				{/* Collective Backlog Management */}
+				<div className="mt-6">
+					<CollectiveBacklogManagement />
 				</div>
 			</div>
 		</div>

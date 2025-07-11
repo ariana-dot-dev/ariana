@@ -1,3 +1,5 @@
+import { API_CONFIG, getApiUrl } from './ApiConfig';
+
 interface User {
 	id: string;
 	email: string;
@@ -103,7 +105,7 @@ class AuthService {
 		}
 
 		try {
-			const response = await fetch('https://api2.ariana.dev/api/profile', {
+			const response = await fetch(getApiUrl(API_CONFIG.ENDPOINTS.PROFILE), {
 				headers: {
 					'Authorization': `Bearer ${this.authState.token}`,
 				},
@@ -158,12 +160,12 @@ class AuthService {
 	}
 
 	public async getActiveSessions(): Promise<any[]> {
-		return this.apiRequest('https://api2.ariana.dev/api/sessions');
+		return this.apiRequest(getApiUrl(API_CONFIG.ENDPOINTS.SESSIONS));
 	}
 
 	public async revokeSession(sessionId: string): Promise<boolean> {
 		try {
-			await this.apiRequest(`https://api2.ariana.dev/api/sessions/${sessionId}`, {
+			await this.apiRequest(getApiUrl(`${API_CONFIG.ENDPOINTS.SESSIONS}/${sessionId}`), {
 				method: 'DELETE',
 			});
 			return true;
@@ -175,7 +177,7 @@ class AuthService {
 
 	public async revokeAllOtherSessions(): Promise<number> {
 		try {
-			const result = await this.apiRequest<{ revokedCount: number }>('https://api2.ariana.dev/api/sessions', {
+			const result = await this.apiRequest<{ revokedCount: number }>(getApiUrl(API_CONFIG.ENDPOINTS.SESSIONS), {
 				method: 'DELETE',
 			});
 			return result.revokedCount;
@@ -188,7 +190,7 @@ class AuthService {
 	public async logout(): Promise<void> {
 		try {
 			// Call backend logout to revoke the session
-			await this.apiRequest('https://api2.ariana.dev/auth/logout', {
+			await this.apiRequest(getApiUrl(API_CONFIG.ENDPOINTS.LOGOUT), {
 				method: 'POST',
 			});
 		} catch (error) {

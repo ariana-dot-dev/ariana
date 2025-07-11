@@ -27,7 +27,8 @@
       "Bash(ssh:*)",
       "Bash(curl:*)",
       "Bash(npm install:*)",
-      "Bash(scp:*)"
+      "Bash(scp:*)",
+      "Bash(cat:*)"
     ],
     "deny": []
   }
