@@ -26,6 +26,7 @@ interface CreateBacklogItemRequest {
   task: string;
   status?: 'open' | 'in_progress' | 'completed';
   priority?: number;
+  owner?: string | null;
 }
 
 interface UpdateBacklogItemRequest {
@@ -57,6 +58,9 @@ class BacklogService {
   }
 
   async createBacklogItem(item: CreateBacklogItemRequest): Promise<BacklogItem> {
+    console.log('Creating backlog item:', item);
+    console.log('API URL:', getApiUrl(API_CONFIG.ENDPOINTS.BACKLOG));
+    
     const response = await this.authService.apiRequest<{ backlogItem: BacklogItem }>(
       getApiUrl(API_CONFIG.ENDPOINTS.BACKLOG),
       {
@@ -64,6 +68,8 @@ class BacklogService {
         body: JSON.stringify(item),
       }
     );
+    
+    console.log('Create response:', response);
     return response.backlogItem;
   }
 
@@ -97,8 +103,46 @@ class BacklogService {
     const params = new URLSearchParams({ git_repository_url: gitRepositoryUrl });
     const url = getApiUrl(API_CONFIG.ENDPOINTS.BACKLOG_BY_REPOSITORY) + `?${params.toString()}`;
     
-    const response = await this.authService.apiRequest<{ backlogItems: BacklogItem[] }>(url);
-    return response.backlogItems;
+    console.log('Fetching backlog by repository:', gitRepositoryUrl);
+    console.log('Request URL:', url);
+    
+    try {
+      const response = await this.authService.apiRequest<{ backlogItems: BacklogItem[] }>(url);
+      console.log('Fetch response:', response);
+      return response.backlogItems;
+    } catch (error) {
+      console.error('getBacklogByRepository error:', error);
+      throw error;
+    }
+  }
+
+  async getRepositoryByUrl(gitRepositoryUrl: string): Promise<{id: number, random_id: string} | null> {
+    try {
+      const params = new URLSearchParams({ repo_url: gitRepositoryUrl });
+      const url = getApiUrl(API_CONFIG.ENDPOINTS.REPOSITORY_BY_URL) + `?${params.toString()}`;
+      
+      const response = await this.authService.apiRequest<{ repository: {id: number, random_id: string} }>(url);
+      return response.repository;
+    } catch (error) {
+      console.error('Failed to get repository by URL:', error);
+      return null;
+    }
+  }
+
+  async getBacklogByRepositoryRandomId(randomId: string): Promise<BacklogItem[]> {
+    console.log('Fetching backlog by repository random ID:', randomId);
+    const params = new URLSearchParams({ repository_id: randomId });
+    const url = getApiUrl(API_CONFIG.ENDPOINTS.BACKLOG_BY_REPOSITORY_ID) + `?${params.toString()}`;
+    console.log('Request URL:', url);
+    
+    try {
+      const response = await this.authService.apiRequest<{ backlogItems: BacklogItem[] }>(url);
+      console.log('Fetch response:', response);
+      return response.backlogItems;
+    } catch (error) {
+      console.error('getBacklogByRepositoryRandomId error:', error);
+      throw error;
+    }
   }
 
   async getAllBacklogItems(filters?: BacklogFilters): Promise<BacklogItem[]> {

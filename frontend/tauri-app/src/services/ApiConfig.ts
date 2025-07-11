@@ -14,7 +14,11 @@ export const API_CONFIG = {
     BACKLOG: '/api/backlog',
     BACKLOG_STATS: '/api/backlog/stats',
     BACKLOG_BY_REPOSITORY: '/api/backlog/repository',
+    BACKLOG_BY_REPOSITORY_ID: '/api/backlog/repository-id',
     ADMIN_BACKLOG: '/api/admin/backlog',
+    
+    // Repository endpoints
+    REPOSITORY_BY_URL: '/api/repository/by-url',
     
     // Admin backlog endpoints (for collective management)
     ADMIN_BACKLOG_ITEM: '/api/admin/backlog', // For update/delete operations

@@ -110,17 +110,42 @@ export const db = {
 
   // Git repository management functions
   async createGitRepository(userId, repoUrl) {
-    const query = `
-      INSERT INTO git_repositories (user_id, repo_url, created_at, access_status, last_access_check)
-      VALUES ($1, $2, now(), true, now())
+    // Generate random ID if not provided
+    const randomIdQuery = `
+      INSERT INTO git_repositories (user_id, repo_url, random_id, created_at, access_status, last_access_check)
+      VALUES ($1, $2, (SELECT generate_random_id(16)), now(), true, now())
       ON CONFLICT (user_id, repo_url)
       DO UPDATE SET
         last_access_check = now()
       RETURNING *;
     `;
 
-    const result = await this.query(query, [userId, repoUrl]);
+    const result = await this.query(randomIdQuery, [userId, repoUrl]);
     return result.rows[0];
+  },
+
+  async getGitRepositoryByRandomId(randomId) {
+    const query = "SELECT * FROM git_repositories WHERE random_id = $1";
+    const result = await this.query(query, [randomId]);
+    return result.rows[0] || null;
+  },
+
+  async getGitRepositoryByUrl(userId, repoUrl) {
+    const query = "SELECT * FROM git_repositories WHERE user_id = $1 AND repo_url = $2";
+    const result = await this.query(query, [userId, repoUrl]);
+    return result.rows[0] || null;
+  },
+
+  async getOrCreateGitRepository(userId, repoUrl) {
+    // Try to get existing repository
+    let repo = await this.getGitRepositoryByUrl(userId, repoUrl);
+    
+    if (!repo) {
+      // Create new repository if it doesn't exist
+      repo = await this.createGitRepository(userId, repoUrl);
+    }
+    
+    return repo;
   },
 
   async getGitRepositoriesByUserId(userId) {
@@ -191,14 +216,28 @@ export const db = {
   },
 
   // Backlog management functions
-  async createBacklogItem(gitRepositoryUrl, task, ownerId, status = 'open') {
+  async createBacklogItem(gitRepositoryUrl, task, ownerId, status = 'open', priority = 3) {
+    // Get or create repository and use its ID
+    const repository = await this.getOrCreateGitRepository(ownerId, gitRepositoryUrl);
+    
     const query = `
-      INSERT INTO backlog (git_repository_url, task, status, owner, created_at)
-      VALUES ($1, $2, $3, $4, now())
+      INSERT INTO backlog (git_repository_url, repository_id, task, status, owner, priority, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, now())
       RETURNING *;
     `;
 
-    const result = await this.query(query, [gitRepositoryUrl, task, status, ownerId]);
+    const result = await this.query(query, [gitRepositoryUrl, repository.id, task, status, ownerId, priority]);
+    return result.rows[0];
+  },
+
+  async createBacklogItemByRepositoryId(repositoryId, task, ownerId, status = 'open', priority = 3) {
+    const query = `
+      INSERT INTO backlog (repository_id, task, status, owner, priority, created_at)
+      VALUES ($1, $2, $3, $4, $5, now())
+      RETURNING *;
+    `;
+
+    const result = await this.query(query, [repositoryId, task, status, ownerId, priority]);
     return result.rows[0];
   },
 
@@ -311,6 +350,34 @@ export const db = {
       ORDER BY b.created_at DESC
     `;
     const result = await this.query(query, [gitRepositoryUrl]);
+    return result.rows;
+  },
+
+  async getBacklogByRepositoryId(repositoryId) {
+    const query = `
+      SELECT b.*, u.name as owner_name, u.email as owner_email,
+             gr.repo_url as git_repository_url, gr.random_id as repository_random_id
+      FROM backlog b
+      JOIN users u ON b.owner = u.id
+      JOIN git_repositories gr ON b.repository_id = gr.id
+      WHERE b.repository_id = $1
+      ORDER BY b.created_at DESC
+    `;
+    const result = await this.query(query, [repositoryId]);
+    return result.rows;
+  },
+
+  async getBacklogByRepositoryRandomId(randomId) {
+    const query = `
+      SELECT b.*, u.name as owner_name, u.email as owner_email,
+             gr.repo_url as git_repository_url, gr.random_id as repository_random_id
+      FROM backlog b
+      JOIN users u ON b.owner = u.id
+      JOIN git_repositories gr ON b.repository_id = gr.id
+      WHERE gr.random_id = $1
+      ORDER BY b.created_at DESC
+    `;
+    const result = await this.query(query, [randomId]);
     return result.rows;
   },
 

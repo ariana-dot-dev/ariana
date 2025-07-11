@@ -77,16 +77,14 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 					console.log(`Successfully fetched ${items.length} items for repository`);
 				} catch (repoError) {
 					console.warn('Failed to fetch repository-specific backlog:', repoError);
-					// If the repository endpoint fails, it means no backlog items are available
-					// Don't fall back to all items for security reasons
 					items = [];
 				}
-				
-				// Apply local filtering to repository-specific results
-				if (filters.status) {
-					items = items.filter(item => item.status === filters.status);
-				}
-				if (filters.priority) {
+			
+			// Apply local filtering to results
+			if (filters.status) {
+				items = items.filter(item => item.status === filters.status);
+			}
+			if (filters.priority) {
 					items = items.filter(item => item.priority.toString() === filters.priority);
 				}
 				if (filters.owner) {
