@@ -1,6 +1,6 @@
 import { OsSession } from "../bindings/os";
 
-export type TaskStatus = 'prompting' | 'in_progress' | 'completed';
+export type TaskStatus = 'prompting' | 'queued' | 'running' | 'paused' | 'completed' | 'failed';
 
 export interface TaskBase {
 	id: string;
@@ -13,10 +13,35 @@ export interface PromptingTask extends TaskBase {
 	status: 'prompting';
 }
 
+export interface QueuedTask extends TaskBase {
+	status: 'queued';
+	queuedAt: number;
+}
+
+export interface RunningTask extends TaskBase {
+	status: 'running';
+	startedAt: number;
+	processId?: string; // Link to ProcessState if needed
+}
+
+export interface PausedTask extends TaskBase {
+	status: 'paused';
+	startedAt: number;
+	pausedAt: number;
+	processId?: string; // Link to ProcessState if needed
+}
+
 export interface InProgressTask extends TaskBase {
 	status: 'in_progress';
 	startedAt: number;
 	processId?: string; // Link to ProcessState if needed
+}
+
+export interface FailedTask extends TaskBase {
+	status: 'failed';
+	startedAt?: number;
+	failedAt: number;
+	reason?: string;
 }
 
 export interface CompletedTask extends TaskBase {
@@ -29,7 +54,7 @@ export interface CompletedTask extends TaskBase {
 	dependsOn?: string[]; // Task IDs this task depends on
 }
 
-export type Task = PromptingTask | InProgressTask | CompletedTask;
+export type Task = PromptingTask | QueuedTask | RunningTask | PausedTask | InProgressTask | CompletedTask | FailedTask;
 
 export class TaskManager {
 	private tasks: Task[] = [];
@@ -57,21 +82,87 @@ export class TaskManager {
 		return task.id;
 	}
 
+	queueTask(taskId: string): boolean {
+		const taskIndex = this.tasks.findIndex(t => t.id === taskId);
+		if (taskIndex === -1 || this.tasks[taskIndex].status !== 'prompting') return false;
+
+		const task = this.tasks[taskIndex] as PromptingTask;
+		const queuedTask: QueuedTask = {
+			...task,
+			status: 'queued',
+			queuedAt: Date.now()
+		};
+
+		this.tasks[taskIndex] = queuedTask;
+		this.notifyListeners();
+		return true;
+	}
+
 	startTask(taskId: string, processId?: string): boolean {
 		const taskIndex = this.tasks.findIndex(t => t.id === taskId);
 		if (taskIndex === -1) return false;
 		
 		const task = this.tasks[taskIndex];
-		if (task.status !== 'prompting') return false;
+		if (task.status !== 'prompting' && task.status !== 'queued') return false;
 
-		const inProgressTask: InProgressTask = {
+		const runningTask: RunningTask = {
 			...task,
-			status: 'in_progress',
+			status: 'running',
 			startedAt: Date.now(),
 			processId
 		};
 		
-		this.tasks[taskIndex] = inProgressTask;
+		this.tasks[taskIndex] = runningTask;
+		this.notifyListeners();
+		return true;
+	}
+
+	pauseTask(taskId: string): boolean {
+		const taskIndex = this.tasks.findIndex(t => t.id === taskId);
+		if (taskIndex === -1 || this.tasks[taskIndex].status !== 'running') return false;
+
+		const task = this.tasks[taskIndex] as RunningTask;
+		const pausedTask: PausedTask = {
+			...task,
+			status: 'paused',
+			pausedAt: Date.now()
+		};
+
+		this.tasks[taskIndex] = pausedTask;
+		this.notifyListeners();
+		return true;
+	}
+
+	resumeTask(taskId: string): boolean {
+		const taskIndex = this.tasks.findIndex(t => t.id === taskId);
+		if (taskIndex === -1 || this.tasks[taskIndex].status !== 'paused') return false;
+
+		const task = this.tasks[taskIndex] as PausedTask;
+		const runningTask: RunningTask = {
+			...task,
+			status: 'running'
+		};
+
+		this.tasks[taskIndex] = runningTask;
+		this.notifyListeners();
+		return true;
+	}
+
+	failTask(taskId: string, reason?: string): boolean {
+		const taskIndex = this.tasks.findIndex(t => t.id === taskId);
+		if (taskIndex === -1) return false;
+		
+		const task = this.tasks[taskIndex];
+		if (task.status !== 'running' && task.status !== 'queued' && task.status !== 'paused') return false;
+
+		const failedTask: FailedTask = {
+			...task,
+			status: 'failed',
+			failedAt: Date.now(),
+			reason
+		};
+		
+		this.tasks[taskIndex] = failedTask;
 		this.notifyListeners();
 		return true;
 	}
@@ -81,7 +172,7 @@ export class TaskManager {
 		if (taskIndex === -1) return false;
 		
 		const task = this.tasks[taskIndex];
-		if (task.status !== 'in_progress') return false;
+		if (task.status !== 'in_progress' && task.status !== 'running') return false;
 
 		const completedTask: CompletedTask = {
 			...task,
@@ -110,8 +201,31 @@ export class TaskManager {
 		return this.tasks.filter(t => t.status === 'prompting') as PromptingTask[];
 	}
 
+	getQueuedTasks(): QueuedTask[] {
+		return this.tasks.filter(t => t.status === 'queued') as QueuedTask[];
+	}
+
+	getRunningTasks(): RunningTask[] {
+		return this.tasks.filter(t => t.status === 'running') as RunningTask[];
+	}
+
+	getPausedTasks(): PausedTask[] {
+		return this.tasks.filter(t => t.status === 'paused') as PausedTask[];
+	}
+
 	getInProgressTasks(): InProgressTask[] {
 		return this.tasks.filter(t => t.status === 'in_progress') as InProgressTask[];
+	}
+
+	getFailedTasks(): FailedTask[] {
+		return this.tasks.filter(t => t.status === 'failed') as FailedTask[];
+	}
+
+	// Get all tasks that are currently "active" (queued, running, or paused)
+	getActiveTasks(): (QueuedTask | RunningTask | PausedTask)[] {
+		return this.tasks.filter(t => 
+			t.status === 'queued' || t.status === 'running' || t.status === 'paused'
+		) as (QueuedTask | RunningTask | PausedTask)[];
 	}
 
 	getCompletedTasks(): CompletedTask[] {
@@ -126,6 +240,52 @@ export class TaskManager {
 	getCurrentInProgressTask(): InProgressTask | undefined {
 		const inProgressTasks = this.getInProgressTasks();
 		return inProgressTasks[inProgressTasks.length - 1]; // Latest in-progress task
+	}
+
+	// Task fusion logic for multi-task commits
+	fuseRunningTasks(): CompletedTask {
+		const runningTasks = this.getRunningTasks();
+		if (runningTasks.length === 0) {
+			throw new Error('No running tasks to fuse');
+		}
+
+		const firstTask = runningTasks[0];
+		
+		// Concatenate all running task prompts with separators
+		const fusedPrompt = runningTasks.map(t => t.prompt).join('\n\n---\n\n');
+		
+		const fusedTask: CompletedTask = {
+			id: firstTask.id,
+			prompt: fusedPrompt,
+			createdAt: firstTask.createdAt,
+			status: 'completed',
+			startedAt: firstTask.startedAt,
+			completedAt: Date.now(),
+			commitHash: '', // Will be set after actual git commit
+			isReverted: false,
+			processId: firstTask.processId
+		};
+		
+		// Remove all running tasks from the list
+		this.tasks = this.tasks.filter(t => !runningTasks.includes(t as RunningTask));
+		
+		// Insert fused task at the position of the first running task (preserve order)
+		const insertIndex = this.tasks.findIndex(t => t.createdAt > firstTask.createdAt);
+		this.tasks.splice(insertIndex >= 0 ? insertIndex : this.tasks.length, 0, fusedTask);
+		
+		this.notifyListeners();
+		return fusedTask;
+	}
+
+	// Ensure there's always an empty task for prompting
+	ensureEmptyTask(): void {
+		const hasEmptyPromptingTask = this.tasks.some(t => 
+			t.status === 'prompting' && (!t.prompt || t.prompt.trim() === '')
+		);
+		
+		if (!hasEmptyPromptingTask) {
+			this.createPromptingTask('');
+		}
 	}
 
 	// Revert/Restore logic

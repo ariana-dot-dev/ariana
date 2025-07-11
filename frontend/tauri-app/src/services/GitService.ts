@@ -143,4 +143,33 @@ export class GitService {
 			throw new Error(`Failed to create initial commit: ${error}`);
 		}
 	}
+
+	/**
+	 * Stash any uncommitted changes
+	 * @param osSession - The OS session for the git repository
+	 * @param message - Optional stash message
+	 * @returns Promise<void>
+	 */
+	static async stashChanges(osSession: OsSession, message?: string): Promise<void> {
+		const directory = osSessionGetWorkingDirectory(osSession);
+		
+		try {
+			const args = ['stash'];
+			if (message) {
+				args.push('push', '-m', message);
+			}
+			
+			await invoke<string>('execute_command_with_os_session', {
+				command: 'git',
+				args,
+				directory,
+				osSession
+			});
+			
+			console.log(`[GitService] Successfully stashed changes${message ? ` with message: "${message}"` : ''}`);
+		} catch (error) {
+			console.error('[GitService] Failed to stash changes:', error);
+			// Don't throw - stashing is best effort
+		}
+	}
 }

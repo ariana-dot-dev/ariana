@@ -50,9 +50,11 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	private isProcessingEvents = false;
 	private eventQueue: TerminalEvent[][] = [];
 	private lastActivityTime: number = 0;
-	private completionTimeoutId: NodeJS.Timeout | null = null;
 	private osSession: OsSession | null = null;
 	private isCompletingTask: boolean = false;
+	// Manual control state
+	private isPaused: boolean = false;
+	private isManuallyControlled: boolean = false;
 
 	constructor() {
 		super();
@@ -225,10 +227,11 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	/**
 	 * Clean up resources
 	 */
-	async cleanup(): Promise<void> {
-		console.log(`${this.logPrefix} Starting cleanup...`);
+	async cleanup(preserveTerminal: boolean = false): Promise<void> {
+		console.log(`${this.logPrefix} Starting cleanup (preserveTerminal: ${preserveTerminal})...`);
 		
-		if (this.terminalId) {
+		// Only kill terminal if not preserving
+		if (this.terminalId && !preserveTerminal) {
 			try {
 				console.log(`${this.logPrefix} Killing terminal ${this.terminalId}`);
 				await this.killTerminal(this.terminalId);
@@ -250,11 +253,8 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		this.eventQueue = [];
 		this.lastActivityTime = 0;
 		this.isCompletingTask = false;
-		
-		if (this.completionTimeoutId) {
-			clearTimeout(this.completionTimeoutId);
-			this.completionTimeoutId = null;
-		}
+		this.isPaused = false;
+		this.isManuallyControlled = false;
 		
 		this.removeAllListeners();
 		console.log(`${this.logPrefix} Cleanup completed`);
@@ -328,7 +328,6 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 
 		// Update last activity time
 		this.lastActivityTime = Date.now();
-		this.resetCompletionTimeout();
 
 		// Get current TUI lines for CLI agents library
 		const tuiLines = this.getCurrentTuiLines();
@@ -432,122 +431,91 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		await this.sendRawInput(this.terminalId, keyData);
 	}
 
-	private resetCompletionTimeout(): void {
-		if (this.completionTimeoutId) {
-			clearTimeout(this.completionTimeoutId);
+	// Manual control methods
+	async pauseAgent(): Promise<void> {
+		if (!this.terminalId || this.isPaused) return;
+
+		console.log(`${this.logPrefix} Pausing agent...`);
+		await this.sendEscapeUntilInterrupted();
+		this.isPaused = true;
+		this.emit('agentPaused');
+	}
+
+	async resumeAgent(): Promise<void> {
+		if (!this.terminalId || !this.isPaused) return;
+
+		console.log(`${this.logPrefix} Resuming agent...`);
+		await this.sendRawInput(this.terminalId, "continue\r");
+		this.isPaused = false;
+		this.emit('agentResumed');
+	}
+
+	async queuePrompt(prompt: string): Promise<void> {
+		if (!this.terminalId) {
+			throw new Error('No terminal available for queuing prompt');
 		}
 
-		// Only set timeout if we've seen the Try prompt and aren't already completing
-		if (this.hasSeenTryPrompt && !this.isCompletingTask) {
-			this.completionTimeoutId = setTimeout(() => {
-				this.handleTaskCompletion();
-			}, 5000); // 5 seconds of inactivity
+		console.log(`${this.logPrefix} Queuing prompt: ${prompt.substring(0, 50)}...`);
+
+		// Send prompt to Claude Code (will be queued if busy)
+		for (const char of prompt) {
+			if (char === "\n") {
+				await this.sendRawInput(this.terminalId, "\\");
+				await this.delay(Math.random() * 5 + 5);
+				await this.sendRawInput(this.terminalId, "\r\n");
+			} else {
+				await this.sendRawInput(this.terminalId, char);
+			}
+			await this.delay(Math.random() * 5 + 5);
+		}
+		await this.delay(1000);
+		await this.sendRawInput(this.terminalId, "\x0d");
+
+		this.emit('promptQueued', { prompt });
+	}
+
+	async prepareManualCommit(): Promise<void> {
+		console.log(`${this.logPrefix} Preparing for manual commit...`);
+		// Don't send Ctrl+D - keep terminal alive
+		this.emit('readyForCommit');
+	}
+
+	private async sendEscapeUntilInterrupted(): Promise<void> {
+		console.log(`${this.logPrefix} Sending escape sequences until interrupted...`);
+		let attempts = 0;
+
+		while (true) {
+			await this.sendRawInput(this.terminalId!, "\x1b"); // ESC
+			await this.delay(500);
+
+			const currentLines = this.getCurrentTuiLines();
+			const hasInterrupted = currentLines.some(line =>
+				line.content.includes("⎿  Interrupted by user")
+			);
+			const hasPrompt = currentLines.some(line =>
+				line.content.includes("| >")
+			);
+
+			if (hasInterrupted && hasPrompt) {
+				console.log(`${this.logPrefix} Successfully interrupted after ${attempts + 1} attempts`);
+				break;
+			}
+
+			attempts++;
+			if (attempts % 10 === 0) {
+				console.log(`${this.logPrefix} Escape attempt ${attempts}, still trying...`);
+			}
+
+			// No timeout - keep trying indefinitely as specified
 		}
 	}
 
-	private async handleTaskCompletion(): Promise<void> {
-		if (!this.terminalId || !this.hasSeenTryPrompt || this.isCompletingTask) {
-			console.log(this.logPrefix, `Skipping task completion - terminalId: ${this.terminalId}, hasSeenTryPrompt: ${this.hasSeenTryPrompt}, isCompletingTask: ${this.isCompletingTask}`);
-			return;
-		}
-
-		this.isCompletingTask = true;
-
-		console.log(
-			this.logPrefix,
-			"Task appears to be complete after 5 seconds of inactivity, draining event queue...",
-		);
-
-		// Wait for any pending events to be processed
-		let drainAttempts = 0;
-		const maxDrainAttempts = 50; // 5 seconds max
-		while (this.eventQueue.length > 0 && drainAttempts < maxDrainAttempts) {
-			console.log(this.logPrefix, `Draining events, queue length: ${this.eventQueue.length}, attempt: ${drainAttempts + 1}`);
-			await this.delay(100);
-			drainAttempts++;
-		}
-		
-		// Force process any remaining events
-		if (this.eventQueue.length > 0) {
-			console.warn(this.logPrefix, `Forcing final event processing, ${this.eventQueue.length} events remaining`);
-			await this.processEventQueue();
-		}
-
-		console.log(this.logPrefix, "Event queue drained, sending Ctrl+D...");
-
-		try {
-			await this.sendCtrlD(this.terminalId);
-			await this.delay(Math.random() * 50 + 50);
-			await this.sendCtrlD(this.terminalId);
-			await this.delay(Math.random() * 50 + 50);
-			await this.sendCtrlD(this.terminalId);
-			await this.delay(Math.random() * 50 + 50);
-			await this.sendCtrlD(this.terminalId);
-
-			// Additional delay to let terminal settle after Ctrl+D
-			console.log(this.logPrefix, "Waiting for terminal to settle...");
-			await this.delay(2000);
-
-			const elapsed = Date.now() - this.startTime;
-			
-			// Create git commit as part of task completion
-			let commitHash = "";
-			if (this.osSession && this.currentPrompt) {
-				try {
-					// Add delay to ensure file system operations complete
-					await this.delay(1000);
-					
-					const { GitService } = await import('./GitService');
-					console.log(this.logPrefix, `Attempting to commit changes...`);
-					commitHash = await GitService.createCommit(this.osSession, this.currentPrompt);
-					console.log(this.logPrefix, `Successfully created commit: ${commitHash}`);
-				} catch (error) {
-					const errorString = String(error);
-					console.log(this.logPrefix, `Git commit error: ${errorString}`);
-					
-					if (errorString === "NO_CHANGES_TO_COMMIT" || errorString.toLowerCase().includes("nothing to commit")) {
-						// Check if there are actually changes that weren't detected
-						console.warn(this.logPrefix, "Git reports no changes but task completed - possible timing issue");
-						commitHash = "NO_CHANGES";
-					} else {
-						// Real git error - this indicates a repository or git configuration problem
-						console.error(this.logPrefix, "Git commit failed with error:", error);
-						
-						// Check for common git repository issues
-						if (errorString.includes("unknown revision") || 
-						    errorString.includes("ambiguous argument") || 
-						    errorString.includes("not a git repository") ||
-						    errorString.includes("detected dubious ownership")) {
-							this.emit("taskError", new Error(`Cannot complete task: Git repository error - ${errorString}`));
-							return;
-						}
-						
-						// For other git errors, log but don't fail the task
-						console.error(this.logPrefix, `Git error (non-fatal): ${errorString}`);
-						commitHash = "GIT_ERROR";
-					}
-				}
-			}
-
-			this.emit("taskCompleted", {
-				prompt: this.currentPrompt,
-				elapsed,
-				commitHash
-			});
-			
-			// Critical: Clean up terminal and event listeners after completion
-			console.log(this.logPrefix, "Task completed, starting cleanup...");
-			await this.cleanup();
-		} catch (error) {
-			console.error(
-				this.logPrefix,
-				"Error sending completion sequence:",
-				error,
-			);
-			this.isCompletingTask = false;
-			// Also cleanup on error to prevent resource leaks
-			await this.cleanup();
-		}
+	getAgentStatus(): { isRunning: boolean; isPaused: boolean; terminalId: string | null } {
+		return {
+			isRunning: this.isRunning,
+			isPaused: this.isPaused,
+			terminalId: this.terminalId
+		};
 	}
 
 	private async processTuiInteraction(tuiLines: TuiLine[]): Promise<void> {
