@@ -551,7 +551,10 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 							onClick={fetchBacklogItems}
 							className="px-3 py-1 text-sm bg-[var(--acc-500)] text-white rounded hover:bg-[var(--acc-600)] transition-colors"
 						>
-							Refresh
+							<svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+								<path fillRule="evenodd" d="M8 3a5 5 0 1 1-4.546 2.914.5.5 0 0 0-.908-.417A6 6 0 1 0 8 2z"/>
+								<path d="M8 4.466V.534a.25.25 0 0 0-.41-.192L5.23 2.308a.25.25 0 0 0 0 .384l2.36 1.966A.25.25 0 0 0 8 4.466"/>
+							</svg>
 						</button>
 					</div>
 				</div>
@@ -846,7 +849,15 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 									</button>
 								</div>
 								
-								<div className="flex gap-2 items-center justify-end">
+								<div className="flex gap-2 items-center justify-between">
+									{/* Repository detection logic preserved for filtering - no display */}
+									{!project?.gitOriginUrl && (
+										<div className="flex-1 text-xs text-[var(--negative-600)] bg-[var(--negative-50)] px-2 py-1 rounded border">
+											No .git URL detected, cannot provide backlog
+										</div>
+									)}
+									
+									<div className="flex gap-2 items-center">
 										<select
 											value={newTaskData.priority}
 											onChange={(e) => setNewTaskData(prev => ({ ...prev, priority: parseInt(e.target.value) }))}
@@ -867,7 +878,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 										</select>
 										<button
 											onClick={createNewTask}
-											className="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors w-16"
+											className="px-2 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors w-16 text-center"
 										>
 											Create
 										</button>
