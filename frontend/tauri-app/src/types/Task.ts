@@ -123,6 +123,9 @@ export class TaskManager {
 		this.tasks[taskIndex] = runningTask;
 		console.log(`[TaskManager] R3,R5: Successfully started task ${taskId} - terminal launched and Claude Code started`);
 		this.notifyListeners();
+		
+		// Auto-create empty task if needed (Q5, Q15)
+		this.autoEnsureEmptyTask();
 		return true;
 	}
 
@@ -203,7 +206,7 @@ export class TaskManager {
 		}
 		
 		const task = this.tasks[taskIndex];
-		if (task.status !== 'in_progress' && task.status !== 'running') {
+		if (task.status !== 'running') {
 			console.log(`[TaskManager] R10: Failed to complete task ${taskId} - invalid status: ${task.status}`);
 			return false;
 		}
@@ -301,8 +304,7 @@ export class TaskManager {
 			startedAt: firstTask.startedAt,
 			completedAt: Date.now(),
 			commitHash: '', // Will be set after actual git commit
-			isReverted: false,
-			processId: firstTask.processId
+			isReverted: false
 		};
 		
 		// Remove all running tasks from the list
@@ -315,6 +317,9 @@ export class TaskManager {
 		console.log(`[TaskManager] Q11: Inserted fused task at position of first task (ID: ${firstTask.id}) - preserving order in list`);
 		
 		this.notifyListeners();
+		
+		// Auto-create empty task after fusion (Q5, Q15)
+		this.autoEnsureEmptyTask();
 		return fusedTask;
 	}
 
@@ -331,6 +336,14 @@ export class TaskManager {
 		} else {
 			console.log(`[TaskManager] R1,Q5: Empty prompting task already exists - no action needed`);
 		}
+	}
+
+	// Private method for automatic empty task creation
+	private autoEnsureEmptyTask(): void {
+		// Use setTimeout to avoid triggering during the current operation
+		setTimeout(() => {
+			this.ensureEmptyTask();
+		}, 0);
 	}
 
 	// Revert/Restore logic
@@ -508,6 +521,9 @@ export class TaskManager {
 
 		this.tasks[taskIndex] = { ...task, prompt };
 		this.notifyListeners();
+		
+		// Auto-create empty task if needed (Q5, Q15)
+		this.autoEnsureEmptyTask();
 		return true;
 	}
 
@@ -529,6 +545,9 @@ export class TaskManager {
 		(this.tasks[taskIndex] as CompletedTask).commitHash = commitHash;
 		this.notifyListeners();
 		console.log(`[TaskManager] R10: Successfully updated commit hash for task ${taskId}`);
+		
+		// Auto-create empty task after commit completion (Q5, Q15)
+		this.autoEnsureEmptyTask();
 		return true;
 	}
 

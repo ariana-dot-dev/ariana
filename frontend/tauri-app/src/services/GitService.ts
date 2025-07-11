@@ -25,11 +25,15 @@ export class GitService {
 			const errorMessage = error instanceof Error ? error.message : String(error);
 			console.error('[GitService] Failed to create commit:', errorMessage);
 			
-			// Re-throw with the actual error message
-			if (errorMessage === "NO_CHANGES_TO_COMMIT") {
-				throw errorMessage; // Preserve special error codes
+			// Check for no changes scenarios
+			if (errorMessage === "NO_CHANGES_TO_COMMIT" || 
+				errorMessage.includes("nothing to commit") ||
+				errorMessage.includes("Unknown error (no stderr output)")) {
+				console.log('[GitService] No changes to commit - returning NO_CHANGES');
+				return "NO_CHANGES";
 			}
-			throw new Error(errorMessage); // Return just the error message, not wrapped
+			
+			throw new Error(errorMessage);
 		}
 	}
 

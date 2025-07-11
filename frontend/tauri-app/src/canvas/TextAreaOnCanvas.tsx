@@ -344,7 +344,7 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 		console.log(`[TextAreaOnCanvas] R4,R12: Starting task ${taskId} with prompt: ${task.prompt.substring(0, 100)}...`);
 
 		try {
-			if (!claudeAgent || !claudeAgent.isTaskRunning()) {
+			if (!claudeAgent || !claudeAgent.isAgentAvailable()) {
 				// Start new agent for existing task
 				console.log(`[TextAreaOnCanvas] R5,R14: No existing agent - launching new terminal and Claude Code for task ${taskId}`);
 				const success = await startExistingTask(taskId, task.prompt);
@@ -390,11 +390,12 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 
 				// Update commit hash for the already-completed fused task
 				taskManager.updateCommitHash(fusedTask.id, commitHash);
-				console.log(`[TextAreaOnCanvas] R13: Step 2 complete - Committed fused task with hash: ${commitHash}`);
 				
-				// Ensure there's a new empty task after commit (Q5, Q15)
-				console.log(`[TextAreaOnCanvas] Q5,Q15: Ensuring empty task after stop/commit sequence`);
-				taskManager.ensureEmptyTask();
+				if (commitHash === "NO_CHANGES") {
+					console.log(`[TextAreaOnCanvas] R13: Step 2 complete - No changes to commit, task marked as completed with NO_CHANGES`);
+				} else {
+					console.log(`[TextAreaOnCanvas] R13: Step 2 complete - Committed fused task with hash: ${commitHash}`);
+				}
 			} else {
 				console.log(`[TextAreaOnCanvas] R13: Step 2 skipped - No running tasks to commit`);
 			}
@@ -429,15 +430,15 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 			// Update commit hash for the already-completed fused task
 			taskManager.updateCommitHash(fusedTask.id, commitHash);
 
-			console.log(`[TextAreaOnCanvas] R10: Manual commit successful - hash: ${commitHash}`);
+			if (commitHash === "NO_CHANGES") {
+				console.log(`[TextAreaOnCanvas] R10: Manual commit completed - no changes to commit, task marked with NO_CHANGES`);
+			} else {
+				console.log(`[TextAreaOnCanvas] R10: Manual commit successful - hash: ${commitHash}`);
+			}
 			console.log(`[TextAreaOnCanvas] R2,R9: Agent and terminal remain alive - no cleanup performed`);
 			
 			// Reset agent state after manual commit
 			claudeAgent?.resetAfterCommit();
-			
-			// Ensure there's a new empty task after commit (Q5, Q15)
-			console.log(`[TextAreaOnCanvas] Q5,Q15: Checking for empty task creation after commit completion`);
-			taskManager.ensureEmptyTask();
 		} catch (error) {
 			console.error(`[TextAreaOnCanvas] R10: Manual commit failed:`, error);
 		}

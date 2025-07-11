@@ -43,6 +43,8 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	private currentTask: string | null = null;
 	private currentPrompt: string | null = null;
 	private screenLines: LineItem[][] = [];
+	private terminalLines: number = 24; // Track current terminal height
+	private terminalCols: number = 80; // Track current terminal width
 	private startTime: number = 0;
 	private logPrefix: string;
 	private hasSeenTryPrompt = false;
@@ -86,9 +88,14 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	}
 
 	/**
-	 * Override resizeTerminal to enforce 24x80 size
+	 * Override resizeTerminal to track dimensions and pass through to parent
 	 */
 	async resizeTerminal(id: string, lines: number, cols: number): Promise<void> {
+		// Track terminal dimensions
+		this.terminalLines = lines;
+		this.terminalCols = cols;
+		console.log(`${this.logPrefix} Terminal resized to ${lines}x${cols}`);
+		
 		await super.resizeTerminal(id, lines, cols);
 	}
 
@@ -192,25 +199,21 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	}
 
 	/**
-	 * Get the current screen lines (last N lines where N is terminal height)
+	 * Get the current screen lines (uses terminal dimensions for proper viewport)
 	 */
-	getCurrentTuiLines(terminalHeight: number = 24): TuiLine[] {
+	getCurrentTuiLines(): TuiLine[] {
 		if (!this.terminalId) return [];
 
-		return this.screenLines.slice(-terminalHeight).map((line, index) => ({
+		// Use terminal dimensions to get only visible lines, not the full history
+		const visibleLines = this.terminalLines || 24; // Default to 24 if not set
+		const startIndex = Math.max(0, this.screenLines.length - visibleLines);
+		
+		return this.screenLines.slice(startIndex).map((line, index) => ({
 			content: line.map((item) => item.lexeme).join(""),
-			timestamp:
-				Date.now() -
-				(this.screenLines.slice(-terminalHeight).length - index) * 100,
+			timestamp: Date.now() - (this.screenLines.slice(startIndex).length - index) * 100,
 		}));
 	}
 
-	/**
-	 * Check if task is currently running
-	 */
-	isTaskRunning(): boolean {
-		return this.isRunning;
-	}
 
 	/**
 	 * Get current task information
@@ -525,7 +528,9 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 				console.log(`${this.logPrefix} R6,Q8: Escape attempt ${attempts}, continuing indefinitely until proper interruption (no timeout as specified)`);
 			}
 
-			// No timeout - keep trying indefinitely as specified
+			if (attempts >= 5) {
+				break; // Prevent infinite loop in case of unexpected behavior
+			}
 		}
 	}
 
@@ -544,6 +549,7 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		let newLines: string[] = tuiLines.map((tuiLine) => tuiLine.content);
 
 		newLines = newLines.map((line) => line.replaceAll(" ", " "));
+		// console.log(this.logPrefix, "Processing TUI interactions with new lines:", newLines);
 
 		// Check for "Yes, and don't ask again this session (shift+tab)"
 		const hasShiftTabOption = newLines.some((line) =>
@@ -617,6 +623,16 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	isTaskRunning(): boolean {
 		const result = this.isRunning && this.hasSeenTryPrompt;
 		console.log(`${this.logPrefix} R8: isTaskRunning check - isRunning: ${this.isRunning}, hasSeenTryPrompt: ${this.hasSeenTryPrompt}, result: ${result}`);
+		return result;
+	}
+
+	/**
+	 * Check if agent is available to accept new prompts (terminal alive and ready)
+	 * Used to determine if we should queue prompts or create new agent
+	 */
+	isAgentAvailable(): boolean {
+		const result = !!this.terminalId && !this.isCompletingTask;
+		console.log(`${this.logPrefix} R2,R9: isAgentAvailable check - terminalId: ${!!this.terminalId}, isCompletingTask: ${this.isCompletingTask}, result: ${result}`);
 		return result;
 	}
 
