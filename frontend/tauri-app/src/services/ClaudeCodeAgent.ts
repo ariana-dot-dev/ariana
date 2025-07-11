@@ -87,7 +87,7 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	 * Override resizeTerminal to enforce 24x80 size
 	 */
 	async resizeTerminal(id: string, lines: number, cols: number): Promise<void> {
-		await super.resizeTerminal(id, 24, 80);
+		await super.resizeTerminal(id, lines, cols);
 	}
 
 	/**

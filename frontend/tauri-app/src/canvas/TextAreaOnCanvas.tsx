@@ -354,7 +354,7 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 	return (
 		<motion.div
 			className={cn(
-				"absolute select-none overflow-hidden p-1",
+				"absolute select-none w-full overflow-hidden p-1",
 				isDragging ? "z-30" : "z-10",
 			)}
 			initial={{
@@ -379,11 +379,11 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 			}}
 			layout
 		>
-			<div className={cn("w-full h-full flex flex-col p-3")}>
+			<div className={cn("w-full h-full flex p-3")}>
 				<div
 					className={cn(
-						"relative flex flex-col rounded-md gap-0",
-						showTerminal ? "h-1/3" : "h-full",
+						"relative flex flex-col rounded-md gap-0 h-full",
+						showTerminal ? "w-2/5" : "w-full",
 					)}
 					style={{
 						backgroundImage:
@@ -559,7 +559,7 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 				</div>
 
 				{showTerminal && terminalId && (
-					<div className="h-2/3 mt-2 opacity-70">
+					<div className="w-3/5 h-full mt-2 opacity-70">
 						<CustomTerminalRenderer
 							elementId={`claude-terminal-${terminalId}`}
 							existingTerminalId={terminalId}

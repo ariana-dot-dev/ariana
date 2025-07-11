@@ -563,6 +563,28 @@ export class GitProject {
 		};
 	}
 
+	/**
+	 * Create a new GitProject and ensure it has an initial commit
+	 * @param root - The OS session for the git repository
+	 * @param name - Optional project name
+	 * @returns Promise<GitProject> - The created project
+	 */
+	static async create(root: OsSession, name?: string): Promise<GitProject> {
+		const project = new GitProject(root, name);
+		
+		try {
+			// Ensure the repository has an initial commit
+			await import('../services/GitService').then(({ GitService }) => 
+				GitService.ensureInitialCommit(root)
+			);
+		} catch (error) {
+			console.error('[GitProject] Failed to ensure initial commit:', error);
+			// Don't throw - project is still usable, just without initial commit
+		}
+		
+		return project;
+	}
+
 	static fromJSON(data: any): GitProject {
 		const project = new GitProject(data.root, data.name);
 		project.id = data.id;

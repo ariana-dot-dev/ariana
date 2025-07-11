@@ -177,6 +177,7 @@ body {
 	width: 100vw;
 	border-radius: 8px;
 	overflow: hidden;
+	background: transparent;
 }
 
 /* I know, terrible practice, yada yada. That's my IDE, I decide */

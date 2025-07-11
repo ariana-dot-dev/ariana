@@ -148,7 +148,7 @@ export function ProjectSelector({ onProjectCreated }: ProjectSelectorProps) {
 			}
 
 			// Create GitProject with the OsSession as root
-			const gitProject = new GitProject(osSession);
+			const gitProject = await GitProject.create(osSession);
 			const projectIndex = store.addGitProject(gitProject);
 
 			onProjectCreated(projectIndex);
@@ -265,20 +265,8 @@ export function ProjectSelector({ onProjectCreated }: ProjectSelectorProps) {
 				osSession 
 			});
 
-			// Create initial commit to ensure HEAD exists
-			try {
-				await invoke("git_commit", {
-					directory: projectPath,
-					message: "Initial commit",
-					osSession
-				});
-			} catch (error) {
-				// If commit fails (e.g., no changes), that's okay for empty repos
-				console.log("Initial commit not needed or failed:", error);
-			}
-
-			// Create GitProject with the OsSession as root
-			const gitProject = new GitProject(osSession, sanitizedName);
+			// Create GitProject with the OsSession as root (this will handle initial commit)
+			const gitProject = await GitProject.create(osSession, sanitizedName);
 			const projectId = store.addGitProject(gitProject);
 
 			// Reset create project state
