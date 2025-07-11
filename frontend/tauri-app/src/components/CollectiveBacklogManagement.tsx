@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import BacklogService, { BacklogItem, BacklogFilters } from '../services/BacklogService';
 import AuthService from '../services/AuthService';
+import { GitProject } from '../types/GitProject';
 
 interface CollectiveBacklogManagementProps {
+	project?: GitProject;
 	onClose?: () => void;
 }
 
-export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementProps> = ({ onClose }) => {
+export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementProps> = ({ project, onClose }) => {
 	const [backlogItems, setBacklogItems] = useState<BacklogItem[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
@@ -26,7 +28,6 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 	const [showCreateForm, setShowCreateForm] = useState(false);
 	const [newTaskData, setNewTaskData] = useState({
 		task: '',
-		git_repository_url: '',
 		priority: 3,
 		status: 'open' as const
 	});
@@ -51,6 +52,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 		return unsubscribe;
 	}, [authService]);
 
+
 	// Fetch backlog items
 	const fetchBacklogItems = async () => {
 		try {
@@ -64,15 +66,51 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 				return;
 			}
 
-			// Build filters object
-			const filterParams: BacklogFilters = {};
-			if (filters.status) filterParams.status = filters.status;
-			if (filters.priority) filterParams.priority = filters.priority;
-			if (filters.owner) filterParams.owner = filters.owner;
-			if (filters.overdue) filterParams.overdue = filters.overdue;
+			let items: BacklogItem[] = [];
 
-			// Use admin endpoint to get all backlog items across repositories
-			const items = await backlogService.getAllBacklogItems(filterParams);
+			// Check if we have a project with git origin URL for repository-specific filtering
+			if (project?.gitOriginUrl) {
+				console.log(`Fetching backlog items for repository: ${project.gitOriginUrl}`);
+				try {
+					items = await backlogService.getBacklogByRepository(project.gitOriginUrl);
+					console.log(`Successfully fetched ${items.length} items for repository`);
+				} catch (repoError) {
+					console.warn('Failed to fetch repository-specific backlog:', repoError);
+					// If the repository endpoint fails, it means no backlog items are available
+					// Don't fall back to all items for security reasons
+					items = [];
+				}
+				
+				// Apply local filtering to repository-specific results
+				if (filters.status) {
+					items = items.filter(item => item.status === filters.status);
+				}
+				if (filters.priority) {
+					items = items.filter(item => item.priority.toString() === filters.priority);
+				}
+				if (filters.owner) {
+					items = items.filter(item => item.owner === filters.owner);
+				}
+				if (filters.overdue) {
+					const now = new Date();
+					items = items.filter(item => {
+						if (!item.due_date) return false;
+						return new Date(item.due_date) < now;
+					});
+				}
+			} else {
+				// Build filters object for admin endpoint (fallback when no project)
+				const filterParams: BacklogFilters = {};
+				if (filters.status) filterParams.status = filters.status;
+				if (filters.priority) filterParams.priority = filters.priority;
+				if (filters.owner) filterParams.owner = filters.owner;
+				if (filters.overdue) filterParams.overdue = filters.overdue;
+
+				// Use admin endpoint to get all backlog items across repositories
+				items = await backlogService.getAllBacklogItems(filterParams);
+				console.log('Fetching all backlog items (no project git URL available)');
+			}
+			
 			setBacklogItems(items);
 
 			// Extract unique users from backlog items for owner selection
@@ -207,17 +245,26 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 
 	// Handle create new task
 	const createNewTask = async () => {
-		if (!newTaskData.task.trim() || !newTaskData.git_repository_url.trim()) {
-			setError('Task description and repository URL are required');
+		if (!newTaskData.task.trim()) {
+			setError('Task description is required');
+			return;
+		}
+		
+		if (!project?.gitOriginUrl) {
+			setError('No .git URL detected, cannot create backlog tasks.');
 			return;
 		}
 
 		try {
-			const newItem = await backlogService.createBacklogItem(newTaskData);
+			const taskData = {
+				...newTaskData,
+				git_repository_url: project.gitOriginUrl
+			};
+			
+			const newItem = await backlogService.createBacklogItem(taskData);
 			setBacklogItems(prev => [newItem, ...prev]);
 			setNewTaskData({
 				task: '',
-				git_repository_url: '',
 				priority: 3,
 				status: 'open'
 			});
@@ -234,7 +281,6 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 		setShowCreateForm(false);
 		setNewTaskData({
 			task: '',
-			git_repository_url: '',
 			priority: 3,
 			status: 'open'
 		});
@@ -352,7 +398,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 		if (isAuthenticated) {
 			fetchBacklogItems();
 		}
-	}, [filters, isAuthenticated]);
+	}, [filters, isAuthenticated, project?.gitOriginUrl]);
 
 	// Show authentication required message if not logged in
 	if (!isAuthenticated) {
@@ -381,6 +427,40 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 						<div className="text-lg text-[var(--base-800)] mb-2">Authentication Required</div>
 						<div className="text-sm text-[var(--base-600)]">
 							Please log in to view and manage backlog items.
+						</div>
+					</div>
+				</div>
+			</div>
+		);
+	}
+
+	// Show no git URL message if project has no git origin URL
+	if (!project?.gitOriginUrl) {
+		return (
+			<div className="w-full h-full bg-[var(--base-50)] overflow-y-auto">
+				<div className="sticky top-0 bg-[var(--base-100)] border-b border-[var(--base-300)] p-4">
+					<div className="flex items-center justify-between">
+						<div>
+							<h1 className="text-xl font-semibold text-[var(--base-800)]">Collective Backlog Management</h1>
+							<p className="text-sm text-[var(--base-600)] mt-1">
+								Manage all backlog items across repositories
+							</p>
+						</div>
+						{onClose && (
+							<button
+								onClick={onClose}
+								className="text-[var(--base-500)] hover:text-[var(--base-700)] text-xl"
+							>
+								×
+							</button>
+						)}
+					</div>
+				</div>
+				<div className="flex items-center justify-center py-12">
+					<div className="text-center">
+						<div className="text-lg text-[var(--base-800)] mb-2">No .git URL detected</div>
+						<div className="text-sm text-[var(--base-600)]">
+							Cannot provide backlog. Please open a project with a valid git repository.
 						</div>
 					</div>
 				</div>
@@ -766,38 +846,45 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 									</button>
 								</div>
 								
-								<div className="flex gap-2 items-center justify-end">
-									<input
-										type="url"
-										value={newTaskData.git_repository_url}
-										onChange={(e) => setNewTaskData(prev => ({ ...prev, git_repository_url: e.target.value }))}
-										placeholder="Repository URL"
-										className="flex-1 px-2 py-1 text-sm border border-[var(--base-300)] rounded focus:outline-none focus:border-[var(--acc-500)]"
-									/>
-									<select
-										value={newTaskData.priority}
-										onChange={(e) => setNewTaskData(prev => ({ ...prev, priority: parseInt(e.target.value) }))}
-										className="px-2 py-1 text-sm border border-[var(--base-300)] rounded focus:outline-none focus:border-[var(--acc-500)] w-24"
-									>
-										{[1, 2, 3, 4, 5, 6, 7].map(p => (
-											<option key={p} value={p}>{getPriorityLabel(p)}</option>
-										))}
-									</select>
-									<select
-										value={newTaskData.status}
-										onChange={(e) => setNewTaskData(prev => ({ ...prev, status: e.target.value as any }))}
-										className="px-2 py-1 text-sm border border-[var(--base-300)] rounded focus:outline-none focus:border-[var(--acc-500)] w-24"
-									>
-										<option value="open">Open</option>
-										<option value="in_progress">In Progress</option>
-										<option value="completed">Completed</option>
-									</select>
-									<button
-										onClick={createNewTask}
-										className="px-3 py-1 text-sm bg-[var(--acc-500)] text-white rounded hover:bg-[var(--acc-600)] transition-colors w-16"
-									>
-										Create
-									</button>
+								<div className="flex gap-2 items-center justify-between">
+									{/* Show current repository info */}
+									{project?.gitOriginUrl && (
+										<div className="flex-1 text-xs text-[var(--base-600)] bg-[var(--base-50)] px-2 py-1 rounded border">
+											<span className="font-medium">Repository:</span> {project.gitOriginUrl}
+										</div>
+									)}
+									{!project?.gitOriginUrl && (
+										<div className="flex-1 text-xs text-[var(--negative-600)] bg-[var(--negative-50)] px-2 py-1 rounded border">
+											No .git URL detected, cannot provide backlog
+										</div>
+									)}
+									
+									<div className="flex gap-2 items-center">
+										<select
+											value={newTaskData.priority}
+											onChange={(e) => setNewTaskData(prev => ({ ...prev, priority: parseInt(e.target.value) }))}
+											className="px-2 py-1 text-sm border border-[var(--base-300)] rounded focus:outline-none focus:border-[var(--acc-500)] w-24"
+										>
+											{[1, 2, 3, 4, 5, 6, 7].map(p => (
+												<option key={p} value={p}>{getPriorityLabel(p)}</option>
+											))}
+										</select>
+										<select
+											value={newTaskData.status}
+											onChange={(e) => setNewTaskData(prev => ({ ...prev, status: e.target.value as any }))}
+											className="px-2 py-1 text-sm border border-[var(--base-300)] rounded focus:outline-none focus:border-[var(--acc-500)] w-24"
+										>
+											<option value="open">Open</option>
+											<option value="in_progress">In Progress</option>
+											<option value="completed">Completed</option>
+										</select>
+										<button
+											onClick={createNewTask}
+											className="px-3 py-1 text-sm bg-[var(--acc-500)] text-white rounded hover:bg-[var(--acc-600)] transition-colors w-16"
+										>
+											Create
+										</button>
+									</div>
 								</div>
 							</div>
 						)}

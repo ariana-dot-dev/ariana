@@ -366,6 +366,7 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 		}
 	}, [currentCanvas?.id, selectedItemId, viewMode]);
 
+
 	return selectedGitProject ? (
 		<div className="w-full h-full flex gap-1.5">
 			<div
@@ -444,6 +445,7 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 					<AgentOverview
 						canvases={selectedGitProject.canvases}
 						backgroundAgents={getBackgroundAgents()}
+						project={selectedGitProject}
 						onAddPrompt={handleAddPrompt}
 						onPlayCanvas={handlePlayCanvas}
 						onPauseCanvas={handlePauseCanvas}

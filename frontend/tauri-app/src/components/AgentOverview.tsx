@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { GitProjectCanvas, CanvasLockState } from '../types/GitProject';
+import { GitProjectCanvas, CanvasLockState, GitProject } from '../types/GitProject';
 import { BackgroundAgent, BackgroundAgentStatus } from '../types/BackgroundAgent';
 import { Task, TaskStatus } from '../types/Task';
 import { CollectiveBacklogManagement } from './CollectiveBacklogManagement';
@@ -7,6 +7,7 @@ import { CollectiveBacklogManagement } from './CollectiveBacklogManagement';
 interface AgentOverviewProps {
 	canvases: GitProjectCanvas[];
 	backgroundAgents: BackgroundAgent[];
+	project?: GitProject; // Add project to access git origin URL
 	onAddPrompt?: (canvasId: string, prompt: string) => void;
 	onPlayCanvas?: (canvasId: string) => void;
 	onPauseCanvas?: (canvasId: string) => void;
@@ -19,6 +20,7 @@ interface AgentOverviewProps {
 export const AgentOverview: React.FC<AgentOverviewProps> = ({
 	canvases,
 	backgroundAgents,
+	project,
 	onAddPrompt,
 	onPlayCanvas,
 	onPauseCanvas,
@@ -220,13 +222,13 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 														<div className="space-y-1 mb-2">
 															<div className="text-xs font-medium text-[var(--base-700)]">Active:</div>
 															{activeTasks.slice(0, 2).map((task, i) => (
-																<div key={i} className="text-xs text-[var(--base-600)] truncate flex items-center gap-1">
-																	<span className={`w-1.5 h-1.5 rounded-full ${
+																<div key={i} className="text-xs text-[var(--base-600)] flex items-start gap-1">
+																	<span className={`w-1.5 h-1.5 rounded-full mt-0.5 flex-shrink-0 ${
 																		task.status === 'in_progress' ? 'bg-[var(--acc-500)]' :
 																		task.status === 'completed' ? 'bg-[var(--positive-500)]' :
 																		'bg-[var(--base-400)]'
 																	}`}></span>
-																	{task.prompt}
+																	<span className="break-words">{task.prompt}</span>
 																</div>
 															))}
 															{activeTasks.length > 2 && (
@@ -444,7 +446,7 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 				
 				{/* Collective Backlog Management */}
 				<div className="mt-6">
-					<CollectiveBacklogManagement />
+					<CollectiveBacklogManagement project={project} />
 				</div>
 			</div>
 		</div>
