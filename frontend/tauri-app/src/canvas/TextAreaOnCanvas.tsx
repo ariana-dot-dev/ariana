@@ -270,6 +270,11 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 		const handlePromptQueued = (data: { prompt: string }) => {
 			console.log(`[TextAreaOnCanvas] Prompt queued:`, data.prompt.substring(0, 50));
 		};
+		const handlePromptSent = () => {
+			console.log(`[TextAreaOnCanvas] R8: Prompt sent to Claude - pause button should now be visible`);
+			// Force re-render to update button visibility
+			setTaskManagerUpdateTrigger(prev => prev + 1);
+		};
 
 		claudeAgent.on("taskCompleted", handleTaskComplete);
 		claudeAgent.on("taskError", handleTaskError);
@@ -278,6 +283,7 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 		claudeAgent.on("agentPaused", handleAgentPaused);
 		claudeAgent.on("agentResumed", handleAgentResumed);
 		claudeAgent.on("promptQueued", handlePromptQueued);
+		claudeAgent.on("promptSent", handlePromptSent);
 
 		return () => {
 			claudeAgent.off("taskCompleted", handleTaskComplete);
@@ -287,8 +293,9 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 			claudeAgent.off("agentPaused", handleAgentPaused);
 			claudeAgent.off("agentResumed", handleAgentResumed);
 			claudeAgent.off("promptQueued", handlePromptQueued);
+			claudeAgent.off("promptSent", handlePromptSent);
 		};
-	}, [claudeAgent]);
+	}, [claudeAgent, elementId, getProcessByElementId, updateProcess]);
 
 	// CRITICAL: Clean up agent on component unmount
 	useEffect(() => {
@@ -424,6 +431,9 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 
 			console.log(`[TextAreaOnCanvas] R10: Manual commit successful - hash: ${commitHash}`);
 			console.log(`[TextAreaOnCanvas] R2,R9: Agent and terminal remain alive - no cleanup performed`);
+			
+			// Reset agent state after manual commit
+			claudeAgent?.resetAfterCommit();
 			
 			// Ensure there's a new empty task after commit (Q5, Q15)
 			console.log(`[TextAreaOnCanvas] Q5,Q15: Checking for empty task creation after commit completion`);

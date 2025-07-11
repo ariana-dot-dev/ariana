@@ -454,7 +454,9 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		}
 
 		console.log(`${this.logPrefix} R8: Resuming agent - sending continue prompt and enter`);
-		await this.sendRawInput(this.terminalId, "continue\r");
+		await this.sendRawInput(this.terminalId, "continue");
+		await this.delay(1000);
+		await this.sendRawInput(this.terminalId, "\x0d"); // Send Enter
 		this.isPaused = false;
 		console.log(`${this.logPrefix} R8: Agent successfully resumed - continuing execution`);
 		this.emit('agentResumed');
@@ -568,6 +570,12 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 				this.currentPrompt,
 			);
 			this.hasSeenTryPrompt = true;
+			console.log(
+				this.logPrefix,
+				"R8: Set hasSeenTryPrompt = true, pause button should now appear"
+			);
+			// Emit event to trigger UI update
+			this.emit("promptSent");
 			// Send the prompt key by key, simulating typing
 			for (const char of this.currentPrompt) {
 				if (char === "\n") {
@@ -600,5 +608,29 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 
 	private delay(ms: number): Promise<void> {
 		return new Promise((resolve) => setTimeout(resolve, ms));
+	}
+
+	/**
+	 * Check if a task is currently running and a prompt has been sent
+	 * Pause button should only show if agent is running AND we've sent the prompt
+	 */
+	isTaskRunning(): boolean {
+		const result = this.isRunning && this.hasSeenTryPrompt;
+		console.log(`${this.logPrefix} R8: isTaskRunning check - isRunning: ${this.isRunning}, hasSeenTryPrompt: ${this.hasSeenTryPrompt}, result: ${result}`);
+		return result;
+	}
+
+	/**
+	 * Reset task state after manual commit
+	 * Called when tasks are committed manually via the commit button
+	 */
+	resetAfterCommit(): void {
+		console.log(`${this.logPrefix} R10: Resetting agent state after manual commit`);
+		this.isRunning = false;
+		this.hasSeenTryPrompt = false;
+		this.currentTask = null;
+		this.currentPrompt = null;
+		this.isManuallyControlled = true; // Keep terminal alive but mark as manually controlled
+		console.log(`${this.logPrefix} R2,R9: Agent reset but terminal remains alive`);
 	}
 }
