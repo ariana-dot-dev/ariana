@@ -71,7 +71,7 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 	const canControlTerminal = canEdit && canvasLockState === 'normal';
 	const canStartTasks = canEdit && canvasLockState === 'normal';
 	
-	// Force re-render when TaskManager state changes
+	// Force re-render when TaskManager state changes (simple pattern like original)
 	const [taskManagerUpdateTrigger, setTaskManagerUpdateTrigger] = useState(0);
 	
 	// Subscribe to TaskManager changes
@@ -85,13 +85,13 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 		return unsubscribe;
 	}, [taskManager]);
 	
-	// Auto-create empty task when needed
+	// Auto-create empty task when component mounts (simple, one-time check)
 	useEffect(() => {
-		if (taskManager && currentCanvas) {
-			const textAreaObj = (layout.element.kind as TextAreaKind).textArea;
+		if (taskManager) {
+			console.log(`[TextAreaOnCanvas] R1,R4: Auto-task creation check - current task count: ${allTasks.length}`);
 			taskManager.ensureEmptyTask();
 		}
-	}, [allTasks.length, taskManager, currentCanvas, layout]);
+	}, [taskManager]); // Only depend on taskManager, not tasks array
 	const textAreaRef = useRef<HTMLTextAreaElement>(null);
 	const textAreaOsSession = (element.kind as TextAreaKind).textArea.osSession; 
 	
@@ -157,55 +157,62 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 		}
 	};
 
-	const handleGoClick = async () => {
-		const success = await startTaskWithPrompt(currentPrompt);
-		if (success && autoGoRemaining > 0) {
-			setAutoGoRemaining(prev => Math.max(0, prev - 1));
+	const startExistingTask = async (taskId: string, prompt: string) => {
+		try {
+			console.log(`[TextAreaOnCanvas] Starting existing task ${taskId} with new agent`);
+			const agent = new ClaudeCodeAgent();
+			setClaudeAgent(agent);
+			setShowTerminal(true);
+
+			await agent.startTask(
+				textAreaOsSession || { Local: "." },
+				prompt.trim(),
+				(newTerminalId: string) => {
+					setTerminalId(newTerminalId);
+					setShowTerminal(true);
+					
+					const processId = crypto.randomUUID();
+					const processState: ProcessState = {
+						processId,
+						terminalId: newTerminalId,
+						type: 'claude-code',
+						status: 'running',
+						startTime: Date.now(),
+						elementId,
+						prompt: prompt.trim()
+					};
+					
+					ProcessManager.registerProcess(processId, agent);
+					ProcessManager.setTerminalConnection(elementId, newTerminalId);
+					addProcess(processState);
+					startTask(taskId, processId);
+				},
+			);
+
+			return true;
+		} catch (error) {
+			setShowTerminal(false);
+			setTerminalId(null);
+			return false;
 		}
 	};
 
-	useEffect(() => {
-		(layout.element.kind as TextAreaKind).textArea.content = text;
-	}, [text]);
+
 
 	// Memoize textArea object to prevent re-render loops
 	const textAreaObj = useMemo(() => (layout.element.kind as TextAreaKind).textArea, [layout.element.id]);
 
-	useEffect(() => {
-		if (currentPromptingTask) {
-			setCurrentPrompt(currentPromptingTask.prompt);
-			setText(currentPromptingTask.prompt);
-		} else if (!currentPrompt && text) {
-			setCurrentPrompt(text);
-			if (textAreaObj.shouldTriggerAutoGo) {
-				setAutoGoRemaining(1);
-				textAreaObj.shouldTriggerAutoGo = false;
-			}
-		}
-	}, [text, currentPrompt, currentPromptingTask, textAreaObj]);
+
 
 	useEffect(() => {
-		if (autoGoRemaining > 0 && currentPrompt.trim() && !currentInProgressTask && !currentPromptingTask && canEdit && !claudeAgent) {
-			const autoPress = async () => {
-				const success = await startTaskWithPrompt(currentPrompt);
-				if (success) {
-					setAutoGoRemaining(prev => Math.max(0, prev - 1));
-				}
-			};
-			const timeoutId = setTimeout(autoPress, 1500);
-			return () => clearTimeout(timeoutId); // IMPORTANT: Clear timeout on cleanup
-		}
-	}, [autoGoRemaining, currentPrompt, currentInProgressTask, currentPromptingTask, canEdit, claudeAgent]);
-
-	useEffect(() => {
-		if (!currentInProgressTask && !claudeAgent) {
+		if (!hasRunningTasks && !claudeAgent) {
 			const timeoutId = setTimeout(() => {
 				setShowTerminal(false);
 				setTerminalId(null);
 			}, 1000);
 			return () => clearTimeout(timeoutId);
 		}
-	}, [currentInProgressTask, claudeAgent]);
+	}, [hasRunningTasks, claudeAgent]);
 
 	useEffect(() => {
 		const existingProcess = getProcessByElementId(elementId);
@@ -322,38 +329,51 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 	// Multi-task control handlers
 	const handleStartTask = async (taskId: string) => {
 		const task = taskManager?.getTask(taskId);
-		if (!task || !task.prompt.trim() || !canEdit) return;
+		if (!task || !task.prompt.trim() || !canEdit) {
+			console.log(`[TextAreaOnCanvas] R4,R12: Cannot start task ${taskId} - task missing, empty prompt, or canvas not editable`);
+			return;
+		}
+
+		console.log(`[TextAreaOnCanvas] R4,R12: Starting task ${taskId} with prompt: ${task.prompt.substring(0, 100)}...`);
 
 		try {
 			if (!claudeAgent || !claudeAgent.isTaskRunning()) {
-				// Start new agent if none exists
-				console.log(`[TextAreaOnCanvas] Starting new agent for task ${taskId}`);
-				const success = await startTaskWithPrompt(task.prompt);
+				// Start new agent for existing task
+				console.log(`[TextAreaOnCanvas] R5,R14: No existing agent - launching new terminal and Claude Code for task ${taskId}`);
+				const success = await startExistingTask(taskId, task.prompt);
 				if (success) {
-					taskManager?.startTask(taskId);
+					console.log(`[TextAreaOnCanvas] R5,R14: Successfully launched terminal for task ${taskId} - task marked as running`);
+				} else {
+					console.log(`[TextAreaOnCanvas] R5,R14: Failed to launch terminal for task ${taskId}`);
 				}
 			} else {
 				// Queue prompt in existing agent
-				console.log(`[TextAreaOnCanvas] Queuing prompt in existing agent for task ${taskId}`);
+				console.log(`[TextAreaOnCanvas] R5,R12,R14: Existing agent found - queuing prompt in Claude Code for task ${taskId}`);
 				await claudeAgent.queuePrompt(task.prompt);
 				taskManager?.startTask(taskId);
+				console.log(`[TextAreaOnCanvas] R5,R12,R14: Task ${taskId} queued successfully - will be processed after current task`);
 			}
 		} catch (error) {
-			console.error('Failed to start task:', error);
+			console.error(`[TextAreaOnCanvas] R5,R12,R14: Failed to start task ${taskId}:`, error);
 		}
 	};
 
 	const handleStopCommitStart = async (taskId: string) => {
-		if (!claudeAgent || !taskManager || !canEdit) return;
+		if (!claudeAgent || !taskManager || !canEdit) {
+			console.log(`[TextAreaOnCanvas] R13: Cannot stop/commit/start for task ${taskId} - missing agent, taskManager, or not editable`);
+			return;
+		}
+
+		console.log(`[TextAreaOnCanvas] R13: Starting stop/commit/start sequence for task ${taskId} - interrupt current, commit all, start new`);
 
 		try {
-			console.log(`[TextAreaOnCanvas] Stop, commit and start for task ${taskId}`);
-
 			// 1. Send escape until interrupted
+			console.log(`[TextAreaOnCanvas] R13: Step 1 - Interrupting Claude with escape sequences`);
 			await claudeAgent.pauseAgent();
 
 			// 2. Fusion and commit running tasks
 			if (hasRunningTasks) {
+				console.log(`[TextAreaOnCanvas] R13: Step 2 - Fusing ${hasRunningTasks ? runningTasks.length : 0} running tasks and committing`);
 				const fusedTask = taskManager.fuseRunningTasks();
 				const { GitService } = await import('../services/GitService');
 				const commitHash = await GitService.createCommit(
@@ -361,46 +381,65 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 					fusedTask.prompt
 				);
 
-				// Update fused task with commit hash
-				fusedTask.commitHash = commitHash;
-				taskManager.completeTask(fusedTask.id, commitHash);
+				// Update commit hash for the already-completed fused task
+				taskManager.updateCommitHash(fusedTask.id, commitHash);
+				console.log(`[TextAreaOnCanvas] R13: Step 2 complete - Committed fused task with hash: ${commitHash}`);
+				
+				// Ensure there's a new empty task after commit (Q5, Q15)
+				console.log(`[TextAreaOnCanvas] Q5,Q15: Ensuring empty task after stop/commit sequence`);
+				taskManager.ensureEmptyTask();
+			} else {
+				console.log(`[TextAreaOnCanvas] R13: Step 2 skipped - No running tasks to commit`);
 			}
 
 			// 3. Start new task
+			console.log(`[TextAreaOnCanvas] R13: Step 3 - Starting new task ${taskId}`);
 			await handleStartTask(taskId);
+			console.log(`[TextAreaOnCanvas] R13: Stop/commit/start sequence complete for task ${taskId}`);
 		} catch (error) {
-			console.error('Stop, commit and start failed:', error);
+			console.error(`[TextAreaOnCanvas] R13: Stop/commit/start failed for task ${taskId}:`, error);
 		}
 	};
 
 	const handleCommit = async () => {
-		if (!claudeAgent || !taskManager || !hasRunningTasks) return;
+		if (!claudeAgent || !taskManager || !hasRunningTasks) {
+			console.log(`[TextAreaOnCanvas] R10: Cannot commit - missing agent (${!claudeAgent}), taskManager (${!taskManager}), or no running tasks (${!hasRunningTasks})`);
+			return;
+		}
+
+		console.log(`[TextAreaOnCanvas] R10: Manual commit initiated - fusing ${runningTasks.length} running tasks into single commit`);
 
 		try {
-			console.log(`[TextAreaOnCanvas] Manual commit of ${runningTasks.length} running tasks`);
-
 			const fusedTask = taskManager.fuseRunningTasks();
+			console.log(`[TextAreaOnCanvas] R10: Task fusion complete - creating git commit`);
+			
 			const { GitService } = await import('../services/GitService');
 			const commitHash = await GitService.createCommit(
 				textAreaOsSession || { Local: "." },
 				fusedTask.prompt
 			);
 
-			fusedTask.commitHash = commitHash;
-			taskManager.completeTask(fusedTask.id, commitHash);
+			// Update commit hash for the already-completed fused task
+			taskManager.updateCommitHash(fusedTask.id, commitHash);
 
-			console.log(`[TextAreaOnCanvas] Successfully committed fused task with hash: ${commitHash}`);
-			// Keep agent and terminal running - don't cleanup
+			console.log(`[TextAreaOnCanvas] R10: Manual commit successful - hash: ${commitHash}`);
+			console.log(`[TextAreaOnCanvas] R2,R9: Agent and terminal remain alive - no cleanup performed`);
+			
+			// Ensure there's a new empty task after commit (Q5, Q15)
+			console.log(`[TextAreaOnCanvas] Q5,Q15: Checking for empty task creation after commit completion`);
+			taskManager.ensureEmptyTask();
 		} catch (error) {
-			console.error('Manual commit failed:', error);
+			console.error(`[TextAreaOnCanvas] R10: Manual commit failed:`, error);
 		}
 	};
 
 	const handleTaskPromptUpdate = (taskId: string, prompt: string) => {
+		console.log(`[TextAreaOnCanvas] R2: Updating prompt for task ${taskId} - length: ${prompt.length} characters`);
 		taskManager?.updateTaskPrompt(taskId, prompt);
 
 		// Persist to GitProject immediately
 		if (currentCanvas) {
+			console.log(`[TextAreaOnCanvas] R2: Persisting prompt update to GitProject for canvas ${currentCanvas.id}`);
 			setInProgressPrompt(currentCanvas.id, elementId, prompt);
 		}
 	};

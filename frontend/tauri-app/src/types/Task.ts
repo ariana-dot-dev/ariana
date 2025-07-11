@@ -31,11 +31,6 @@ export interface PausedTask extends TaskBase {
 	processId?: string; // Link to ProcessState if needed
 }
 
-export interface InProgressTask extends TaskBase {
-	status: 'in_progress';
-	startedAt: number;
-	processId?: string; // Link to ProcessState if needed
-}
 
 export interface FailedTask extends TaskBase {
 	status: 'failed';
@@ -54,7 +49,7 @@ export interface CompletedTask extends TaskBase {
 	dependsOn?: string[]; // Task IDs this task depends on
 }
 
-export type Task = PromptingTask | QueuedTask | RunningTask | PausedTask | InProgressTask | CompletedTask | FailedTask;
+export type Task = PromptingTask | QueuedTask | RunningTask | PausedTask | CompletedTask | FailedTask;
 
 export class TaskManager {
 	private tasks: Task[] = [];
@@ -79,12 +74,17 @@ export class TaskManager {
 			status: 'prompting'
 		};
 		this.tasks.push(task);
+		this.notifyListeners();
 		return task.id;
 	}
 
 	queueTask(taskId: string): boolean {
+		console.log(`[TaskManager] R4: Attempting to queue task ${taskId} for multi-task support`);
 		const taskIndex = this.tasks.findIndex(t => t.id === taskId);
-		if (taskIndex === -1 || this.tasks[taskIndex].status !== 'prompting') return false;
+		if (taskIndex === -1 || this.tasks[taskIndex].status !== 'prompting') {
+			console.log(`[TaskManager] R4: Failed to queue task ${taskId} - task not found or not in prompting state`);
+			return false;
+		}
 
 		const task = this.tasks[taskIndex] as PromptingTask;
 		const queuedTask: QueuedTask = {
@@ -94,16 +94,24 @@ export class TaskManager {
 		};
 
 		this.tasks[taskIndex] = queuedTask;
+		console.log(`[TaskManager] R4: Successfully queued task ${taskId} at ${queuedTask.queuedAt}`);
 		this.notifyListeners();
 		return true;
 	}
 
 	startTask(taskId: string, processId?: string): boolean {
+		console.log(`[TaskManager] R3,R5: Starting task ${taskId} with processId ${processId || 'none'}`);
 		const taskIndex = this.tasks.findIndex(t => t.id === taskId);
-		if (taskIndex === -1) return false;
+		if (taskIndex === -1) {
+			console.log(`[TaskManager] R3,R5: Failed to start task ${taskId} - task not found`);
+			return false;
+		}
 		
 		const task = this.tasks[taskIndex];
-		if (task.status !== 'prompting' && task.status !== 'queued') return false;
+		if (task.status !== 'prompting' && task.status !== 'queued') {
+			console.log(`[TaskManager] R3,R5: Failed to start task ${taskId} - invalid status: ${task.status}`);
+			return false;
+		}
 
 		const runningTask: RunningTask = {
 			...task,
@@ -113,13 +121,18 @@ export class TaskManager {
 		};
 		
 		this.tasks[taskIndex] = runningTask;
+		console.log(`[TaskManager] R3,R5: Successfully started task ${taskId} - terminal launched and Claude Code started`);
 		this.notifyListeners();
 		return true;
 	}
 
 	pauseTask(taskId: string): boolean {
+		console.log(`[TaskManager] R8: Attempting to pause task ${taskId} (manual control)`);
 		const taskIndex = this.tasks.findIndex(t => t.id === taskId);
-		if (taskIndex === -1 || this.tasks[taskIndex].status !== 'running') return false;
+		if (taskIndex === -1 || this.tasks[taskIndex].status !== 'running') {
+			console.log(`[TaskManager] R8: Failed to pause task ${taskId} - task not found or not running`);
+			return false;
+		}
 
 		const task = this.tasks[taskIndex] as RunningTask;
 		const pausedTask: PausedTask = {
@@ -129,13 +142,18 @@ export class TaskManager {
 		};
 
 		this.tasks[taskIndex] = pausedTask;
+		console.log(`[TaskManager] R8: Successfully paused task ${taskId} at ${pausedTask.pausedAt}`);
 		this.notifyListeners();
 		return true;
 	}
 
 	resumeTask(taskId: string): boolean {
+		console.log(`[TaskManager] R8: Attempting to resume task ${taskId} (manual control)`);
 		const taskIndex = this.tasks.findIndex(t => t.id === taskId);
-		if (taskIndex === -1 || this.tasks[taskIndex].status !== 'paused') return false;
+		if (taskIndex === -1 || this.tasks[taskIndex].status !== 'paused') {
+			console.log(`[TaskManager] R8: Failed to resume task ${taskId} - task not found or not paused`);
+			return false;
+		}
 
 		const task = this.tasks[taskIndex] as PausedTask;
 		const runningTask: RunningTask = {
@@ -144,16 +162,24 @@ export class TaskManager {
 		};
 
 		this.tasks[taskIndex] = runningTask;
+		console.log(`[TaskManager] R8: Successfully resumed task ${taskId} - sending continue prompt`);
 		this.notifyListeners();
 		return true;
 	}
 
 	failTask(taskId: string, reason?: string): boolean {
+		console.log(`[TaskManager] R15: Marking task ${taskId} as failed - reason: ${reason || 'unspecified'}`);
 		const taskIndex = this.tasks.findIndex(t => t.id === taskId);
-		if (taskIndex === -1) return false;
+		if (taskIndex === -1) {
+			console.log(`[TaskManager] R15: Failed to fail task ${taskId} - task not found`);
+			return false;
+		}
 		
 		const task = this.tasks[taskIndex];
-		if (task.status !== 'running' && task.status !== 'queued' && task.status !== 'paused') return false;
+		if (task.status !== 'running' && task.status !== 'queued' && task.status !== 'paused') {
+			console.log(`[TaskManager] R15: Failed to fail task ${taskId} - invalid status: ${task.status}`);
+			return false;
+		}
 
 		const failedTask: FailedTask = {
 			...task,
@@ -163,16 +189,24 @@ export class TaskManager {
 		};
 		
 		this.tasks[taskIndex] = failedTask;
+		console.log(`[TaskManager] R15: Successfully marked task ${taskId} as failed - will trigger git stash`);
 		this.notifyListeners();
 		return true;
 	}
 
 	completeTask(taskId: string, commitHash: string, dependsOn?: string[]): boolean {
+		console.log(`[TaskManager] R10: Completing task ${taskId} with commit hash: ${commitHash}`);
 		const taskIndex = this.tasks.findIndex(t => t.id === taskId);
-		if (taskIndex === -1) return false;
+		if (taskIndex === -1) {
+			console.log(`[TaskManager] R10: Failed to complete task ${taskId} - task not found`);
+			return false;
+		}
 		
 		const task = this.tasks[taskIndex];
-		if (task.status !== 'in_progress' && task.status !== 'running') return false;
+		if (task.status !== 'in_progress' && task.status !== 'running') {
+			console.log(`[TaskManager] R10: Failed to complete task ${taskId} - invalid status: ${task.status}`);
+			return false;
+		}
 
 		const completedTask: CompletedTask = {
 			...task,
@@ -184,6 +218,7 @@ export class TaskManager {
 		};
 		
 		this.tasks[taskIndex] = completedTask;
+		console.log(`[TaskManager] R10: Successfully completed task ${taskId} - manual commit via button pressed`);
 		this.notifyListeners();
 		return true;
 	}
@@ -213,8 +248,8 @@ export class TaskManager {
 		return this.tasks.filter(t => t.status === 'paused') as PausedTask[];
 	}
 
-	getInProgressTasks(): InProgressTask[] {
-		return this.tasks.filter(t => t.status === 'in_progress') as InProgressTask[];
+	getInProgressTasks(): RunningTask[] {
+		return this.tasks.filter(t => t.status === 'running') as RunningTask[];
 	}
 
 	getFailedTasks(): FailedTask[] {
@@ -237,22 +272,26 @@ export class TaskManager {
 		return promptingTasks[promptingTasks.length - 1]; // Latest prompting task
 	}
 
-	getCurrentInProgressTask(): InProgressTask | undefined {
+	getCurrentInProgressTask(): RunningTask | undefined {
 		const inProgressTasks = this.getInProgressTasks();
 		return inProgressTasks[inProgressTasks.length - 1]; // Latest in-progress task
 	}
 
 	// Task fusion logic for multi-task commits
 	fuseRunningTasks(): CompletedTask {
+		console.log(`[TaskManager] R7,Q1: Starting task fusion - combining running tasks into single commit`);
 		const runningTasks = this.getRunningTasks();
 		if (runningTasks.length === 0) {
+			console.log(`[TaskManager] R7,Q1: No running tasks to fuse - operation failed`);
 			throw new Error('No running tasks to fuse');
 		}
 
+		console.log(`[TaskManager] R7,Q1: Fusing ${runningTasks.length} running tasks - task IDs: ${runningTasks.map(t => t.id).join(', ')}`);
 		const firstTask = runningTasks[0];
 		
 		// Concatenate all running task prompts with separators
 		const fusedPrompt = runningTasks.map(t => t.prompt).join('\n\n---\n\n');
+		console.log(`[TaskManager] R7,Q1: Created fused prompt with ${fusedPrompt.length} characters using separator: \\n\\n---\\n\\n`);
 		
 		const fusedTask: CompletedTask = {
 			id: firstTask.id,
@@ -268,10 +307,12 @@ export class TaskManager {
 		
 		// Remove all running tasks from the list
 		this.tasks = this.tasks.filter(t => !runningTasks.includes(t as RunningTask));
+		console.log(`[TaskManager] Q11: Removed ${runningTasks.length} individual running tasks from data model - they disappear as if they never existed`);
 		
 		// Insert fused task at the position of the first running task (preserve order)
 		const insertIndex = this.tasks.findIndex(t => t.createdAt > firstTask.createdAt);
 		this.tasks.splice(insertIndex >= 0 ? insertIndex : this.tasks.length, 0, fusedTask);
+		console.log(`[TaskManager] Q11: Inserted fused task at position of first task (ID: ${firstTask.id}) - preserving order in list`);
 		
 		this.notifyListeners();
 		return fusedTask;
@@ -279,12 +320,16 @@ export class TaskManager {
 
 	// Ensure there's always an empty task for prompting
 	ensureEmptyTask(): void {
+		console.log(`[TaskManager] R1,Q5: Checking if empty task creation needed - auto-task creation logic`);
 		const hasEmptyPromptingTask = this.tasks.some(t => 
 			t.status === 'prompting' && (!t.prompt || t.prompt.trim() === '')
 		);
 		
 		if (!hasEmptyPromptingTask) {
+			console.log(`[TaskManager] R1,Q5: No empty prompting task found - creating new empty task automatically`);
 			this.createPromptingTask('');
+		} else {
+			console.log(`[TaskManager] R1,Q5: Empty prompting task already exists - no action needed`);
 		}
 	}
 
@@ -463,6 +508,27 @@ export class TaskManager {
 
 		this.tasks[taskIndex] = { ...task, prompt };
 		this.notifyListeners();
+		return true;
+	}
+
+	// Update commit hash for completed tasks (used after fusion)
+	updateCommitHash(taskId: string, commitHash: string): boolean {
+		console.log(`[TaskManager] R10: Updating commit hash for task ${taskId} to: ${commitHash}`);
+		const taskIndex = this.tasks.findIndex(t => t.id === taskId);
+		if (taskIndex === -1) {
+			console.log(`[TaskManager] R10: Failed to update commit hash - task ${taskId} not found`);
+			return false;
+		}
+		
+		const task = this.tasks[taskIndex];
+		if (task.status !== 'completed') {
+			console.log(`[TaskManager] R10: Failed to update commit hash - task ${taskId} not completed`);
+			return false;
+		}
+
+		(this.tasks[taskIndex] as CompletedTask).commitHash = commitHash;
+		this.notifyListeners();
+		console.log(`[TaskManager] R10: Successfully updated commit hash for task ${taskId}`);
 		return true;
 	}
 

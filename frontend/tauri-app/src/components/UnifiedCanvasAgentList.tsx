@@ -83,7 +83,7 @@ const getCanvasTaskInfo = (canvas: GitProjectCanvas): { prompt: string; isLoadin
 		const tasks = canvas.taskManager.getTasks();
 		
 		// Check if there's an in-progress task (actual running task)
-		const inProgressTask = tasks.find(task => task.status === 'in_progress');
+		const inProgressTask = tasks.find(task => task.status === 'running');
 		if (inProgressTask) {
 			let prompt = inProgressTask.prompt.trim();
 			prompt = prompt.replace(/\([^)]*\)/g, '').trim();

@@ -32,7 +32,10 @@ export const TerminalControls: React.FC<TerminalControlsProps> = ({
     <>
       {/* Hide/Show Toggle - At intersection of terminal and canvas */}
       <button
-        onClick={onToggleVisibility}
+        onClick={() => {
+          console.log(`[TerminalControls] R7: Terminal visibility toggle clicked - current: ${isTerminalVisible}, will become: ${!isTerminalVisible}`);
+          onToggleVisibility();
+        }}
         className={cn(
           "absolute left-0 top-1/2 -translate-y-1/2 z-20",
           "bg-[var(--base-300)] hover:bg-[var(--base-400)]",
@@ -49,7 +52,10 @@ export const TerminalControls: React.FC<TerminalControlsProps> = ({
         <>
           {/* Maximize Button - Floating top-right */}
           <button
-            onClick={onToggleMaximize}
+            onClick={() => {
+              console.log(`[TerminalControls] R7: Terminal maximize toggle clicked - current: ${isTerminalMaximized}, will become: ${!isTerminalMaximized}`);
+              onToggleMaximize();
+            }}
             className={cn(
               "absolute top-2 right-2 z-20",
               "bg-[var(--base-300)] hover:bg-[var(--base-400)]",
@@ -70,7 +76,15 @@ export const TerminalControls: React.FC<TerminalControlsProps> = ({
             )}>
               {/* Pause/Resume Button */}
               <button
-                onClick={isAgentPaused ? onResume : onPause}
+                onClick={() => {
+                  if (isAgentPaused) {
+                    console.log(`[TerminalControls] R8: Resume button clicked - agent will be resumed and continue execution`);
+                    onResume();
+                  } else {
+                    console.log(`[TerminalControls] R8: Pause button clicked - agent will be paused with escape sequences`);
+                    onPause();
+                  }
+                }}
                 className={cn(
                   "px-3 py-1 rounded text-sm transition-all",
                   "flex items-center gap-1",
@@ -86,7 +100,10 @@ export const TerminalControls: React.FC<TerminalControlsProps> = ({
               {/* Commit Button - Only when tasks are running */}
               {hasRunningTasks && (
                 <button
-                  onClick={onCommit}
+                  onClick={() => {
+                    console.log(`[TerminalControls] R10: Commit button clicked - will fuse running tasks and create manual commit`);
+                    onCommit();
+                  }}
                   className={cn(
                     "px-3 py-1 rounded text-sm transition-all",
                     "bg-[var(--positive-500)] text-[var(--whitest)]",

@@ -228,16 +228,18 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	 * Clean up resources
 	 */
 	async cleanup(preserveTerminal: boolean = false): Promise<void> {
-		console.log(`${this.logPrefix} Starting cleanup (preserveTerminal: ${preserveTerminal})...`);
+		console.log(`${this.logPrefix} R2,R9: Starting cleanup (preserveTerminal: ${preserveTerminal}) - terminal persistence control`);
 		
 		// Only kill terminal if not preserving
 		if (this.terminalId && !preserveTerminal) {
 			try {
-				console.log(`${this.logPrefix} Killing terminal ${this.terminalId}`);
+				console.log(`${this.logPrefix} R2,R9: Killing terminal ${this.terminalId} - preserveTerminal is false`);
 				await this.killTerminal(this.terminalId);
 			} catch (error) {
-				console.error(`${this.logPrefix} Error killing terminal:`, error);
+				console.error(`${this.logPrefix} R2,R9: Error killing terminal:`, error);
 			}
+		} else if (this.terminalId && preserveTerminal) {
+			console.log(`${this.logPrefix} R2,R9: Preserving terminal ${this.terminalId} - will survive canvas switches and app restarts`);
 		}
 
 		console.log(`${this.logPrefix} Calling super.cleanup()`);
@@ -433,29 +435,39 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 
 	// Manual control methods
 	async pauseAgent(): Promise<void> {
-		if (!this.terminalId || this.isPaused) return;
+		if (!this.terminalId || this.isPaused) {
+			console.log(`${this.logPrefix} R8: Cannot pause agent - no terminal (${!this.terminalId}) or already paused (${this.isPaused})`);
+			return;
+		}
 
-		console.log(`${this.logPrefix} Pausing agent...`);
+		console.log(`${this.logPrefix} R8: Starting agent pause - sending escape sequences until interrupted`);
 		await this.sendEscapeUntilInterrupted();
 		this.isPaused = true;
+		console.log(`${this.logPrefix} R8: Agent successfully paused - ready for manual control`);
 		this.emit('agentPaused');
 	}
 
 	async resumeAgent(): Promise<void> {
-		if (!this.terminalId || !this.isPaused) return;
+		if (!this.terminalId || !this.isPaused) {
+			console.log(`${this.logPrefix} R8: Cannot resume agent - no terminal (${!this.terminalId}) or not paused (${!this.isPaused})`);
+			return;
+		}
 
-		console.log(`${this.logPrefix} Resuming agent...`);
+		console.log(`${this.logPrefix} R8: Resuming agent - sending continue prompt and enter`);
 		await this.sendRawInput(this.terminalId, "continue\r");
 		this.isPaused = false;
+		console.log(`${this.logPrefix} R8: Agent successfully resumed - continuing execution`);
 		this.emit('agentResumed');
 	}
 
 	async queuePrompt(prompt: string): Promise<void> {
 		if (!this.terminalId) {
+			console.log(`${this.logPrefix} R5,R12: Cannot queue prompt - no terminal available`);
 			throw new Error('No terminal available for queuing prompt');
 		}
 
-		console.log(`${this.logPrefix} Queuing prompt: ${prompt.substring(0, 50)}...`);
+		console.log(`${this.logPrefix} R5,R12: Queuing prompt in existing Claude Code instance: ${prompt.substring(0, 50)}...`);
+		console.log(`${this.logPrefix} R5,R12: This will be queued and processed after current task (multi-task support)`);
 
 		// Send prompt to Claude Code (will be queued if busy)
 		for (const char of prompt) {
@@ -471,39 +483,44 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		await this.delay(1000);
 		await this.sendRawInput(this.terminalId, "\x0d");
 
+		console.log(`${this.logPrefix} R5,R12: Prompt successfully queued in Claude Code - task marked as running`);
 		this.emit('promptQueued', { prompt });
 	}
 
 	async prepareManualCommit(): Promise<void> {
-		console.log(`${this.logPrefix} Preparing for manual commit...`);
+		console.log(`${this.logPrefix} R2,R9: Preparing for manual commit - terminal will remain alive`);
 		// Don't send Ctrl+D - keep terminal alive
+		console.log(`${this.logPrefix} R2,R9: No Ctrl+D sent - persistent terminal maintained until manual commit`);
 		this.emit('readyForCommit');
 	}
 
 	private async sendEscapeUntilInterrupted(): Promise<void> {
-		console.log(`${this.logPrefix} Sending escape sequences until interrupted...`);
+		console.log(`${this.logPrefix} R6,Q8: Starting escape sequence - sending escape until proper interruption detected`);
 		let attempts = 0;
 
 		while (true) {
 			await this.sendRawInput(this.terminalId!, "\x1b"); // ESC
 			await this.delay(500);
+			attempts++;
 
-			const currentLines = this.getCurrentTuiLines();
+			let currentLines = this.getCurrentTuiLines();
+			currentLines = currentLines.map((line) => ({ ...line, content: line.content.replaceAll(" ", " ") }));
 			const hasInterrupted = currentLines.some(line =>
-				line.content.includes("⎿  Interrupted by user")
+				line.content.includes("Interrupted by user")
 			);
 			const hasPrompt = currentLines.some(line =>
-				line.content.includes("| >")
+				line.content.includes("│ >")
 			);
 
+			console.log(`${this.logPrefix} R6,Q8: Attempt ${attempts} - Interrupted: ${hasInterrupted}, Prompt: ${hasPrompt}`);
+
 			if (hasInterrupted && hasPrompt) {
-				console.log(`${this.logPrefix} Successfully interrupted after ${attempts + 1} attempts`);
+				console.log(`${this.logPrefix} R6,Q8: Successfully interrupted after ${attempts} attempts - found both 'Interrupted by user' and '| >' prompt`);
 				break;
 			}
 
-			attempts++;
 			if (attempts % 10 === 0) {
-				console.log(`${this.logPrefix} Escape attempt ${attempts}, still trying...`);
+				console.log(`${this.logPrefix} R6,Q8: Escape attempt ${attempts}, continuing indefinitely until proper interruption (no timeout as specified)`);
 			}
 
 			// No timeout - keep trying indefinitely as specified

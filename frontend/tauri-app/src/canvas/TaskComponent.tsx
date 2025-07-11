@@ -33,8 +33,14 @@ export const TaskComponent: React.FC<TaskComponentProps> = ({
   // Auto-resize textarea based on content
   useEffect(() => {
     if (textareaRef.current && task.status === 'prompting') {
+      const oldHeight = textareaRef.current.style.height;
       textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = Math.max(24, textareaRef.current.scrollHeight) + 'px';
+      const newHeight = Math.max(24, textareaRef.current.scrollHeight) + 'px';
+      textareaRef.current.style.height = newHeight;
+      
+      if (oldHeight !== newHeight) {
+        console.log(`[TaskComponent] R3: Auto-resized textarea for task ${task.id} - height: ${oldHeight} -> ${newHeight} (no scrollbar)`);
+      }
     }
   }, [localPrompt, task.status]);
 
@@ -46,6 +52,7 @@ export const TaskComponent: React.FC<TaskComponentProps> = ({
   }, [task.prompt, task.status]);
 
   const handlePromptChange = (value: string) => {
+    console.log(`[TaskComponent] R3: Prompt changed for task ${task.id} - length: ${value.length}, auto-resizing textarea`);
     setLocalPrompt(value);
     onUpdatePrompt(value);
   };
@@ -117,14 +124,13 @@ export const TaskComponent: React.FC<TaskComponentProps> = ({
           }
           className={cn(
             "w-[calc(100%-120px)] font-mono border-none text-base resize-none bg-transparent",
-            "overflow: hidden", // No scrollbar - auto-resize instead
+            "overflow-hidden", // No scrollbar - auto-resize instead
             getTaskStatusColor(),
             !isEditable && "cursor-default",
             !canEdit && "opacity-60",
-            "whitespace-pre-wrap break-words overflow-wrap-anywhere",
-            "scrollbar-none", // Ensure no scrollbar appears
-            "min-h-[24px]" // Minimum height
+            "whitespace-pre-wrap break-words overflow-wrap-anywhere"
           )}
+          style={{ minHeight: '24px', height: '24px' }}
           spellCheck={false}
           rows={1} // Start with single row
         />
@@ -142,7 +148,10 @@ export const TaskComponent: React.FC<TaskComponentProps> = ({
           {/* Start button */}
           {showStartButton && (
             <button
-              onClick={onStart}
+              onClick={() => {
+                console.log(`[TaskComponent] R4: Start button clicked for task ${task.id} - launching terminal or queuing in existing`);
+                onStart();
+              }}
               className={cn(
                 "px-2 py-0.5 text-xs rounded transition-all",
                 "bg-[var(--positive-400)] text-[var(--blackest)]",
@@ -158,7 +167,10 @@ export const TaskComponent: React.FC<TaskComponentProps> = ({
           {/* Stop, commit and start button */}
           {showStopCommitStartButton && (
             <button
-              onClick={onStopCommitStart}
+              onClick={() => {
+                console.log(`[TaskComponent] R12: Stop/Commit/Start button clicked for task ${task.id} - will interrupt, commit running tasks, then start this one`);
+                onStopCommitStart();
+              }}
               className={cn(
                 "px-2 py-0.5 text-xs rounded transition-all whitespace-nowrap",
                 "bg-[var(--acc-400)] text-[var(--blackest)]",
