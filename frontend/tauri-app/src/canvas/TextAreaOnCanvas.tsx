@@ -7,8 +7,6 @@ import { ClaudeCodeAgent } from "../services/ClaudeCodeAgent";
 import { useGitProject } from "../contexts/GitProjectContext";
 import { ProcessManager } from "../services/ProcessManager";
 import { ProcessState } from "../types/GitProject";
-import { GitService } from "../services/GitService";
-import { osSessionGetWorkingDirectory } from "../bindings/os";
 
 interface TextAreaOnCanvasProps {
 	layout: ElementLayout;
@@ -41,8 +39,6 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 		startTask,
 		completeTask,
 		updateTaskPrompt,
-		revertTask,
-		restoreTask,
 		currentCanvas,
 		getCanvasLockState,
 		canEditCanvas,
@@ -68,6 +64,20 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 	const currentInProgressTask = taskManager?.getCurrentInProgressTask();
 	const completedTasks = taskManager?.getCompletedTasks() || [];
 	const elementId = element.id;
+	
+	// Force re-render when TaskManager state changes
+	const [taskManagerUpdateTrigger, setTaskManagerUpdateTrigger] = useState(0);
+	
+	// Subscribe to TaskManager changes
+	useEffect(() => {
+		if (!taskManager) return;
+		
+		const unsubscribe = taskManager.subscribe(() => {
+			setTaskManagerUpdateTrigger(prev => prev + 1);
+		});
+		
+		return unsubscribe;
+	}, [taskManager]);
 	
 	// Initialize prompt from persistent storage
 	useEffect(() => {
@@ -287,65 +297,26 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 	}, [elementId]); // Only depend on elementId, not claudeAgent
 
 	const handleRevertTask = async (taskId: string) => {
+		if (!taskManager) return;
+		
 		try {
-			const task = taskManager?.getTask(taskId);
-			console.log(`[handleRevertTask] Task:`, task);
-			if (!task || task.status !== 'completed' || !task.commitHash || task.commitHash === "NO_CHANGES") {
-				console.log(`[handleRevertTask] Early return - invalid task state`);
-				return;
+			const success = await taskManager.performRevert(taskId, textAreaOsSession || { Local: "." });
+			if (!success) {
+				alert("Failed to revert: No target commit available or invalid task state");
 			}
-
-			const allTasks = taskManager?.getTasks();
-			const completedTasks = taskManager?.getCompletedTasks();
-			console.log(`[handleRevertTask] All tasks:`, allTasks);
-			console.log(`[handleRevertTask] Completed tasks:`, completedTasks);
-			
-			let targetCommitHash = taskManager?.getRevertTargetCommit(taskId);
-			console.log(`[handleRevertTask] Target commit hash from task manager:`, targetCommitHash);
-			
-			// If no task-based target, fall back to git-based revert (previous commit)
-			if (!targetCommitHash && task.commitHash) {
-				try {
-					// Use git to find the previous commit
-					const { invoke } = await import("@tauri-apps/api/core");
-					const gitLog = await invoke<string>('execute_command_with_os_session', {
-						command: 'git',
-						args: ['log', '--oneline', '-n', '2', '--format=%H'],
-						directory: osSessionGetWorkingDirectory(textAreaOsSession || { Local: "." }),
-						osSession: textAreaOsSession || { Local: "." }
-					});
-					
-					const commits = gitLog.trim().split('\n');
-					if (commits.length >= 2) {
-						targetCommitHash = commits[1]; // Previous commit
-						console.log(`[handleRevertTask] Using git-based revert to commit:`, targetCommitHash);
-					}
-				} catch (error) {
-					console.error(`[handleRevertTask] Failed to get git log:`, error);
-				}
-			}
-			
-			if (!targetCommitHash) {
-				console.log(`[handleRevertTask] No target commit hash available, cannot revert`);
-				return;
-			}
-			
-			await GitService.revertToCommit(textAreaOsSession || { Local: "." }, targetCommitHash);
-			revertTask(taskId);
 		} catch (error) {
 			alert(`Failed to revert: ${error}`);
 		}
 	};
 
 	const handleRestoreTask = async (taskId: string) => {
+		if (!taskManager) return;
+		
 		try {
-			const task = taskManager?.getTask(taskId);
-			if (!task || task.status !== 'completed' || !task.commitHash || task.commitHash === "NO_CHANGES") {
-				return;
+			const success = await taskManager.performRestore(taskId, textAreaOsSession || { Local: "." });
+			if (!success) {
+				alert("Failed to restore: Invalid task state");
 			}
-
-			await GitService.revertToCommit(textAreaOsSession || { Local: "." }, task.commitHash);
-			restoreTask(taskId);
 		} catch (error) {
 			alert(`Failed to restore: ${error}`);
 		}

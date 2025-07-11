@@ -276,7 +276,7 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 				className={cn(
 					"group flex flex-col gap-1.5 transition-all outline-0 rounded-md select-none relative z-50 border-[var(--acc-400-50)]",
 					showCanvases
-						? "w-[40ch]"
+						? "min-w-[25ch] w-[25ch] max-w-[25ch]"
 						: "w-1 my-0 hover:w-3 not-hover:bg-[var(--base-400-20)] hover:border-(length:--border)",
 				)}
 			>

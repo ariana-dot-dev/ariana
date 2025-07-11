@@ -1,3 +1,5 @@
+import { OsSession } from "../bindings/os";
+
 export type TaskStatus = 'prompting' | 'in_progress' | 'completed';
 
 export interface TaskBase {
@@ -31,6 +33,17 @@ export type Task = PromptingTask | InProgressTask | CompletedTask;
 
 export class TaskManager {
 	private tasks: Task[] = [];
+	private listeners: Set<() => void> = new Set();
+	
+	// Listener management methods
+	subscribe(listener: () => void): () => void {
+		this.listeners.add(listener);
+		return () => this.listeners.delete(listener);
+	}
+	
+	private notifyListeners(): void {
+		this.listeners.forEach(listener => listener());
+	}
 	
 	// Task creation and state transitions
 	createPromptingTask(prompt: string): string {
@@ -59,6 +72,7 @@ export class TaskManager {
 		};
 		
 		this.tasks[taskIndex] = inProgressTask;
+		this.notifyListeners();
 		return true;
 	}
 
@@ -79,6 +93,7 @@ export class TaskManager {
 		};
 		
 		this.tasks[taskIndex] = completedTask;
+		this.notifyListeners();
 		return true;
 	}
 
@@ -143,6 +158,7 @@ export class TaskManager {
 				(this.tasks[globalIndex] as CompletedTask).isReverted = true;
 			}
 		}
+		this.notifyListeners();
 		return true;
 	}
 
@@ -159,6 +175,7 @@ export class TaskManager {
 				(this.tasks[globalIndex] as CompletedTask).isReverted = false;
 			}
 		}
+		this.notifyListeners();
 		return true;
 	}
 
@@ -181,6 +198,101 @@ export class TaskManager {
 		return undefined;
 	}
 
+	/**
+	 * Perform git revert operation and update task state
+	 * @param taskId - ID of the task to revert
+	 * @param osSession - OS session for git operations
+	 * @returns Promise<boolean> - Success/failure
+	 */
+	async performRevert(taskId: string, osSession: OsSession): Promise<boolean> {
+		try {
+			const task = this.getTask(taskId);
+			if (!task || task.status !== 'completed' || !task.commitHash || task.commitHash === "NO_CHANGES") {
+				console.log(`[TaskManager] Cannot revert task ${taskId} - invalid state`);
+				return false;
+			}
+
+			// First try to get target commit from task history
+			let targetCommitHash = this.getRevertTargetCommit(taskId);
+			
+			// If no task-based target, fall back to git log (for first task)
+			if (!targetCommitHash && task.commitHash) {
+				try {
+					const { invoke } = await import("@tauri-apps/api/core");
+					const { osSessionGetWorkingDirectory } = await import("../bindings/os");
+					
+					const gitLog = await invoke<string>('execute_command_with_os_session', {
+						command: 'git',
+						args: ['log', '--oneline', '-n', '2', '--format=%H'],
+						directory: osSessionGetWorkingDirectory(osSession),
+						osSession
+					});
+					
+					const commits = gitLog.trim().split('\n');
+					if (commits.length >= 2) {
+						targetCommitHash = commits[1]; // Previous commit
+						console.log(`[TaskManager] Using git-based revert to commit: ${targetCommitHash}`);
+					}
+				} catch (error) {
+					console.error(`[TaskManager] Failed to get git log:`, error);
+				}
+			}
+			
+			if (!targetCommitHash) {
+				console.log(`[TaskManager] No target commit available for revert`);
+				return false;
+			}
+			
+			// Perform git revert
+			const { GitService } = await import('../services/GitService');
+			await GitService.revertToCommit(osSession, targetCommitHash);
+			
+			// Update task state
+			this.revertTask(taskId);
+			
+			console.log(`[TaskManager] Successfully reverted task ${taskId} to ${targetCommitHash}`);
+			// Notify listeners after successful revert
+			this.notifyListeners();
+			return true;
+			
+		} catch (error) {
+			console.error(`[TaskManager] Failed to revert task ${taskId}:`, error);
+			return false;
+		}
+	}
+
+	/**
+	 * Perform git restore operation and update task state
+	 * @param taskId - ID of the task to restore
+	 * @param osSession - OS session for git operations
+	 * @returns Promise<boolean> - Success/failure
+	 */
+	async performRestore(taskId: string, osSession: OsSession): Promise<boolean> {
+		try {
+			const task = this.getTask(taskId);
+			if (!task || task.status !== 'completed' || !task.commitHash || task.commitHash === "NO_CHANGES") {
+				console.log(`[TaskManager] Cannot restore task ${taskId} - invalid state`);
+				return false;
+			}
+
+			// Perform git restore to task's commit
+			const { GitService } = await import('../services/GitService');
+			await GitService.revertToCommit(osSession, task.commitHash);
+			
+			// Update task state
+			this.restoreTask(taskId);
+			
+			console.log(`[TaskManager] Successfully restored task ${taskId} to ${task.commitHash}`);
+			// Notify listeners after successful restore
+			this.notifyListeners();
+			return true;
+			
+		} catch (error) {
+			console.error(`[TaskManager] Failed to restore task ${taskId}:`, error);
+			return false;
+		}
+	}
+
 	// Update task prompt (only for prompting tasks)
 	updateTaskPrompt(taskId: string, prompt: string): boolean {
 		const taskIndex = this.tasks.findIndex(t => t.id === taskId);
@@ -190,6 +302,7 @@ export class TaskManager {
 		if (task.status !== 'prompting') return false;
 
 		this.tasks[taskIndex] = { ...task, prompt };
+		this.notifyListeners();
 		return true;
 	}
 
