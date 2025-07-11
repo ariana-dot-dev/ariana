@@ -28,7 +28,12 @@
       "Bash(curl:*)",
       "Bash(npm install:*)",
       "Bash(scp:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(dos2unix:*)",
+      "Bash(git checkout:*)",
+      "Bash(pkill:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": []
   }

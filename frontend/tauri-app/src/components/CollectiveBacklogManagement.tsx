@@ -569,7 +569,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 						<div className="text-[var(--base-600)]">Loading backlog items...</div>
 					</div>
 				) : (
-					// Backlog Table
+					/* Backlog Table */
 					<div className="bg-[var(--base-100)] rounded-lg border border-[var(--base-300)] overflow-hidden">
 						<div className="overflow-x-auto">
 							<table className="w-full text-sm table-fixed">
@@ -775,9 +775,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 												<td className="px-4 py-3">
 													<div className="flex gap-2">
 														<button
-															onClick={() => {
-																// TODO: Implement add to new agent
-															}}
+															onClick={() => {/* TODO: Implement add to new agent */}}
 															className="w-6 h-6 flex items-center justify-center bg-[var(--acc-500)] hover:bg-[var(--acc-600)] text-white rounded transition-colors"
 															title="Add to new agent"
 														>
@@ -786,9 +784,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 															</svg>
 														</button>
 														<button
-															onClick={() => {
-																// TODO: Implement add to selected agents
-															}}
+															onClick={() => {/* TODO: Implement add to selected agents */}}
 															className="w-6 h-6 flex items-center justify-center bg-[var(--positive-500)] hover:bg-[var(--positive-600)] text-white rounded transition-colors"
 															title="Add to agents selection"
 														>
@@ -871,7 +867,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 										</select>
 										<button
 											onClick={createNewTask}
-											className="px-3 py-1 text-sm bg-[var(--acc-500)] text-white rounded hover:bg-[var(--acc-600)] transition-colors w-16"
+											className="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors w-16"
 										>
 											Create
 										</button>
