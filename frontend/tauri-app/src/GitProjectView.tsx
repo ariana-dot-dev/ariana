@@ -5,6 +5,7 @@ import { useGitProject } from "./contexts/GitProjectContext";
 import { cn } from "./utils";
 import { useStore } from "./state";
 import { UnifiedCanvasAgentList } from "./components/UnifiedCanvasAgentList";
+import { AgentOverview } from "./components/AgentOverview";
 import { osSessionGetWorkingDirectory } from "./bindings/os";
 
 interface GitProjectViewProps {
@@ -28,6 +29,7 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 	const [showCanvases, setShowCanvases] = useState(true);
 	const [mergingCanvases, setMergingCanvases] = useState<Set<string>>(new Set());
 	const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+	const [viewMode, setViewMode] = useState<'canvas' | 'overview'>('canvas');
 
 	const canvasesHoveredRef = useRef(false);
 
@@ -115,10 +117,92 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 		}
 	};
 
-	// Handle unified item selection (canvas or background agent)
+	// Agent Overview handler functions
+	const handleAddPrompt = (canvasId: string, prompt: string) => {
+		if (!selectedGitProject) return;
+		
+		const canvas = selectedGitProject.canvases.find(c => c.id === canvasId);
+		if (!canvas) return;
+		
+		// Create a new prompting task with the provided prompt
+		const taskId = canvas.taskManager.createPromptingTask(prompt);
+		console.log(`Created new prompting task ${taskId} for canvas ${canvasId}`);
+		
+		// Save the updated project
+		updateGitProject(selectedGitProject.id);
+	};
+
+	const handlePlayCanvas = (canvasId: string) => {
+		if (!selectedGitProject) return;
+		
+		const canvas = selectedGitProject.canvases.find(c => c.id === canvasId);
+		if (!canvas) return;
+		
+		// Switch to this canvas and let the user interact with it
+		const canvasIndex = selectedGitProject.canvases.findIndex(c => c.id === canvasId);
+		if (canvasIndex !== -1) {
+			selectedGitProject.setCurrentCanvasIndex(canvasIndex);
+			updateGitProject(selectedGitProject.id);
+			setSelectedItemId(canvasId);
+			// Switch to canvas view
+			setViewMode('canvas');
+		}
+	};
+
+	const handlePauseCanvas = (canvasId: string) => {
+		if (!selectedGitProject) return;
+		
+		const canvas = selectedGitProject.canvases.find(c => c.id === canvasId);
+		if (!canvas) return;
+		
+		// For now, we'll just log this since there's no direct pause mechanism for tasks
+		// In a full implementation, this would interact with running processes
+		console.log(`Pause requested for canvas ${canvasId}`);
+		
+		// Cancel any running background agents for this canvas
+		const runningAgents = getBackgroundAgents().filter(agent => 
+			agent.status === 'running' && agent.context && 
+			(agent.context as any).canvasId === canvasId
+		);
+		
+		runningAgents.forEach(agent => {
+			cancelBackgroundAgent(agent.id);
+		});
+	};
+
+	const handleRunTest = (canvasId: string) => {
+		if (!selectedGitProject) return;
+		
+		const canvas = selectedGitProject.canvases.find(c => c.id === canvasId);
+		if (!canvas?.osSession) return;
+		
+		// This would typically run tests in the canvas workspace
+		// For now, we'll just log and potentially switch to the canvas
+		console.log(`Run test requested for canvas ${canvasId}`);
+		
+		// Switch to this canvas so user can see the test results
+		const canvasIndex = selectedGitProject.canvases.findIndex(c => c.id === canvasId);
+		if (canvasIndex !== -1) {
+			selectedGitProject.setCurrentCanvasIndex(canvasIndex);
+			updateGitProject(selectedGitProject.id);
+			setSelectedItemId(canvasId);
+			// Switch to canvas view
+			setViewMode('canvas');
+		}
+	};
+
+	// Handle unified item selection (canvas, background agent, or overview)
 	const handleItemSelect = (itemId: string | null) => {
 		if (!itemId || !selectedGitProject) {
 			setSelectedItemId(null);
+			setViewMode('canvas');
+			return;
+		}
+
+		// Check if it's the overview
+		if (itemId === 'agent-overview') {
+			setViewMode('overview');
+			setSelectedItemId(itemId);
 			return;
 		}
 
@@ -129,6 +213,7 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 			selectedGitProject.setCurrentCanvasIndex(canvasIndex);
 			updateGitProject(selectedGitProject.id);
 			setSelectedItemId(itemId);
+			setViewMode('canvas');
 			return;
 		}
 
@@ -137,11 +222,13 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 		if (agent) {
 			// It's a background agent - just select it for status display
 			setSelectedItemId(itemId);
+			setViewMode('canvas');
 			return;
 		}
 
 		// Unknown item
 		setSelectedItemId(null);
+		setViewMode('canvas');
 	};
 
 	// Get the directory name from the project root
@@ -263,12 +350,20 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 		}
 	}, [selectedGitProject?.id, selectedGitProject?.canvases.length, updateGitProject]);
 
-	// Sync selectedItemId with current canvas
+	// Show overview when no canvases are available
 	useEffect(() => {
-		if (currentCanvas && selectedItemId !== currentCanvas.id) {
+		if (selectedGitProject && selectedGitProject.canvases.length === 0 && viewMode === 'canvas') {
+			setViewMode('overview');
+			setSelectedItemId('agent-overview');
+		}
+	}, [selectedGitProject?.canvases.length, viewMode]);
+
+	// Sync selectedItemId with current canvas (only in canvas mode)
+	useEffect(() => {
+		if (viewMode === 'canvas' && currentCanvas && selectedItemId !== currentCanvas.id) {
 			setSelectedItemId(currentCanvas.id);
 		}
-	}, [currentCanvas?.id, selectedItemId]);
+	}, [currentCanvas?.id, selectedItemId, viewMode]);
 
 	return selectedGitProject ? (
 		<div className="w-full h-full flex gap-1.5">
@@ -303,12 +398,29 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 						</div>
 						
 						<div className="flex flex-col gap-2 h-full w-full overflow-y-auto">
-							<button
-								onClick={handleCreateCanvas}
-								className="self-end w-fit px-3 py-2 text-sm border-[var(--base-300)] border-dashed hover:border-solid border-(length:--border) cursor-pointer hover:bg-[var(--acc-100-70)] text-[var(--acc-800-70)] rounded-lg transition-colors flex items-center justify-center gap-2"
-							>
-								<span>+ new edit</span>
-							</button>
+							<div className="flex gap-2">
+								<button
+									onClick={handleCreateCanvas}
+									className="flex-1 px-3 py-2 text-sm border-[var(--base-300)] border-dashed hover:border-solid border-(length:--border) cursor-pointer hover:bg-[var(--acc-100-70)] text-[var(--acc-800-70)] rounded-lg transition-colors flex items-center justify-center gap-2"
+								>
+									<span>+ new edit</span>
+								</button>
+							</div>
+
+							{/* Agent Overview Item */}
+							<div className="flex flex-col gap-1">
+								<button
+									onClick={() => handleItemSelect('agent-overview')}
+									className={`w-full px-3 py-2 text-sm rounded-lg transition-colors text-left flex items-center gap-2 ${
+										selectedItemId === 'agent-overview'
+											? 'bg-[var(--acc-500)] text-white'
+											: 'hover:bg-[var(--acc-100-70)] text-[var(--base-700)]'
+									}`}
+								>
+									<span>📊</span>
+									<span>Agent Overview</span>
+								</button>
+							</div>
 
 							{/* Unified Canvas and Agent List */}
 							<UnifiedCanvasAgentList
@@ -326,7 +438,21 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 					</>
 				)}
 			</div>
-			{currentCanvas ? (
+			{viewMode === 'overview' ? (
+				<div className="w-full h-full animate-fade-in opacity-100">
+					<AgentOverview
+						canvases={selectedGitProject.canvases}
+						backgroundAgents={getBackgroundAgents()}
+						onAddPrompt={handleAddPrompt}
+						onPlayCanvas={handlePlayCanvas}
+						onPauseCanvas={handlePauseCanvas}
+						onDeleteCanvas={deleteWorkspace}
+						onMergeCanvas={handleMergeCanvas}
+						onRunTest={handleRunTest}
+						onCreateAgent={handleCreateCanvas}
+					/>
+				</div>
+			) : currentCanvas ? (
 				<div className="w-full h-full animate-fade-in opacity-100" key={currentCanvas.id}>
 					{currentCanvas.lockState === 'loading' ? (
 						<div className="w-full h-full flex items-center justify-center">
