@@ -29,7 +29,8 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 	const [newTaskData, setNewTaskData] = useState({
 		task: '',
 		priority: 3,
-		status: 'open' as const
+		status: 'open' as const,
+		owner: null
 	});
 
 	const backlogService = useMemo(() => new BacklogService(), []);
@@ -266,7 +267,8 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 			setNewTaskData({
 				task: '',
 				priority: 3,
-				status: 'open'
+				status: 'open',
+				owner: null
 			});
 			setShowCreateForm(false);
 			setError(null);
@@ -282,7 +284,8 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 		setNewTaskData({
 			task: '',
 			priority: 3,
-			status: 'open'
+			status: 'open',
+			owner: null
 		});
 		setError(null);
 	};
@@ -566,7 +569,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 						<div className="text-[var(--base-600)]">Loading backlog items...</div>
 					</div>
 				) : (
-					/* Backlog Table */
+					// Backlog Table
 					<div className="bg-[var(--base-100)] rounded-lg border border-[var(--base-300)] overflow-hidden">
 						<div className="overflow-x-auto">
 							<table className="w-full text-sm table-fixed">
@@ -648,9 +651,6 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 														>
 															<div className="font-medium text-[var(--base-800)] break-words line-clamp-4">
 																{item.task}
-															</div>
-															<div className="text-xs text-[var(--base-500)] break-all truncate">
-																{item.git_repository_url}
 															</div>
 														</div>
 													)}
@@ -775,7 +775,9 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 												<td className="px-4 py-3">
 													<div className="flex gap-2">
 														<button
-															onClick={() => {/* TODO: Implement add to new agent */}}
+															onClick={() => {
+																// TODO: Implement add to new agent
+															}}
 															className="w-6 h-6 flex items-center justify-center bg-[var(--acc-500)] hover:bg-[var(--acc-600)] text-white rounded transition-colors"
 															title="Add to new agent"
 														>
@@ -784,7 +786,9 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 															</svg>
 														</button>
 														<button
-															onClick={() => {/* TODO: Implement add to selected agents */}}
+															onClick={() => {
+																// TODO: Implement add to selected agents
+															}}
 															className="w-6 h-6 flex items-center justify-center bg-[var(--positive-500)] hover:bg-[var(--positive-600)] text-white rounded transition-colors"
 															title="Add to agents selection"
 														>
@@ -846,20 +850,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 									</button>
 								</div>
 								
-								<div className="flex gap-2 items-center justify-between">
-									{/* Show current repository info */}
-									{project?.gitOriginUrl && (
-										<div className="flex-1 text-xs text-[var(--base-600)] bg-[var(--base-50)] px-2 py-1 rounded border">
-											<span className="font-medium">Repository:</span> {project.gitOriginUrl}
-										</div>
-									)}
-									{!project?.gitOriginUrl && (
-										<div className="flex-1 text-xs text-[var(--negative-600)] bg-[var(--negative-50)] px-2 py-1 rounded border">
-											No .git URL detected, cannot provide backlog
-										</div>
-									)}
-									
-									<div className="flex gap-2 items-center">
+								<div className="flex gap-2 items-center justify-end">
 										<select
 											value={newTaskData.priority}
 											onChange={(e) => setNewTaskData(prev => ({ ...prev, priority: parseInt(e.target.value) }))}
