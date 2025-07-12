@@ -6,9 +6,18 @@ import { GitProject } from '../types/GitProject';
 interface CollectiveBacklogManagementProps {
 	project?: GitProject;
 	onClose?: () => void;
+	onCreateAgent?: () => string | undefined;
+	onAddPrompt?: (canvasId: string, prompt: string) => void;
+	selectedAgents?: string[];
 }
 
-export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementProps> = ({ project, onClose }) => {
+export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementProps> = ({ 
+	project, 
+	onClose, 
+	onCreateAgent, 
+	onAddPrompt, 
+	selectedAgents 
+}) => {
 	const [backlogItems, setBacklogItems] = useState<BacklogItem[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
@@ -286,6 +295,44 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 			owner: null
 		});
 		setError(null);
+	};
+
+	// Handle add to new agent
+	const handleAddToNewAgent = (item: BacklogItem) => {
+		console.log('Adding item to new agent:', item);
+		
+		if (!onCreateAgent || !onAddPrompt) {
+			console.error('Missing onCreateAgent or onAddPrompt functions');
+			return;
+		}
+		
+		// Create new agent
+		const newAgentId = onCreateAgent();
+		console.log('Created new agent:', newAgentId);
+		
+		if (newAgentId) {
+			// Add the task as a prompt to the new agent
+			onAddPrompt(newAgentId, item.task);
+			console.log(`Added task "${item.task}" to new agent ${newAgentId}`);
+		} else {
+			console.error('Failed to create new agent');
+		}
+	};
+
+	// Handle add to selected agents
+	const handleAddToSelectedAgents = (item: BacklogItem) => {
+		console.log('Adding item to selected agents:', item, 'Selected agents:', selectedAgents);
+		
+		if (!onAddPrompt || !selectedAgents || selectedAgents.length === 0) {
+			console.error('Missing onAddPrompt function or no agents selected');
+			return;
+		}
+		
+		// Add the task as a prompt to each selected agent
+		selectedAgents.forEach(agentId => {
+			onAddPrompt(agentId, item.task);
+			console.log(`Added task "${item.task}" to agent ${agentId}`);
+		});
 	};
 
 	// Sort and filter data
@@ -776,7 +823,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 												<td className="px-4 py-3">
 													<div className="flex gap-2">
 														<button
-															onClick={() => {/* TODO: Implement add to new agent */}}
+															onClick={() => handleAddToNewAgent(item)}
 															className="w-6 h-6 flex items-center justify-center bg-[var(--acc-500)] hover:bg-[var(--acc-600)] text-white rounded transition-colors"
 															title="Add to new agent"
 														>
@@ -785,9 +832,10 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 															</svg>
 														</button>
 														<button
-															onClick={() => {/* TODO: Implement add to selected agents */}}
+															onClick={() => handleAddToSelectedAgents(item)}
 															className="w-6 h-6 flex items-center justify-center bg-[var(--positive-500)] hover:bg-[var(--positive-600)] text-white rounded transition-colors"
 															title="Add to agents selection"
+															disabled={!selectedAgents || selectedAgents.length === 0}
 														>
 															<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16">
 																<path d="M9.5 0a.5.5 0 0 1 .5.5.5.5 0 0 0 .5.5.5.5 0 0 1 .5.5V2a.5.5 0 0 1-.5.5h-5A.5.5 0 0 1 5 2v-.5a.5.5 0 0 1 .5-.5.5.5 0 0 0 .5-.5.5.5 0 0 1 .5-.5h3Z"/>

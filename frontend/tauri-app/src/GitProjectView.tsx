@@ -23,7 +23,8 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 		cancelBackgroundAgent,
 		forceRemoveBackgroundAgent,
 		getCanvasLockState,
-		canEditCanvas
+		canEditCanvas,
+		getCurrentTaskManager
 	} = useGitProject();
 	const { updateGitProject, removeGitProject } = useStore();
 	const [showCanvases, setShowCanvases] = useState(true);
@@ -97,8 +98,8 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 	};
 
 	// Handle canvas creation
-	const handleCreateCanvas = () => {
-		if (!selectedGitProject) return;
+	const handleCreateCanvas = (): string | undefined => {
+		if (!selectedGitProject) return undefined;
 		
 		console.log("Creating new canvas copy...");
 		
@@ -111,9 +112,11 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 			setSelectedItemId(result.canvasId);
 			// Trigger state update to save to disk
 			updateGitProject(selectedGitProject.id);
+			return result.canvasId;
 		} else {
 			console.error("Failed to create canvas copy:", result.error);
 			alert(`Failed to create canvas copy: ${result.error}`);
+			return undefined;
 		}
 	};
 
@@ -453,6 +456,8 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 						onMergeCanvas={handleMergeCanvas}
 						onRunTest={handleRunTest}
 						onCreateAgent={handleCreateCanvas}
+						taskManager={getCurrentTaskManager()}
+						onProjectUpdate={() => updateGitProject(selectedGitProject.id)}
 					/>
 				</div>
 			) : currentCanvas ? (

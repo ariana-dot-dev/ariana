@@ -5,6 +5,7 @@ export interface TaskBase {
 	prompt: string;
 	createdAt: number;
 	status: TaskStatus;
+	linkedAgents?: string[]; // Array of canvas IDs this task is linked to
 }
 
 export interface PromptingTask extends TaskBase {
@@ -191,6 +192,61 @@ export class TaskManager {
 
 		this.tasks[taskIndex] = { ...task, prompt };
 		return true;
+	}
+
+	// Link task to agents
+	linkTaskToAgent(taskId: string, canvasId: string): boolean {
+		const taskIndex = this.tasks.findIndex(t => t.id === taskId);
+		if (taskIndex === -1) return false;
+		
+		const task = this.tasks[taskIndex];
+		const linkedAgents = task.linkedAgents || [];
+		
+		if (!linkedAgents.includes(canvasId)) {
+			this.tasks[taskIndex] = { 
+				...task, 
+				linkedAgents: [...linkedAgents, canvasId] 
+			};
+		}
+		return true;
+	}
+
+	// Link task to multiple agents
+	linkTaskToAgents(taskId: string, canvasIds: string[]): boolean {
+		const taskIndex = this.tasks.findIndex(t => t.id === taskId);
+		if (taskIndex === -1) return false;
+		
+		const task = this.tasks[taskIndex];
+		const linkedAgents = task.linkedAgents || [];
+		const newLinkedAgents = [...new Set([...linkedAgents, ...canvasIds])];
+		
+		this.tasks[taskIndex] = { 
+			...task, 
+			linkedAgents: newLinkedAgents 
+		};
+		return true;
+	}
+
+	// Remove link between task and agent
+	unlinkTaskFromAgent(taskId: string, canvasId: string): boolean {
+		const taskIndex = this.tasks.findIndex(t => t.id === taskId);
+		if (taskIndex === -1) return false;
+		
+		const task = this.tasks[taskIndex];
+		if (!task.linkedAgents) return false;
+		
+		this.tasks[taskIndex] = { 
+			...task, 
+			linkedAgents: task.linkedAgents.filter(id => id !== canvasId) 
+		};
+		return true;
+	}
+
+	// Get tasks linked to a specific agent
+	getTasksLinkedToAgent(canvasId: string): Task[] {
+		return this.tasks.filter(task => 
+			task.linkedAgents && task.linkedAgents.includes(canvasId)
+		);
 	}
 
 	// Serialization for persistence
