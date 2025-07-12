@@ -396,6 +396,8 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 				} else {
 					console.log(`[TextAreaOnCanvas] R13: Step 2 complete - Committed fused task with hash: ${commitHash}`);
 				}
+				
+				// Note: Process status will be updated when new task starts in step 3
 			} else {
 				console.log(`[TextAreaOnCanvas] R13: Step 2 skipped - No running tasks to commit`);
 			}
@@ -439,6 +441,14 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 			
 			// Reset agent state after manual commit
 			claudeAgent?.resetAfterCommit();
+			
+			// Update process status to finished since tasks are now committed
+			// but keep the process around for terminal persistence (R2, R9)
+			const existingProcess = getProcessByElementId(elementId);
+			if (existingProcess) {
+				console.log(`[TextAreaOnCanvas] R10: Updating process ${existingProcess.processId} status to 'completed' after manual commit`);
+				updateProcess(existingProcess.processId, { status: 'completed' });
+			}
 		} catch (error) {
 			console.error(`[TextAreaOnCanvas] R10: Manual commit failed:`, error);
 		}

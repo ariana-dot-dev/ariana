@@ -113,6 +113,12 @@ export class GitProject {
 		if (index >= -1 && index < this.canvases.length && index !== this.currentCanvasIndex) {
 			this.currentCanvasIndex = index;
 			this.lastModified = Date.now();
+			
+			// Check for running tasks with dead terminals when switching to a canvas
+			if (index >= 0 && index < this.canvases.length) {
+				this.checkAndFailOrphanedTasks(this.canvases[index]);
+			}
+			
 			this.notifyListeners('currentCanvasIndex');
 		}
 	}
@@ -618,6 +624,16 @@ export class GitProject {
 		
 		project.createdAt = data.createdAt || Date.now();
 		project.lastModified = data.lastModified || Date.now();
+		
+		// Check for orphaned running tasks after restoration
+		// This handles the case where the app was closed while tasks were running
+		if (project.currentCanvasIndex >= 0 && project.currentCanvasIndex < project.canvases.length) {
+			// Use setTimeout to avoid blocking the restoration process
+			setTimeout(() => {
+				project.checkAndFailOrphanedTasks(project.canvases[project.currentCanvasIndex]);
+			}, 100);
+		}
+		
 		return project;
 	}
 
@@ -750,5 +766,66 @@ export class GitProject {
 			this.notifyListeners('canvases');
 		}
 		return deleted;
+	}
+
+	/**
+	 * Check for running tasks with dead terminals and fail them
+	 * Called when switching to a canvas to handle R15 requirement
+	 */
+	private async checkAndFailOrphanedTasks(canvas: GitProjectCanvas): Promise<void> {
+		if (!canvas.taskManager) return;
+		
+		// ONLY check actually running tasks, not completed ones
+		const runningTasks = canvas.taskManager.getRunningTasks();
+		if (runningTasks.length === 0) return;
+		
+		console.log(`[GitProject] R15: Checking ${runningTasks.length} running tasks for dead terminals in canvas ${canvas.id}`);
+		
+		// Check if we need to stash (only once if any task needs to be failed)
+		let needsStash = false;
+		const tasksToFail: string[] = [];
+		
+		// Import ProcessManager to check terminal availability
+		const { ProcessManager } = await import('../services/ProcessManager');
+		
+		for (const task of runningTasks) {
+			if (task.processId) {
+				// Check if the process/terminal is still alive
+				const process = ProcessManager.getProcess(task.processId);
+				if (!process) {
+					console.log(`[GitProject] R15: Running task ${task.id} has dead terminal (process ${task.processId} not found)`);
+					tasksToFail.push(task.id);
+					needsStash = true;
+				}
+			} else {
+				// No processId means the terminal was never created or already dead
+				console.log(`[GitProject] R15: Running task ${task.id} has no process ID - marking as failed`);
+				tasksToFail.push(task.id);
+				needsStash = true;
+			}
+		}
+		
+		// Perform git stash if needed (R15, Q9)
+		if (needsStash && canvas.osSession) {
+			try {
+				console.log(`[GitProject] R15: Performing git stash before marking ${tasksToFail.length} tasks as failed`);
+				const { GitService } = await import('../services/GitService');
+				await GitService.stashChanges(canvas.osSession);
+				console.log(`[GitProject] R15: Git stash completed successfully`);
+			} catch (error) {
+				console.error(`[GitProject] R15: Git stash failed:`, error);
+				// Continue with task failure even if stash fails
+			}
+		}
+		
+		// Mark tasks as failed
+		for (const taskId of tasksToFail) {
+			canvas.taskManager.failTask(taskId, "Agent process terminated");
+		}
+		
+		if (tasksToFail.length > 0) {
+			console.log(`[GitProject] R15: Marked ${tasksToFail.length} tasks as failed due to dead terminals`);
+			this.notifyListeners('canvases');
+		}
 	}
 }
