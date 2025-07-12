@@ -151,6 +151,14 @@ impl TerminalState {
 			self.parser.process(valid);
 		}
 
+		// Log memory usage every 1000 lines to track buffer growth
+		if self.rows_state.len() > 0 && self.rows_state.len() % 1000 == 0 {
+			let estimated_bytes = self.rows_state.len() * self.cols as usize * 4; // Rough estimate: 4 bytes per character
+			let estimated_mb = estimated_bytes as f64 / (1024.0 * 1024.0);
+			println!("[MemoryTrack] Terminal buffer: {} lines, {} cols, estimated {}MB", 
+					 self.rows_state.len(), self.cols, estimated_mb);
+		}
+
 		self.build_screen_events(false)
 	}
 
@@ -552,7 +560,9 @@ impl CustomTerminalManager {
 		self.connections.lock().unwrap().insert(id.clone(), conn);
 		self.writers.lock().unwrap().insert(id.clone(), writer);
 
-		println!("Connected terminal: {}", id);
+		let total_connections = self.connections.lock().unwrap().len();
+		println!("[MemoryTrack] Connected terminal: {}, total connections: {}", id, total_connections);
+		
 		let events = self
 			.connections
 			.lock()
@@ -621,8 +631,12 @@ impl CustomTerminalManager {
 	}
 
 	pub fn kill_terminal(&self, id: &str) -> Result<()> {
-		self.connections.lock().unwrap().remove(id);
-		self.writers.lock().unwrap().remove(id);
+		let had_connection = self.connections.lock().unwrap().remove(id).is_some();
+		let had_writer = self.writers.lock().unwrap().remove(id).is_some();
+		let remaining_connections = self.connections.lock().unwrap().len();
+		
+		println!("[MemoryTrack] Killed terminal: {}, had_connection: {}, had_writer: {}, remaining connections: {}", 
+				 id, had_connection, had_writer, remaining_connections);
 		Ok(())
 	}
 }

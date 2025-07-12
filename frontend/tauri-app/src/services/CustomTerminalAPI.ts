@@ -161,10 +161,12 @@ export class CustomTerminalAPI {
 		callback: (events: TerminalEvent[]) => void, // Expect an array of events
 	): Promise<void> {
 		try {
+			const existingCount = this.eventListeners.size;
 			// Remove existing listener if any
 			const existingListener = this.eventListeners.get(id);
 			if (existingListener) {
 				existingListener();
+				console.log(`[MemoryTrack] Removed existing event listener for ${id}, total listeners: ${this.eventListeners.size}`);
 			}
 
 			// Listen for an array of TerminalEvent
@@ -177,6 +179,7 @@ export class CustomTerminalAPI {
 			);
 
 			this.eventListeners.set(id, unlisten);
+			console.log(`[MemoryTrack] Added event listener for ${id}, listeners: ${existingCount} → ${this.eventListeners.size}`);
 		} catch (error) {
 			throw new Error(`Failed to set up terminal event listener: ${error}`);
 		}
@@ -187,10 +190,12 @@ export class CustomTerminalAPI {
 	 */
 	async onTerminalDisconnect(id: string, callback: () => void): Promise<void> {
 		try {
+			const existingCount = this.disconnectListeners.size;
 			// Remove existing listener if any
 			const existingListener = this.disconnectListeners.get(id);
 			if (existingListener) {
 				existingListener();
+				console.log(`[MemoryTrack] Removed existing disconnect listener for ${id}, total disconnect listeners: ${this.disconnectListeners.size}`);
 			}
 
 			const unlisten = await listen(`custom-terminal-disconnect-${id}`, () => {
@@ -198,6 +203,7 @@ export class CustomTerminalAPI {
 			});
 
 			this.disconnectListeners.set(id, unlisten);
+			console.log(`[MemoryTrack] Added disconnect listener for ${id}, disconnect listeners: ${existingCount} → ${this.disconnectListeners.size}`);
 		} catch (error) {
 			throw new Error(
 				`Failed to set up terminal disconnect listener: ${error}`,
@@ -264,6 +270,9 @@ export class CustomTerminalAPI {
 	 * Cleanup all event listeners
 	 */
 	cleanup(): void {
+		const eventListenerCount = this.eventListeners.size;
+		const disconnectListenerCount = this.disconnectListeners.size;
+		
 		for (const unlisten of this.eventListeners.values()) {
 			unlisten();
 		}
@@ -274,6 +283,8 @@ export class CustomTerminalAPI {
 		this.disconnectListeners.clear();
 		this.terminalId = null;
 		this.isConnected = false;
+		
+		console.log(`[MemoryTrack] Cleaned up ${eventListenerCount} event listeners and ${disconnectListenerCount} disconnect listeners`);
 	}
 
 	/**
