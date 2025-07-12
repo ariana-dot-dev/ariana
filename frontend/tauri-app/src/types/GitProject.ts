@@ -729,6 +729,11 @@ export class GitProject {
 		return canvas?.runningProcesses?.find(p => p.elementId === elementId);
 	}
 
+	getElementIdByProcessId(canvasId: string, processId: string): string | undefined {
+		const canvas = this.canvases.find(c => c.id === canvasId);
+		return canvas?.runningProcesses?.find(p => p.processId === processId)?.elementId;
+	}
+
 	// In-progress prompt management
 	setInProgressPrompt(canvasId: string, elementId: string, prompt: string): boolean {
 		const canvas = this.canvases.find(c => c.id === canvasId);
@@ -750,23 +755,16 @@ export class GitProject {
 		return true;
 	}
 
-	getInProgressPrompt(canvasId: string, elementId: string): string | undefined {
+	cleanupInProgressPrompt(canvasId: string, elementId: string): void {
 		const canvas = this.canvases.find(c => c.id === canvasId);
-		return canvas?.inProgressPrompts?.get(elementId);
-	}
-
-	clearInProgressPrompt(canvasId: string, elementId: string): boolean {
-		const canvas = this.canvases.find(c => c.id === canvasId);
-		if (!canvas?.inProgressPrompts) return false;
-
-		const deleted = canvas.inProgressPrompts.delete(elementId);
-		if (deleted) {
+		if (canvas?.inProgressPrompts?.has(elementId)) {
+			canvas.inProgressPrompts.delete(elementId);
 			canvas.lastModified = Date.now();
 			this.lastModified = Date.now();
 			this.notifyListeners('canvases');
 		}
-		return deleted;
 	}
+
 
 	/**
 	 * Check for running tasks with dead terminals and fail them
@@ -820,7 +818,19 @@ export class GitProject {
 		
 		// Mark tasks as failed
 		for (const taskId of tasksToFail) {
+			// Get task to find processId before failing
+			const task = canvas.taskManager.getTask(taskId);
+			const processId = (task as any)?.processId;
+			
 			canvas.taskManager.failTask(taskId, "Agent process terminated");
+			
+			// Cleanup in-progress prompt when task fails
+			if (processId) {
+				const elementId = this.getElementIdByProcessId(canvas.id, processId);
+				if (elementId) {
+					this.cleanupInProgressPrompt(canvas.id, elementId);
+				}
+			}
 		}
 		
 		if (tasksToFail.length > 0) {

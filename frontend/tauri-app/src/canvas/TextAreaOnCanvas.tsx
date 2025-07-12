@@ -44,8 +44,6 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 		currentCanvas,
 		getCanvasLockState,
 		canEditCanvas,
-		getInProgressPrompt,
-		clearInProgressPrompt,
 		setInProgressPrompt
 	} = useGitProject();
 	
