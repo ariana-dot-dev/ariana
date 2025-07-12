@@ -50,10 +50,11 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	private hasSeenTryPrompt = false;
 	private hasSeenTrustPrompt = false;
 	private isProcessingEvents = false;
-	private eventQueue: TerminalEvent[][] = [];
 	private lastActivityTime: number = 0;
 	private osSession: OsSession | null = null;
 	private isCompletingTask: boolean = false;
+	private stateCheckInterval: number | null = null;
+	private lastStateCheck: number = 0;
 	// Manual control state
 	private isPaused: boolean = false;
 	private isManuallyControlled: boolean = false;
@@ -170,6 +171,9 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		if (!this.isRunning || !this.terminalId) return;
 
 		try {
+			// Stop the state check interval
+			this.stopStateCheckInterval();
+			
 			// Send Ctrl+C to interrupt
 			await this.sendCtrlC(this.terminalId);
 
@@ -207,6 +211,11 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		// Use terminal dimensions to get only visible lines, not the full history
 		const visibleLines = this.terminalLines || 24; // Default to 24 if not set
 		const startIndex = Math.max(0, this.screenLines.length - visibleLines);
+		
+		// Log screen buffer growth periodically
+		if (this.screenLines.length > 0 && this.screenLines.length % 1000 === 0) {
+			console.log(`[MemoryTrack] ${this.logPrefix} Screen buffer: ${this.screenLines.length} lines, visible: ${visibleLines}, memory estimate: ~${(this.screenLines.length * 80 / 1024).toFixed(1)}KB`);
+		}
 		
 		return this.screenLines.slice(startIndex).map((line, index) => ({
 			content: line.map((item) => item.lexeme).join(""),
@@ -248,6 +257,9 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		console.log(`${this.logPrefix} Calling super.cleanup()`);
 		super.cleanup();
 		
+		// Stop the state check interval
+		this.stopStateCheckInterval();
+		
 		this.isRunning = false;
 		this.currentTask = null;
 		this.currentPrompt = null;
@@ -255,8 +267,8 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		this.hasSeenTryPrompt = false;
 		this.hasSeenTrustPrompt = false;
 		this.isProcessingEvents = false;
-		this.eventQueue = [];
 		this.lastActivityTime = 0;
+		this.lastStateCheck = 0;
 		this.isCompletingTask = false;
 		this.isPaused = false;
 		this.isManuallyControlled = false;
@@ -272,75 +284,108 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 
 		try {
 			this.onTerminalEvent(this.terminalId, (events: TerminalEvent[]) => {
-				// Remove excessive logging that causes performance issues
-				this.queueEventBatch(events);
+				// Just update the internal state, don't process immediately
+				this.updateInternalState(events);
 			});
+			
+			// Start 1-second state checking interval
+			this.startStateCheckInterval();
 		} catch (error) {
 			console.error(this.logPrefix, "❌ Error setting up ClaudeCodeAgent event listener:", error);
 		}
 	}
 
-	private queueEventBatch(events: TerminalEvent[]): void {
-		this.eventQueue.push(events);
-		this.processEventQueue();
+	private startStateCheckInterval(): void {
+		if (this.stateCheckInterval) return; // Already running
+		
+		console.log(`${this.logPrefix} Starting 1-second state check interval`);
+		this.stateCheckInterval = window.setInterval(() => {
+			this.checkCurrentState();
+		}, 1000); // Check state every 1 second
 	}
-
-	private async processEventQueue(): Promise<void> {
-		if (this.isProcessingEvents || this.eventQueue.length === 0) {
-			return;
-		}
-
-		this.isProcessingEvents = true;
-
-		try {
-			while (this.eventQueue.length > 0) {
-				const events = this.eventQueue.shift()!;
-				await this.handleTerminalEvents(events);
-			}
-		} catch (error) {
-			console.error(this.logPrefix, "Error processing event queue:", error);
-		} finally {
-			this.isProcessingEvents = false;
+	
+	private stopStateCheckInterval(): void {
+		if (this.stateCheckInterval) {
+			window.clearInterval(this.stateCheckInterval);
+			this.stateCheckInterval = null;
+			console.log(`${this.logPrefix} Stopped state check interval`);
 		}
 	}
+	
+	private updateInternalState(events: TerminalEvent[]): void {
+		// Silently update internal state without processing
+		this.handleTerminalEvents(events);
+		this.lastActivityTime = Date.now();
+	}
+	
+	private checkCurrentState(): void {
+		const now = Date.now();
+		this.lastStateCheck = now;
+		
+		// Get current TUI lines for CLI agents library
+		const tuiLines = this.getCurrentTuiLines();
+		
+		// Only emit and process if we have actual content
+		if (tuiLines.length > 0) {
+			// Emit screen update event
+			this.emit("screenUpdate", tuiLines);
+			
+			// Process TUI interactions based on current state
+			this.processTuiInteraction(tuiLines).catch(error => {
+				console.error(this.logPrefix, "Error in TUI interaction processing:", error);
+			});
+		}
+	}
 
-	private async handleTerminalEvents(events: TerminalEvent[]): Promise<void> {
+	private handleTerminalEvents(events: TerminalEvent[]): void {
+		// Only process the latest screen state, not intermediate changes
+		let latestScreenUpdate: TerminalEvent | null = null;
+		let hasPatches = false;
+		let hasNewLines = false;
+
+		// Find the latest complete screen update or collect patches/newLines
 		for (const event of events) {
 			switch (event.type) {
 				case "screenUpdate":
-					if (event.screen) {
-						this.screenLines = [...event.screen];
-					}
+					latestScreenUpdate = event; // Use the latest screen update
+					hasPatches = false; // Screen update supersedes patches
+					hasNewLines = false; // Screen update supersedes new lines
 					break;
-
-				case "newLines":
-					if (event.lines) {
-						this.screenLines.push(...event.lines);
-					}
-					break;
-
 				case "patch":
-					if (event.line !== undefined && event.items) {
-						// Ensure we have enough lines
-						while (this.screenLines.length <= event.line) {
-							this.screenLines.push([]);
-						}
-						this.screenLines[event.line] = [...event.items];
-					}
+					if (!latestScreenUpdate) hasPatches = true;
+					break;
+				case "newLines":
+					if (!latestScreenUpdate) hasNewLines = true;
 					break;
 			}
 		}
 
-		// Update last activity time
-		this.lastActivityTime = Date.now();
+		// Apply the final state
+		if (latestScreenUpdate && latestScreenUpdate.screen) {
+			this.screenLines = [...latestScreenUpdate.screen];
+		} else if (hasPatches || hasNewLines) {
+			// Only apply patches/newLines if no complete screen update
+			for (const event of events) {
+				switch (event.type) {
+					case "newLines":
+						if (event.lines) {
+							this.screenLines.push(...event.lines);
+						}
+						break;
+					case "patch":
+						if (event.line !== undefined && event.items) {
+							while (this.screenLines.length <= event.line) {
+								this.screenLines.push([]);
+							}
+							this.screenLines[event.line] = [...event.items];
+						}
+						break;
+				}
+			}
+		}
 
-		// Get current TUI lines for CLI agents library
-		const tuiLines = this.getCurrentTuiLines();
-		// Emit screen update event
-		this.emit("screenUpdate", tuiLines);
-
-		// Process TUI interactions based on new lines
-		await this.processTuiInteraction(tuiLines);
+		// Just update the internal state, don't emit events here
+		// Events will be emitted during the 1-second state check
 	}
 
 	private async initializeClaudeCode(): Promise<void> {

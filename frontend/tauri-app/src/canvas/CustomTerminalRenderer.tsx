@@ -31,6 +31,7 @@ class TerminalConnectionManager {
 		scrollPosition: { scrollTop: number; scrollHeight: number };
 		isAtBottom: boolean;
 	}>(); // elementId -> terminal screen state
+	private static memoryTrackingStarted = false;
 
 	static getConnection(elementId: string): string | undefined {
 		return TerminalConnectionManager.connections.get(elementId);
@@ -38,12 +39,19 @@ class TerminalConnectionManager {
 
 	static setConnection(elementId: string, terminalId: string): void {
 		TerminalConnectionManager.connections.set(elementId, terminalId);
+		console.log(`[MemoryTrack] Added connection ${elementId} -> ${terminalId}, total connections: ${TerminalConnectionManager.connections.size}`);
+		TerminalConnectionManager.startMemoryTracking();
 	}
 
 	static removeConnection(elementId: string): void {
+		const hadConnection = TerminalConnectionManager.connections.has(elementId);
+		const hadScreenState = TerminalConnectionManager.screenStates.has(elementId);
+		
 		TerminalConnectionManager.connections.delete(elementId);
 		// Also remove screen state when connection is removed
 		TerminalConnectionManager.screenStates.delete(elementId);
+		
+		console.log(`[MemoryTrack] Removed connection ${elementId}, total connections: ${TerminalConnectionManager.connections.size}, had connection: ${hadConnection}, had screen state: ${hadScreenState}`);
 	}
 
 
@@ -69,6 +77,10 @@ class TerminalConnectionManager {
 			line ? [...line.filter(item => item !== undefined)] : []
 		);
 		
+		const previousState = TerminalConnectionManager.screenStates.get(elementId);
+		const previousLineCount = previousState?.screen.length || 0;
+		const newLineCount = safeScreen.length;
+		
 		TerminalConnectionManager.screenStates.set(elementId, {
 			screen: safeScreen,
 			cursorPosition: { ...cursorPosition },
@@ -76,10 +88,54 @@ class TerminalConnectionManager {
 			scrollPosition: scrollPosition || { scrollTop: 0, scrollHeight: 0 },
 			isAtBottom: isAtBottom ?? true
 		});
+		
+		// Log significant screen size changes
+		if (Math.abs(newLineCount - previousLineCount) > 100) {
+			console.log(`[MemoryTrack] Screen state updated for ${elementId}: ${previousLineCount} -> ${newLineCount} lines (${newLineCount > previousLineCount ? '+' : ''}${newLineCount - previousLineCount})`);
+		}
 	}
 
 	static hasScreenState(elementId: string): boolean {
 		return TerminalConnectionManager.screenStates.has(elementId);
+	}
+
+	static logMemoryUsage(): void {
+		const connectionsSize = TerminalConnectionManager.connections.size;
+		const screenStatesSize = TerminalConnectionManager.screenStates.size;
+		const totalScreenLines = Array.from(TerminalConnectionManager.screenStates.values())
+			.reduce((sum, state) => sum + state.screen.length, 0);
+		const totalScreenItems = Array.from(TerminalConnectionManager.screenStates.values())
+			.reduce((sum, state) => sum + state.screen.reduce((lineSum, line) => lineSum + line.length, 0), 0);
+		
+		const estimatedMemoryMB = (totalScreenItems * 100) / (1024 * 1024); // Rough estimate: 100 bytes per LineItem
+		
+		console.log(`[MemoryTrack] TerminalConnectionManager: ${connectionsSize} connections, ${screenStatesSize} screen states, ${totalScreenLines} total lines, ${totalScreenItems} total items (~${estimatedMemoryMB.toFixed(1)}MB)`);
+		
+		// Log individual large screen states
+		TerminalConnectionManager.screenStates.forEach((state, elementId) => {
+			if (state.screen.length > 5000) {
+				console.log(`[MemoryTrack] Large screen state: ${elementId} has ${state.screen.length} lines`);
+			}
+		});
+	}
+
+	static startMemoryTracking(): void {
+		if (TerminalConnectionManager.memoryTrackingStarted) return;
+		TerminalConnectionManager.memoryTrackingStarted = true;
+		
+		// Log memory usage every 30 seconds
+		const interval = setInterval(() => {
+			TerminalConnectionManager.logMemoryUsage();
+			
+			// Stop tracking if no connections remain
+			if (TerminalConnectionManager.connections.size === 0) {
+				console.log(`[MemoryTrack] No terminal connections remaining, stopping memory tracking`);
+				clearInterval(interval);
+				TerminalConnectionManager.memoryTrackingStarted = false;
+			}
+		}, 30000);
+		
+		console.log(`[MemoryTrack] Started TerminalConnectionManager memory tracking`);
 	}
 }
 
@@ -737,8 +793,9 @@ const Chunk = React.memo(
 	}) => {
 		const ref = useRef<HTMLDivElement>(null);
 		const isInView = useInView(ref);
+		const renderStart = performance.now();
 
-		return (
+		const result = (
 			<div ref={ref} className={cn("flex flex-col w-full")}>
 				{isInView ? (
 					lines.map((line, index) => (
@@ -758,8 +815,17 @@ const Chunk = React.memo(
 				)}
 			</div>
 		);
+
+		const renderTime = performance.now() - renderStart;
+		if (renderTime > 5) { // Log slow chunk renders
+			console.warn(`[PerfTrack] Slow chunk render: ${renderTime.toFixed(2)}ms for ${lines.length} lines at start ${start}, inView: ${isInView}`);
+		}
+
+		return result;
 	},
 	(prevProps, nextProps) => {
+		const compareStart = performance.now();
+		
 		// deep compare
 		if (prevProps.start !== nextProps.start) return false;
 		if (prevProps.lines.length !== nextProps.lines.length) return false;
@@ -799,6 +865,12 @@ const Chunk = React.memo(
 				}
 			}
 		}
+		
+		const compareTime = performance.now() - compareStart;
+		if (compareTime > 10) { // Log slow memo comparisons
+			console.warn(`[PerfTrack] Slow chunk memo comparison: ${compareTime.toFixed(2)}ms for ${prevProps.lines.length} lines at start ${prevProps.start}`);
+		}
+		
 		return true;
 	},
 );
@@ -898,6 +970,8 @@ const Row = React.memo(
 		);
 	},
 	(prevProps, nextProps) => {
+		const compareStart = performance.now();
+		
 		// deep compare
 		if (prevProps.row !== nextProps.row) return false;
 		if (prevProps.isLightTheme !== nextProps.isLightTheme) return false;
@@ -930,6 +1004,12 @@ const Row = React.memo(
 				return false;
 			}
 		}
+		
+		const compareTime = performance.now() - compareStart;
+		if (compareTime > 5) { // Log slow row memo comparisons
+			console.warn(`[PerfTrack] Slow row memo comparison: ${compareTime.toFixed(2)}ms for row ${prevProps.row} with ${prevProps.line.length} items`);
+		}
+		
 		return true;
 	},
 );
