@@ -31,6 +31,54 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 }) => {
 	const [promptInputs, setPromptInputs] = useState<{[key: string]: string}>({});
 	const [showPromptInput, setShowPromptInput] = useState<{[key: string]: boolean}>({});
+	const [selectedCanvases, setSelectedCanvases] = useState<Set<string>>(new Set());
+	const [selectedBackgroundAgents, setSelectedBackgroundAgents] = useState<Set<string>>(new Set());
+
+	// Selection helper functions
+	const toggleCanvasSelection = (canvasId: string) => {
+		setSelectedCanvases(prev => {
+			const newSet = new Set(prev);
+			if (newSet.has(canvasId)) {
+				newSet.delete(canvasId);
+			} else {
+				newSet.add(canvasId);
+			}
+			return newSet;
+		});
+	};
+
+	const toggleAllCanvases = () => {
+		if (selectedCanvases.size === canvases.length) {
+			setSelectedCanvases(new Set());
+		} else {
+			setSelectedCanvases(new Set(canvases.map(c => c.id)));
+		}
+	};
+
+	const toggleBackgroundAgentSelection = (agentId: string) => {
+		setSelectedBackgroundAgents(prev => {
+			const newSet = new Set(prev);
+			if (newSet.has(agentId)) {
+				newSet.delete(agentId);
+			} else {
+				newSet.add(agentId);
+			}
+			return newSet;
+		});
+	};
+
+	const toggleAllBackgroundAgents = () => {
+		if (selectedBackgroundAgents.size === backgroundAgents.length) {
+			setSelectedBackgroundAgents(new Set());
+		} else {
+			setSelectedBackgroundAgents(new Set(backgroundAgents.map(a => a.id)));
+		}
+	};
+
+	const clearSelection = () => {
+		setSelectedCanvases(new Set());
+		setSelectedBackgroundAgents(new Set());
+	};
 
 	const getCanvasTaskCounts = (canvasId: string) => {
 		const canvas = canvases.find(c => c.id === canvasId);
@@ -182,15 +230,71 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 				<div className="bg-[var(--base-100)] rounded-lg p-4 border border-[var(--base-300)]">
 					<div className="flex items-center justify-between mb-4">
 						<h3 className="text-lg font-medium text-[var(--base-800)]">Agents</h3>
-						<span className="text-sm text-[var(--base-600)]">
-							{canvases.length} agent{canvases.length !== 1 ? 's' : ''}
-							{backgroundAgents.length > 0 && ` • ${backgroundAgents.length} background`}
-						</span>
+						<div className="flex items-center gap-4">
+							{(selectedCanvases.size > 0 || selectedBackgroundAgents.size > 0) && (
+								<div className="flex items-center gap-2">
+									<span className="text-sm text-[var(--base-600)]">
+										{selectedCanvases.size + selectedBackgroundAgents.size} selected
+									</span>
+									<button
+										onClick={clearSelection}
+										className="text-xs px-2 py-1 bg-[var(--base-200)] text-[var(--base-700)] rounded hover:bg-[var(--base-300)] transition-colors"
+									>
+										Clear
+									</button>
+									<div className="flex gap-1">
+										{selectedCanvases.size > 0 && (
+											<>
+												<button
+													onClick={() => {
+														selectedCanvases.forEach(id => onPlayCanvas?.(id));
+														clearSelection();
+													}}
+													className="text-xs px-2 py-1 bg-[var(--positive-500)] text-white rounded hover:bg-[var(--positive-600)] transition-colors"
+												>
+													▶ Start ({selectedCanvases.size})
+												</button>
+												<button
+													onClick={() => {
+														selectedCanvases.forEach(id => onPauseCanvas?.(id));
+														clearSelection();
+													}}
+													className="text-xs px-2 py-1 bg-[var(--base-500)] text-white rounded hover:bg-[var(--base-600)] transition-colors"
+												>
+													⏸ Pause ({selectedCanvases.size})
+												</button>
+												<button
+													onClick={() => {
+														selectedCanvases.forEach(id => onDeleteCanvas?.(id));
+														clearSelection();
+													}}
+													className="text-xs px-2 py-1 bg-[var(--negative-500)] text-white rounded hover:bg-[var(--negative-600)] transition-colors"
+												>
+													🗑 Delete ({selectedCanvases.size})
+												</button>
+											</>
+										)}
+									</div>
+								</div>
+							)}
+							<span className="text-sm text-[var(--base-600)]">
+								{canvases.length} agent{canvases.length !== 1 ? 's' : ''}
+								{backgroundAgents.length > 0 && ` • ${backgroundAgents.length} background`}
+							</span>
+						</div>
 					</div>
 					<div className="overflow-x-auto">
 						<table className="w-full text-sm">
 							<thead className="border-b border-[var(--base-300)]">
 								<tr className="text-left">
+									<th className="pb-2 font-medium text-[var(--base-700)] w-8">
+										<input
+											type="checkbox"
+											checked={canvases.length > 0 && selectedCanvases.size === canvases.length}
+											onChange={toggleAllCanvases}
+											className="rounded border-[var(--base-400)]"
+										/>
+									</th>
 									<th className="pb-2 font-medium text-[var(--base-700)] w-32">Agent Name</th>
 									<th className="pb-2 font-medium text-[var(--base-700)] w-auto">Prompts</th>
 									<th className="pb-2 font-medium text-[var(--base-700)] w-24">Status</th>
@@ -206,7 +310,15 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 									const agentName = generateCanvasName(canvas, index);
 									
 									return (
-										<tr key={canvas.id} className="hover:bg-[var(--base-50)]">
+										<tr key={canvas.id} className={`hover:bg-[var(--base-50)] ${selectedCanvases.has(canvas.id) ? 'bg-[var(--acc-100)]' : ''}`}>
+											<td className="py-3 pr-4">
+												<input
+													type="checkbox"
+													checked={selectedCanvases.has(canvas.id)}
+													onChange={() => toggleCanvasSelection(canvas.id)}
+													className="rounded border-[var(--base-400)]"
+												/>
+											</td>
 											<td className="py-3 pr-4">
 												<div className="flex items-center gap-2">
 													<div className="w-2 h-2 rounded-full bg-[var(--acc-500)]"></div>
@@ -356,7 +468,15 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 								
 								{/* Background Agents */}
 								{backgroundAgents.map((agent) => (
-									<tr key={agent.id} className="hover:bg-[var(--base-50)]">
+									<tr key={agent.id} className={`hover:bg-[var(--base-50)] ${selectedBackgroundAgents.has(agent.id) ? 'bg-[var(--acc-100)]' : ''}`}>
+										<td className="py-3 pr-4">
+											<input
+												type="checkbox"
+												checked={selectedBackgroundAgents.has(agent.id)}
+												onChange={() => toggleBackgroundAgentSelection(agent.id)}
+												className="rounded border-[var(--base-400)]"
+											/>
+										</td>
 										<td className="py-3 pr-4">
 											<div className="flex items-center gap-2">
 												<div className={`w-2 h-2 rounded-full ${
