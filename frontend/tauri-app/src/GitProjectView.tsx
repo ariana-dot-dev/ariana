@@ -332,38 +332,48 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 		
 		try {
 			const canvas = selectedGitProject.canvases.find(c => c.id === canvasId);
-			if (!canvas?.osSession) {
-				console.warn("Canvas osSession is not ready yet. Cannot delete workspace.");
+			
+			if (!canvas) return;
+			
+			// Check if we can delete even without osSession (for canvases that failed to initialize)
+			if (!canvas.osSession && canvas.lockState !== 'loading') {
+				// Canvas doesn't have a workspace yet, so we can just remove it from the project
+				const confirmed = window.confirm(`Are you sure you want to remove this agent? It doesn't appear to have a workspace created yet.`);
+				if (confirmed) {
+					selectedGitProject.removeCanvas(canvasId);
+					updateGitProject(selectedGitProject.id);
+				}
 				return;
 			}
 
-			let deletePath = "";
-			if ('Local' in canvas.osSession) {
-				deletePath = canvas.osSession.Local;
-			} else if ('Wsl' in canvas.osSession) {
-				deletePath = canvas.osSession.Wsl.working_directory;
-			}
-
-			if (!deletePath) return;
-
-			const confirmed = window.confirm(`Are you sure you want to permanently delete this workspace and all its files? This action cannot be undone.\n\nPath: ${deletePath}`);
-			if (confirmed) {
-				// Try to return to pool first (for reuse if possible)
-				try {
-					await selectedGitProject.returnCanvasCopy(canvasId);
-				} catch (returnError) {
-					console.warn('Could not return canvas to pool, deleting instead:', returnError);
-					// Delete from filesystem using osSession-aware deletion
-					await invoke("delete_path_with_os_session", { 
-						path: deletePath, 
-						osSession: canvas.osSession 
-					});
+			// Handle case where osSession exists
+			if (canvas.osSession) {
+				let deletePath = "";
+				if ('Local' in canvas.osSession) {
+					deletePath = canvas.osSession.Local;
+				} else if ('Wsl' in canvas.osSession) {
+					deletePath = canvas.osSession.Wsl.working_directory;
 				}
-				
-				// Remove from project
-				selectedGitProject.removeCanvas(canvasId);
-				updateGitProject(selectedGitProject.id);
-				console.log(`Deleted workspace from project: ${canvasId}`);
+
+				if (!deletePath) return;
+
+				const confirmed = window.confirm(`Are you sure you want to permanently delete this workspace and all its files? This action cannot be undone.\n\nPath: ${deletePath}`);
+				if (confirmed) {
+					// Try to return to pool first (for reuse if possible)
+					try {
+						await selectedGitProject.returnCanvasCopy(canvasId);
+					} catch (returnError) {
+						// Delete from filesystem using osSession-aware deletion
+						await invoke("delete_path_with_os_session", { 
+							path: deletePath, 
+							osSession: canvas.osSession 
+						});
+					}
+					
+					// Remove from project
+					selectedGitProject.removeCanvas(canvasId);
+					updateGitProject(selectedGitProject.id);
+				}
 			}
 		} catch (error) {
 			console.error("Failed to delete workspace:", error);

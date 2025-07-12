@@ -413,7 +413,9 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 													⏸ Pause ({selectedCanvases.size})
 												</button>
 												<button
-													onClick={() => {
+													onClick={(e) => {
+														e.preventDefault();
+														e.stopPropagation();
 														selectedCanvases.forEach(id => onDeleteCanvas?.(id));
 														clearSelection();
 													}}
@@ -700,7 +702,11 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 													</div>
 													<div className="relative group">
 														<button
-															onClick={() => onDeleteCanvas && onDeleteCanvas(canvas.id)}
+															onClick={(e) => {
+																e.preventDefault();
+																e.stopPropagation();
+																onDeleteCanvas?.(canvas.id);
+															}}
 															className="p-2 text-xs bg-[var(--negative-500)] text-white rounded hover:bg-[var(--negative-600)] transition-colors flex items-center justify-center"
 															title="Delete agent"
 															disabled={canvases.length <= 1}
