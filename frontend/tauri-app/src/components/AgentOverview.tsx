@@ -1,11 +1,8 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { GitProjectCanvas, CanvasLockState, GitProject } from '../types/GitProject';
 import { BackgroundAgent, BackgroundAgentStatus } from '../types/BackgroundAgent';
 import { Task, TaskStatus, TaskManager } from '../types/Task';
 import { CollectiveBacklogManagement } from './CollectiveBacklogManagement';
-import { TaskLinkingActions } from './TaskLinkingActions';
-import { TaskLinkDisplay } from './TaskLinkDisplay';
-import BacklogService, { BacklogItem } from '../services/BacklogService';
 
 interface AgentOverviewProps {
 	canvases: GitProjectCanvas[];
@@ -40,32 +37,6 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 	const [showPromptInput, setShowPromptInput] = useState<{[key: string]: boolean}>({});
 	const [selectedCanvases, setSelectedCanvases] = useState<Set<string>>(new Set());
 	const [selectedBackgroundAgents, setSelectedBackgroundAgents] = useState<Set<string>>(new Set());
-	const [backlogItems, setBacklogItems] = useState<BacklogItem[]>([]);
-	const [loadingBacklog, setLoadingBacklog] = useState(false);
-	const [taskLinks, setTaskLinks] = useState<Record<string, string[]>>({}); // taskId -> agentIds[]
-
-	const backlogService = useMemo(() => new BacklogService(), []);
-
-	// Fetch backlog items
-	useEffect(() => {
-		const fetchBacklogItems = async () => {
-			if (!project?.gitOriginUrl) return;
-			
-			setLoadingBacklog(true);
-			try {
-				const response = await backlogService.getBacklogByRepository(project.gitOriginUrl);
-				setBacklogItems(response.backlogItems || []);
-				console.log('Fetched backlog items for task linking:', response.backlogItems);
-			} catch (error) {
-				console.error('Failed to fetch backlog items:', error);
-				setBacklogItems([]);
-			} finally {
-				setLoadingBacklog(false);
-			}
-		};
-
-		fetchBacklogItems();
-	}, [project?.gitOriginUrl, backlogService]);
 
 	// Selection helper functions
 	const toggleCanvasSelection = (canvasId: string) => {
@@ -113,108 +84,7 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 		setSelectedBackgroundAgents(new Set());
 	};
 
-	// Convert backlog items to Task format for the UI
-	const convertBacklogToTasks = (items: BacklogItem[]): Task[] => {
-		return items.map(item => ({
-			id: item.id.toString(),
-			prompt: item.task,
-			createdAt: new Date(item.created_at).getTime(),
-			status: item.status as TaskStatus,
-			linkedAgents: taskLinks[item.id.toString()] || [] // Get links from local state
-		}));
-	};
-
-	// Get all tasks for linking (use backlog items instead of TaskManager tasks)
-	const allTasks = convertBacklogToTasks(backlogItems);
 	const selectedAgentIds = [...selectedCanvases, ...selectedBackgroundAgents];
-
-	// Task linking handlers
-	const handleAddToNewAgent = (taskId: string) => {
-		console.log('handleAddToNewAgent called with taskId:', taskId);
-		console.log('onCreateAgent:', onCreateAgent);
-		
-		if (!onCreateAgent) {
-			console.error('Missing onCreateAgent function');
-			return;
-		}
-		
-		// Create new agent and get its ID
-		console.log('Calling onCreateAgent...');
-		const newAgentId = onCreateAgent();
-		console.log('onCreateAgent returned:', newAgentId);
-		
-		if (newAgentId) {
-			// Link the task to the new agent in local state
-			console.log('Linking task to agent in local state...');
-			setTaskLinks(prev => ({
-				...prev,
-				[taskId]: [...(prev[taskId] || []), newAgentId]
-			}));
-			
-			// Find the backlog item for this task
-			const backlogItem = backlogItems.find(item => item.id.toString() === taskId);
-			console.log('Found backlog item:', backlogItem);
-			
-			if (backlogItem && onAddPrompt) {
-				console.log('Adding prompt to new agent...');
-				onAddPrompt(newAgentId, backlogItem.task);
-			}
-			
-			console.log(`Created new agent ${newAgentId} and linked task ${taskId} to it`);
-			
-			// Save the project state
-			if (onProjectUpdate) {
-				onProjectUpdate();
-			}
-		} else {
-			console.error('Failed to create new agent - onCreateAgent returned:', newAgentId);
-		}
-	};
-
-	const handleAddToSelectedAgents = (taskId: string, agentIds: string[]) => {
-		console.log('handleAddToSelectedAgents called with taskId:', taskId, 'agentIds:', agentIds);
-		
-		// Link task to all selected agents in local state
-		setTaskLinks(prev => ({
-			...prev,
-			[taskId]: [...new Set([...(prev[taskId] || []), ...agentIds])]
-		}));
-		
-		// Find the backlog item for this task
-		const backlogItem = backlogItems.find(item => item.id.toString() === taskId);
-		
-		// Add the task prompt to each selected canvas
-		agentIds.forEach(agentId => {
-			if (backlogItem && onAddPrompt) {
-				console.log('Adding prompt to agent:', agentId);
-				onAddPrompt(agentId, backlogItem.task);
-			}
-		});
-		
-		// Save the project state
-		if (onProjectUpdate) {
-			onProjectUpdate();
-		}
-		
-		// Clear selection after linking
-		clearSelection();
-	};
-
-	// Unlink handler
-	const handleUnlinkTask = (taskId: string, agentId: string) => {
-		console.log('handleUnlinkTask called with taskId:', taskId, 'agentId:', agentId);
-		
-		// Remove link from local state
-		setTaskLinks(prev => ({
-			...prev,
-			[taskId]: (prev[taskId] || []).filter(id => id !== agentId)
-		}));
-		
-		// Save the project state
-		if (onProjectUpdate) {
-			onProjectUpdate();
-		}
-	};
 
 	const getCanvasTaskCounts = (canvasId: string) => {
 		const canvas = canvases.find(c => c.id === canvasId);
@@ -701,35 +571,6 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 				</div>
 				
 
-				{/* Task Linking Section */}
-				{allTasks.length > 0 && (
-					<TaskLinkingActions
-						tasks={allTasks}
-						selectedAgents={selectedAgentIds}
-						hasSelectedAgents={selectedAgentIds.length > 0}
-						onAddToNewAgent={handleAddToNewAgent}
-						onAddToSelectedAgents={handleAddToSelectedAgents}
-					/>
-				)}
-				{allTasks.length === 0 && !loadingBacklog && (
-					<div className="bg-[var(--base-100)] rounded-lg p-4 border border-[var(--base-300)]">
-						<h3 className="text-lg font-medium text-[var(--base-800)] mb-2">Link Tasks to Agents</h3>
-						<p className="text-sm text-[var(--base-600)]">No backlog items available to link. Create tasks in the backlog below.</p>
-					</div>
-				)}
-				{loadingBacklog && (
-					<div className="bg-[var(--base-100)] rounded-lg p-4 border border-[var(--base-300)]">
-						<h3 className="text-lg font-medium text-[var(--base-800)] mb-2">Link Tasks to Agents</h3>
-						<p className="text-sm text-[var(--base-600)]">Loading backlog items...</p>
-					</div>
-				)}
-				
-				{/* Task Link Display */}
-				<TaskLinkDisplay
-					taskManager={{ getTasks: () => allTasks } as TaskManager}
-					canvases={canvases}
-					onUnlinkTask={handleUnlinkTask}
-				/>
 				
 				{/* Collective Backlog Management */}
 				<div className="mt-6">
