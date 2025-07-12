@@ -95,6 +95,7 @@ const getCanvasTaskInfo = (canvas: GitProjectCanvas): { prompt: string; isLoadin
 			// Get the most recent in-progress prompt
 			for (const prompt of canvas.inProgressPrompts.values()) {
 				if (prompt.trim()) {
+					console.log("[getCanvasTaskInfo] In-progress prompt: '", prompt, "'");
 					let cleanPrompt = prompt.trim();
 					// Remove content in parentheses
 					cleanPrompt = cleanPrompt.replace(/\([^)]*\)/g, '').trim();

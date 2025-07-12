@@ -5,6 +5,7 @@ import type { GitProject } from "../types/GitProject";
 export class BackgroundAgentManager {
 	private static cleanupTimers = new Map<string, NodeJS.Timeout>();
 	private static readonly CLEANUP_DELAY_MS = 20000; // 20 seconds
+	private static persistenceCallback: ((projectId: string) => void) | null = null;
 
 	/**
 	 * Initialize automatic cleanup for all existing agents in a GitProject
@@ -51,6 +52,11 @@ export class BackgroundAgentManager {
 				if (agent && this.isTerminalState(agent.status)) {
 					console.log(`[BackgroundAgentManager] Auto-removing completed agent ${agentId.slice(0, 8)} (${agent.type}/${agent.status})`);
 					await this.cancelAgent(agentId, gitProject);
+					
+					// CRITICAL FIX: Trigger persistence after timer-based cleanup
+					// This ensures removed agents don't reappear after app restart
+					console.log(`[BackgroundAgentManager] Triggering persistence for timer cleanup of agent ${agentId.slice(0, 8)}`);
+					this.triggerPersistence(gitProject);
 				} else {
 					console.log(`[BackgroundAgentManager] Skipping cleanup for agent ${agentId.slice(0, 8)} - agent not found or not in terminal state`);
 				}
@@ -368,6 +374,24 @@ export class BackgroundAgentManager {
 			console.log(`[BackgroundAgentManager] Cleaned up workspace: ${workspaceDir}`);
 		} catch (error) {
 			console.warn(`[BackgroundAgentManager] Failed to cleanup workspace:`, error);
+		}
+	}
+
+	/**
+	 * Set persistence callback for automatic saves after timer-based cleanup
+	 */
+	static setPersistenceCallback(callback: (projectId: string) => void): void {
+		this.persistenceCallback = callback;
+	}
+
+	/**
+	 * Trigger persistence after agent removal
+	 */
+	private static triggerPersistence(gitProject: GitProject): void {
+		if (this.persistenceCallback) {
+			this.persistenceCallback(gitProject.id);
+		} else {
+			console.warn(`[BackgroundAgentManager] No persistence callback set - agent removal may not be saved`);
 		}
 	}
 }

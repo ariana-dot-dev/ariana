@@ -551,19 +551,15 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		newLines = newLines.map((line) => line.replaceAll(" ", " "));
 		// console.log(this.logPrefix, "Processing TUI interactions with new lines:", newLines);
 
-		// Check for "Yes, and don't ask again this session (shift+tab)"
-		const hasShiftTabOption = newLines.some((line) =>
-			line.includes("1. Yes"),
+		// Check for "esc to interrupt" - do nothing
+		const hasEscToInterrupt = newLines.some((line) =>
+			line.includes("esc to interrupt"),
 		);
-		if (hasShiftTabOption) {
-			console.log(
-				this.logPrefix,
-				"Found '1. Yes'",
-			);
-			await this.delay(1000);
-			await this.sendRawInput(this.terminalId, "\x0d");
-			// await this.sendRawInput(this.terminalId, "\r");
-			// await this.sendRawInput(this.terminalId, "\r");
+		if (hasEscToInterrupt) {
+			// send `x0d` and then delete
+			// await this.sendRawInput(this.terminalId, "\x0d");
+			// await this.delay(500);
+			// await this.sendRawInput(this.terminalId, "\x08");
 			return;
 		}
 
@@ -599,15 +595,19 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 			return;
 		}
 
-		// Check for "esc to interrupt" - do nothing
-		const hasEscToInterrupt = newLines.some((line) =>
-			line.includes("esc to interrupt"),
+		// Check for "Yes, and don't ask again this session (shift+tab)"
+		const hasShiftTabOption = newLines.some((line) =>
+			line.includes("1. Yes"),
 		);
-		if (hasEscToInterrupt) {
-			// send `x0d` and then delete
-			// await this.sendRawInput(this.terminalId, "\x0d");
-			// await this.delay(500);
-			// await this.sendRawInput(this.terminalId, "\x08");
+		if (hasShiftTabOption) {
+			console.log(
+				this.logPrefix,
+				"Found '1. Yes'",
+			);
+			await this.delay(1000);
+			await this.sendRawInput(this.terminalId, "\x0d");
+			// await this.sendRawInput(this.terminalId, "\r");
+			// await this.sendRawInput(this.terminalId, "\r");
 			return;
 		}
 	}
