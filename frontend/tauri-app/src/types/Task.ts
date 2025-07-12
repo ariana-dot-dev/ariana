@@ -323,18 +323,28 @@ export class TaskManager {
 		return fusedTask;
 	}
 
-	// Ensure there's always an empty task for prompting
+	// Ensure there's always exactly one empty task for prompting
 	ensureEmptyTask(): void {
 		console.log(`[TaskManager] R1,Q5: Checking if empty task creation needed - auto-task creation logic`);
-		const hasEmptyPromptingTask = this.tasks.some(t => 
+		const emptyPromptingTasks = this.tasks.filter(t => 
 			t.status === 'prompting' && (!t.prompt || t.prompt.trim() === '')
 		);
 		
-		if (!hasEmptyPromptingTask) {
+		if (emptyPromptingTasks.length === 0) {
 			console.log(`[TaskManager] R1,Q5: No empty prompting task found - creating new empty task automatically`);
 			this.createPromptingTask('');
+		} else if (emptyPromptingTasks.length > 1) {
+			console.log(`[TaskManager] R1,Q5: Multiple empty prompting tasks found (${emptyPromptingTasks.length}) - removing duplicates`);
+			// Keep the first one, remove the rest
+			for (let i = 1; i < emptyPromptingTasks.length; i++) {
+				const taskIndex = this.tasks.findIndex(t => t.id === emptyPromptingTasks[i].id);
+				if (taskIndex !== -1) {
+					this.tasks.splice(taskIndex, 1);
+				}
+			}
+			this.notifyListeners();
 		} else {
-			console.log(`[TaskManager] R1,Q5: Empty prompting task already exists - no action needed`);
+			console.log(`[TaskManager] R1,Q5: Exactly one empty prompting task exists - no action needed`);
 		}
 	}
 
