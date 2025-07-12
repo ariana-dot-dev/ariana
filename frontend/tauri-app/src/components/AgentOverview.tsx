@@ -37,6 +37,25 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 }) => {
 	const [promptInputs, setPromptInputs] = useState<{[key: string]: string}>({});
 	const [showPromptInput, setShowPromptInput] = useState<{[key: string]: boolean}>({});
+	const [dragState, setDragState] = useState<{
+		draggedTaskId: string | null;
+		draggedCanvasId: string | null;
+		dragOverIndex: number | null;
+		dragOverCanvasId: string | null;
+		isDragging: boolean;
+	}>({
+		draggedTaskId: null,
+		draggedCanvasId: null,
+		dragOverIndex: null,
+		dragOverCanvasId: null,
+		isDragging: false
+	});
+
+	// Use ref to persist drag state across re-renders
+	const dragStateRef = React.useRef(dragState);
+	React.useEffect(() => {
+		dragStateRef.current = dragState;
+	}, [dragState]);
 	const [selectedCanvases, setSelectedCanvases] = useState<Set<string>>(new Set());
 	const [selectedBackgroundAgents, setSelectedBackgroundAgents] = useState<Set<string>>(new Set());
 
@@ -164,6 +183,128 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 		}
 		setPromptInputs(prev => ({...prev, [canvasId]: ''}));
 		setShowPromptInput(prev => ({...prev, [canvasId]: false}));
+	};
+
+	// Drag and drop handlers for prompt reordering
+	const handleDragStart = (e: React.DragEvent, taskId: string, canvasId: string) => {
+		e.stopPropagation();
+		e.dataTransfer.setData('text/plain', taskId);
+		e.dataTransfer.effectAllowed = 'move';
+		
+		const newState = {
+			draggedTaskId: taskId,
+			draggedCanvasId: canvasId,
+			dragOverIndex: null,
+			dragOverCanvasId: null,
+			isDragging: true
+		};
+		
+		setDragState(newState);
+	};
+
+	const handleDragEnd = (e: React.DragEvent) => {
+		e.stopPropagation();
+		
+		// Only reset if we didn't successfully drop (dropEffect would be 'move' if successful)
+		if (e.dataTransfer.dropEffect !== 'move') {
+			setDragState({
+				draggedTaskId: null,
+				draggedCanvasId: null,
+				dragOverIndex: null,
+				dragOverCanvasId: null,
+				isDragging: false
+			});
+		}
+	};
+
+	const handleDragOver = (e: React.DragEvent, index: number, canvasId: string) => {
+		e.preventDefault();
+		e.stopPropagation();
+		
+		if (e.dataTransfer.effectAllowed === 'move') {
+			e.dataTransfer.dropEffect = 'move';
+		} else {
+			e.dataTransfer.dropEffect = 'copy';
+		}
+		
+		if (dragStateRef.current.isDragging) {
+			const newState = {
+				...dragStateRef.current,
+				dragOverIndex: index,
+				dragOverCanvasId: canvasId
+			};
+			
+			setDragState(newState);
+		}
+	};
+
+	const handleDragLeave = (e: React.DragEvent) => {
+		setDragState(prev => ({
+			...prev,
+			dragOverIndex: null,
+			dragOverCanvasId: null
+		}));
+	};
+
+	const handleDrop = (e: React.DragEvent, targetIndex: number, targetCanvasId: string) => {
+		e.preventDefault();
+		e.stopPropagation();
+
+		const { draggedTaskId, draggedCanvasId } = dragStateRef.current;
+		
+		if (!draggedTaskId || !draggedCanvasId) {
+			return;
+		}
+
+		// Set successful drop effect
+		e.dataTransfer.dropEffect = 'move';
+
+		// If dropping within the same canvas, reorder tasks
+		if (draggedCanvasId === targetCanvasId) {
+			const canvas = canvases.find(c => c.id === targetCanvasId);
+			
+			if (canvas && canvas.taskManager) {
+				const draggedIndex = canvas.taskManager.getTaskIndex(draggedTaskId);
+				
+				if (draggedIndex !== -1) {
+					const success = canvas.taskManager.moveTask(draggedTaskId, targetIndex);
+					
+					if (success && onProjectUpdate) {
+						onProjectUpdate();
+					}
+				}
+			}
+		} else {
+			const sourceCanvas = canvases.find(c => c.id === draggedCanvasId);
+			const targetCanvas = canvases.find(c => c.id === targetCanvasId);
+			
+			if (sourceCanvas && targetCanvas && sourceCanvas.taskManager && targetCanvas.taskManager) {
+				const task = sourceCanvas.taskManager.getTask(draggedTaskId);
+				
+				if (task && task.status === 'prompting') {
+					const deleteSuccess = sourceCanvas.taskManager.deleteTask(draggedTaskId);
+					
+					if (deleteSuccess) {
+						const newTaskId = targetCanvas.taskManager.createPromptingTask(task.prompt);
+						const newIndex = Math.min(targetIndex, targetCanvas.taskManager.getTasks().length - 1);
+						const moveSuccess = targetCanvas.taskManager.moveTask(newTaskId, newIndex);
+						
+						if (onProjectUpdate) {
+							onProjectUpdate();
+						}
+					}
+				}
+			}
+		}
+
+		// Reset drag state
+		setDragState({
+			draggedTaskId: null,
+			draggedCanvasId: null,
+			dragOverIndex: null,
+			dragOverCanvasId: null,
+			isDragging: false
+		});
 	};
 
 	const handleRunStopCanvas = (canvasId: string) => {
@@ -341,21 +482,134 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 													{activeTasks.length > 0 && (
 														<div className="space-y-1 mb-2">
 															<div className="text-xs font-medium text-[var(--base-700)]">Active:</div>
-															{activeTasks.slice(0, 2).map((task, i) => (
-																<div key={i} className="text-xs text-[var(--base-600)] flex items-start gap-1">
-																	<span className={`w-1.5 h-1.5 rounded-full mt-0.5 flex-shrink-0 ${
-																		task.status === 'in_progress' ? 'bg-[var(--acc-500)]' :
-																		task.status === 'completed' ? 'bg-[var(--positive-500)]' :
-																		'bg-[var(--base-400)]'
-																	}`}></span>
-																	<span className="break-words">{task.prompt}</span>
-																</div>
+															{activeTasks.slice(0, 10).map((task, i) => (
+																<React.Fragment key={i}>
+																	{/* Drop zone above each task */}
+																	<div 
+																		className={`h-2 transition-all ${
+																			dragState.dragOverIndex === i && dragState.dragOverCanvasId === canvas.id 
+																				? 'border-t-2 border-[var(--acc-500)] bg-[var(--acc-50)]' 
+																				: 'hover:bg-[var(--base-100)]'
+																		}`}
+																		onDragEnter={(e) => {
+																			e.preventDefault();
+																			e.stopPropagation();
+																		}}
+																		onDragOver={(e) => {
+																			handleDragOver(e, i, canvas.id);
+																		}}
+																		onDragLeave={(e) => {
+																			handleDragLeave(e);
+																		}}
+																		onDrop={(e) => {
+																			handleDrop(e, i, canvas.id);
+																		}}
+																		onMouseEnter={() => {
+																			if (dragStateRef.current.isDragging) {
+																				setDragState(prev => ({
+																					...prev,
+																					dragOverIndex: i,
+																					dragOverCanvasId: canvas.id
+																				}));
+																			}
+																		}}
+																		onClick={() => {
+																			if (dragStateRef.current.isDragging) {
+																				const mockEvent = { 
+																					preventDefault: () => {}, 
+																					stopPropagation: () => {},
+																					dataTransfer: { getData: () => dragStateRef.current.draggedTaskId }
+																				} as any;
+																				handleDrop(mockEvent, i, canvas.id);
+																			}
+																		}}
+																	></div>
+																	
+																	{/* Task content (draggable if prompting) */}
+																	<div 
+																		className="text-xs text-[var(--base-600)] flex items-start gap-1 group transition-all min-h-[20px] hover:bg-[var(--base-50)]"
+																		draggable={task.status === 'prompting'}
+																		onDragStart={(e) => {
+																			if (task.status === 'prompting') {
+																				handleDragStart(e, task.id, canvas.id);
+																			}
+																		}}
+																		onDragEnd={handleDragEnd}
+																	>
+																		{/* Drag handle for prompting tasks */}
+																		{task.status === 'prompting' && (
+																			<span 
+																				className="text-xs text-[var(--base-400)] cursor-move opacity-0 group-hover:opacity-100 transition-opacity select-none"
+																				title="Drag to reorder or move to another agent"
+																			>
+																				⋮⋮
+																			</span>
+																		)}
+																		<span className={`w-1.5 h-1.5 rounded-full mt-0.5 flex-shrink-0 ${
+																			task.status === 'in_progress' ? 'bg-[var(--acc-500)]' :
+																			task.status === 'completed' ? 'bg-[var(--positive-500)]' :
+																			'bg-[var(--base-400)]'
+																		}`}></span>
+																		<span className="break-words flex-1">{task.prompt}</span>
+																		{/* Delete button for prompting tasks */}
+																		{task.status === 'prompting' && onPromptDeleted && (
+																			<button
+																				onClick={() => onPromptDeleted(task.id, canvas.id)}
+																				className="opacity-0 group-hover:opacity-100 transition-opacity text-[var(--negative-500)] hover:text-[var(--negative-600)] text-xs px-1"
+																				title="Delete this prompt"
+																			>
+																				×
+																			</button>
+																		)}
+																	</div>
+																</React.Fragment>
 															))}
-															{activeTasks.length > 2 && (
+															{activeTasks.length > 10 && (
 																<div className="text-xs text-[var(--base-500)]">
-																	+{activeTasks.length - 2} more
+																	+{activeTasks.length - 10} more
 																</div>
 															)}
+															
+															{/* Drop zone at the end of the list */}
+															<div 
+																className={`h-4 transition-all bg-transparent hover:bg-[var(--base-100)] ${
+																	dragState.dragOverIndex === activeTasks.length && dragState.dragOverCanvasId === canvas.id 
+																		? 'border-b-2 border-[var(--acc-500)] bg-[var(--acc-50)]' 
+																		: ''
+																}`}
+																onMouseEnter={() => {
+																	if (dragStateRef.current.isDragging) {
+																		setDragState(prev => ({
+																			...prev,
+																			dragOverIndex: activeTasks.length,
+																			dragOverCanvasId: canvas.id
+																		}));
+																	}
+																}}
+																onClick={() => {
+																	if (dragStateRef.current.isDragging) {
+																		const mockEvent = { 
+																			preventDefault: () => {}, 
+																			stopPropagation: () => {},
+																			dataTransfer: { getData: () => dragStateRef.current.draggedTaskId }
+																		} as any;
+																		handleDrop(mockEvent, activeTasks.length, canvas.id);
+																	}
+																}}
+																onDragEnter={(e) => {
+																	e.preventDefault();
+																	e.stopPropagation();
+																}}
+																onDragOver={(e) => {
+																	handleDragOver(e, activeTasks.length, canvas.id);
+																}}
+																onDragLeave={(e) => {
+																	handleDragLeave(e);
+																}}
+																onDrop={(e) => {
+																	handleDrop(e, activeTasks.length, canvas.id);
+																}}
+															></div>
 														</div>
 													)}
 
@@ -574,17 +828,19 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 				
 
 				
-				{/* Collective Backlog Management */}
-				<div className="mt-6">
-					<CollectiveBacklogManagement 
-						project={project}
-						onCreateAgent={onCreateAgent}
-						onAddPrompt={onAddPrompt}
-						selectedAgents={selectedAgentIds}
-						canvases={canvases.map(c => ({ id: c.id, lockState: c.lockState }))}
-						onPromptDeleted={onPromptDeleted}
-					/>
-				</div>
+				{/* Collective Backlog Management - Hidden during drag to prevent re-renders */}
+				{!dragState.isDragging && (
+					<div className="mt-6">
+						<CollectiveBacklogManagement 
+							project={project}
+							onCreateAgent={onCreateAgent}
+							onAddPrompt={onAddPrompt}
+							selectedAgents={selectedAgentIds}
+							canvases={canvases.map(c => ({ id: c.id, lockState: c.lockState }))}
+							onPromptDeleted={onPromptDeleted}
+						/>
+					</div>
+				)}
 			</div>
 		</div>
 	);

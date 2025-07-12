@@ -48,7 +48,8 @@
 				"transparent": true,
 				"center": true,
 				"shadow": false,
-				"useHttpsScheme": true
+				"useHttpsScheme": true,
+				"dragDropEnabled": false
 			}
 		],
 		"security": {

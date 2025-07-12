@@ -626,6 +626,64 @@ export class TaskManager {
 		return true;
 	}
 
+	// Move a task to a specific index (for reordering)
+	moveTask(taskId: string, newIndex: number): boolean {
+		const currentIndex = this.tasks.findIndex(t => t.id === taskId);
+		if (currentIndex === -1) return false;
+		
+		// Clamp newIndex to valid range
+		const clampedIndex = Math.max(0, Math.min(newIndex, this.tasks.length - 1));
+		
+		// Remove task from current position and insert at new position
+		const [task] = this.tasks.splice(currentIndex, 1);
+		this.tasks.splice(clampedIndex, 0, task);
+		
+		console.log(`Moved task ${taskId} from index ${currentIndex} to ${clampedIndex}`);
+		return true;
+	}
+
+	// Reorder tasks based on an array of task IDs
+	reorderTasks(taskIds: string[]): boolean {
+		// Validate that all IDs exist in current tasks
+		const currentTaskIds = this.tasks.map(t => t.id);
+		const validIds = taskIds.filter(id => currentTaskIds.includes(id));
+		
+		if (validIds.length !== currentTaskIds.length) {
+			console.warn('Task reorder failed: ID mismatch');
+			return false;
+		}
+		
+		// Create new task array in the specified order
+		const reorderedTasks: Task[] = [];
+		validIds.forEach(id => {
+			const task = this.tasks.find(t => t.id === id);
+			if (task) reorderedTasks.push(task);
+		});
+		
+		this.tasks = reorderedTasks;
+		console.log(`Reordered ${this.tasks.length} tasks`);
+		return true;
+	}
+
+	// Get the index of a specific task
+	getTaskIndex(taskId: string): number {
+		return this.tasks.findIndex(t => t.id === taskId);
+	}
+
+	// Swap positions of two tasks
+	swapTasks(taskId1: string, taskId2: string): boolean {
+		const index1 = this.getTaskIndex(taskId1);
+		const index2 = this.getTaskIndex(taskId2);
+		
+		if (index1 === -1 || index2 === -1) return false;
+		
+		// Swap tasks
+		[this.tasks[index1], this.tasks[index2]] = [this.tasks[index2], this.tasks[index1]];
+		
+		console.log(`Swapped tasks ${taskId1} and ${taskId2}`);
+		return true;
+	}
+
 	// Get tasks linked to a specific agent
 	getTasksLinkedToAgent(canvasId: string): Task[] {
 		return this.tasks.filter(task => 

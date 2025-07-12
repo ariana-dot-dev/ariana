@@ -331,6 +331,64 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 		}
 	};
 
+	const handleDeleteTask = (taskId: string) => {
+		if (!taskManager) return;
+		
+		console.log(`[TextAreaOnCanvas] Delete task requested: ${taskId}`);
+		const success = taskManager.deleteTask(taskId);
+		
+		if (success) {
+			console.log(`[TextAreaOnCanvas] Successfully deleted task: ${taskId}`);
+			// Clear in-progress prompt if it was being edited
+			if (currentCanvas) {
+				setInProgressPrompt(currentCanvas.id, elementId, '');
+			}
+			// Trigger deletion callback to CollectiveBacklogManagement if available
+			if (onPromptDeleted) {
+				onPromptDeleted(taskId, currentCanvas?.id || '');
+			}
+		} else {
+			console.warn(`[TextAreaOnCanvas] Failed to delete task: ${taskId}`);
+			alert('Failed to delete task. Only prompting tasks can be deleted.');
+		}
+	};
+
+	const handleReorderTasks = (draggedTaskId: string, targetTaskId: string, position: 'before' | 'after') => {
+		if (!taskManager) return;
+		
+		console.log(`[TextAreaOnCanvas] Reorder requested: move ${draggedTaskId} ${position} ${targetTaskId}`);
+		
+		const draggedIndex = taskManager.getTaskIndex(draggedTaskId);
+		const targetIndex = taskManager.getTaskIndex(targetTaskId);
+		
+		if (draggedIndex === -1 || targetIndex === -1) {
+			console.warn(`[TextAreaOnCanvas] Reorder failed: invalid task indices`);
+			return;
+		}
+		
+		// Calculate new index based on position
+		let newIndex = targetIndex;
+		if (position === 'after') {
+			newIndex = targetIndex + 1;
+		}
+		
+		// Adjust for the fact that removing the dragged item shifts indices
+		if (draggedIndex < newIndex) {
+			newIndex--;
+		}
+		
+		const success = taskManager.moveTask(draggedTaskId, newIndex);
+		if (success) {
+			console.log(`[TextAreaOnCanvas] Successfully reordered tasks`);
+			// Persist the reorder to GitProject
+			if (currentCanvas) {
+				setInProgressPrompt(currentCanvas.id, elementId, ''); // Trigger save
+			}
+		} else {
+			console.warn(`[TextAreaOnCanvas] Failed to reorder tasks`);
+		}
+	};
+
 	// Multi-task control handlers
 	const handleStartTask = async (taskId: string) => {
 		const task = taskManager?.getTask(taskId);
@@ -506,10 +564,11 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 				>
 					<div className="h-full overflow-y-auto">
 						{/* Render all tasks */}
-						{allTasks.map((task) => (
+						{allTasks.map((task, index) => (
 							<TaskComponent
 								key={task.id}
 								task={task}
+								taskIndex={index}
 								isRunning={runningTasks.some(rt => rt.id === task.id)}
 								hasOtherRunningTasks={hasRunningTasks && !runningTasks.some(rt => rt.id === task.id)}
 								canEdit={canEdit}
@@ -519,6 +578,8 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 								onUpdatePrompt={(prompt) => handleTaskPromptUpdate(task.id, prompt)}
 								onRevert={handleRevertTask}
 								onRestore={handleRestoreTask}
+								onDelete={handleDeleteTask}
+								onReorder={handleReorderTasks}
 							/>
 						))}
 					</div>
