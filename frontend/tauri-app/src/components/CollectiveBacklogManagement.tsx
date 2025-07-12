@@ -46,6 +46,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 	const authService = useMemo(() => AuthService.getInstance(), []);
 	const [currentUser, setCurrentUser] = useState<any>(null);
 	const [availableUsers, setAvailableUsers] = useState<{id: string, name: string, email: string}[]>([]);
+	const [selectedTasks, setSelectedTasks] = useState<Set<number>>(new Set());
 
 	// Check authentication status
 	useEffect(() => {
@@ -335,6 +336,97 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 		});
 	};
 
+	// Task selection helper functions
+	const toggleTaskSelection = (taskId: number) => {
+		setSelectedTasks(prev => {
+			const newSet = new Set(prev);
+			if (newSet.has(taskId)) {
+				newSet.delete(taskId);
+			} else {
+				newSet.add(taskId);
+			}
+			return newSet;
+		});
+	};
+
+	const toggleAllTasks = () => {
+		if (selectedTasks.size === sortedAndFilteredItems.length) {
+			setSelectedTasks(new Set());
+		} else {
+			setSelectedTasks(new Set(sortedAndFilteredItems.map(item => item.id)));
+		}
+	};
+
+	const clearTaskSelection = () => {
+		setSelectedTasks(new Set());
+	};
+
+	// Bulk actions for selected tasks
+	const handleAddSelectedTasksToNewAgent = () => {
+		if (selectedTasks.size === 0 || !onCreateAgent || !onAddPrompt) return;
+		
+		// Create new agent
+		const newAgentId = onCreateAgent();
+		console.log('Created new agent for bulk tasks:', newAgentId);
+		
+		if (newAgentId) {
+			// Add all selected tasks to the new agent
+			selectedTasks.forEach(taskId => {
+				const item = backlogItems.find(item => item.id === taskId);
+				if (item) {
+					onAddPrompt(newAgentId, item.task);
+					console.log(`Added task "${item.task}" to new agent ${newAgentId}`);
+				}
+			});
+			clearTaskSelection();
+		}
+	};
+
+	const handleAddSelectedTasksToSelectedAgents = () => {
+		if (selectedTasks.size === 0 || !onAddPrompt || !selectedAgents || selectedAgents.length === 0) return;
+		
+		// Add all selected tasks to each selected agent
+		selectedTasks.forEach(taskId => {
+			const item = backlogItems.find(item => item.id === taskId);
+			if (item) {
+				selectedAgents.forEach(agentId => {
+					onAddPrompt(agentId, item.task);
+					console.log(`Added task "${item.task}" to agent ${agentId}`);
+				});
+			}
+		});
+		clearTaskSelection();
+	};
+
+	const handleDeleteSelectedTasks = async () => {
+		if (selectedTasks.size === 0) return;
+		
+		// Confirm deletion
+		const confirmDelete = window.confirm(
+			`Are you sure you want to delete ${selectedTasks.size} task${selectedTasks.size !== 1 ? 's' : ''}? This action cannot be undone.`
+		);
+		
+		if (!confirmDelete) return;
+		
+		try {
+			// Delete all selected tasks
+			const deletePromises = Array.from(selectedTasks).map(taskId => 
+				backlogService.deleteBacklogItem(taskId)
+			);
+			
+			await Promise.all(deletePromises);
+			
+			// Remove deleted tasks from local state
+			setBacklogItems(prev => prev.filter(item => !selectedTasks.has(item.id)));
+			clearTaskSelection();
+			
+			console.log(`Successfully deleted ${selectedTasks.size} tasks`);
+		} catch (err) {
+			console.error('Failed to delete selected tasks:', err);
+			setError(err instanceof Error ? err.message : 'Failed to delete selected tasks');
+		}
+	};
+
 	// Sort and filter data
 	const sortedAndFilteredItems = useMemo(() => {
 		let filtered = [...backlogItems];
@@ -617,16 +709,80 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 						<div className="text-[var(--base-600)]">Loading backlog items...</div>
 					</div>
 				) : (
-					/* Backlog Table */
+					<>
+					{/* Bulk Actions */}
+					{selectedTasks.size > 0 && (
+						<div className="bg-[var(--acc-100)] border border-[var(--acc-300)] rounded-lg p-4 mb-4">
+							<div className="flex items-center justify-between">
+								<div className="flex items-center gap-4">
+									<span className="text-sm font-medium text-[var(--acc-800)]">
+										{selectedTasks.size} task{selectedTasks.size !== 1 ? 's' : ''} selected
+									</span>
+									<button
+										onClick={clearTaskSelection}
+										className="text-xs px-2 py-1 bg-[var(--base-200)] text-[var(--base-700)] rounded hover:bg-[var(--base-300)] transition-colors"
+									>
+										Clear Selection
+									</button>
+								</div>
+								<div className="flex items-center gap-2">
+									<button
+										onClick={handleAddSelectedTasksToNewAgent}
+										className="px-3 py-1 text-xs bg-[var(--acc-500)] text-white rounded hover:bg-[var(--acc-600)] transition-colors flex items-center gap-1"
+										title="Create new agent and add all selected tasks"
+									>
+										<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16">
+											<path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+										</svg>
+										Add to New Agent
+									</button>
+									{selectedAgents && selectedAgents.length > 0 && (
+										<button
+											onClick={handleAddSelectedTasksToSelectedAgents}
+											className="px-3 py-1 text-xs bg-[var(--positive-500)] text-white rounded hover:bg-[var(--positive-600)] transition-colors flex items-center gap-1"
+											title={`Add all selected tasks to ${selectedAgents.length} selected agent${selectedAgents.length !== 1 ? 's' : ''}`}
+										>
+											<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16">
+												<path d="M9.5 0a.5.5 0 0 1 .5.5.5.5 0 0 0 .5.5.5.5 0 0 1 .5.5V2a.5.5 0 0 1-.5.5h-5A.5.5 0 0 1 5 2v-.5a.5.5 0 0 1 .5-.5.5.5 0 0 0 .5-.5.5.5 0 0 1 .5-.5h3Z"/>
+												<path d="M3 2.5a.5.5 0 0 1 .5-.5H4a.5.5 0 0 0 0-1h-.5A1.5 1.5 0 0 0 2 2.5v12A1.5 1.5 0 0 0 3.5 16h9a1.5 1.5 0 0 0 1.5-1.5v-12A1.5 1.5 0 0 0 12.5 1H12a.5.5 0 0 0 0 1h.5a.5.5 0 0 1 .5.5v12a.5.5 0 0 1-.5.5h-9a.5.5 0 0 1-.5-.5v-12Z"/>
+												<path d="M8.5 6.5a.5.5 0 0 0-1 0V8H6a.5.5 0 0 0 0 1h1.5v1.5a.5.5 0 0 0 1 0V9H10a.5.5 0 0 0 0-1H8.5V6.5Z"/>
+											</svg>
+											Add to Selection ({selectedAgents.length})
+										</button>
+									)}
+									<button
+										onClick={handleDeleteSelectedTasks}
+										className="px-3 py-1 text-xs bg-[var(--negative-500)] text-white rounded hover:bg-[var(--negative-600)] transition-colors flex items-center gap-1"
+										title={`Delete ${selectedTasks.size} selected task${selectedTasks.size !== 1 ? 's' : ''}`}
+									>
+										<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16">
+											<path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/>
+										</svg>
+										Delete ({selectedTasks.size})
+									</button>
+								</div>
+							</div>
+						</div>
+					)}
+
+					{/* Backlog Table */}
 					<div className="bg-[var(--base-100)] rounded-lg border border-[var(--base-300)] overflow-hidden">
 						<div className="overflow-x-auto">
 							<table className="w-full text-sm table-fixed">
 								<thead className="bg-[var(--base-200)] border-b border-[var(--base-300)]">
 									<tr>
+										<th className="px-4 py-3 text-left font-medium text-[var(--base-700)]" style={{ width: '3%' }}>
+											<input
+												type="checkbox"
+												checked={sortedAndFilteredItems.length > 0 && selectedTasks.size === sortedAndFilteredItems.length}
+												onChange={toggleAllTasks}
+												className="rounded border-[var(--base-400)]"
+											/>
+										</th>
 										<th 
 											className="px-4 py-3 text-left font-medium text-[var(--base-700)] cursor-pointer hover:bg-[var(--base-300)] transition-colors"
 											onClick={() => handleSort('task')}
-											style={{ width: '43%' }}
+											style={{ width: '40%' }}
 										>
 											Task {sortConfig.key === 'task' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
 										</th>
@@ -679,7 +835,17 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 										</tr>
 									) : (
 										sortedAndFilteredItems.map((item) => (
-											<tr key={item.id} className="hover:bg-[var(--base-50)] transition-colors">
+											<tr key={item.id} className={`hover:bg-[var(--base-50)] transition-colors ${selectedTasks.has(item.id) ? 'bg-[var(--acc-100)]' : ''}`}>
+												{/* Checkbox */}
+												<td className="px-4 py-3">
+													<input
+														type="checkbox"
+														checked={selectedTasks.has(item.id)}
+														onChange={() => toggleTaskSelection(item.id)}
+														className="rounded border-[var(--base-400)]"
+													/>
+												</td>
+												
 												{/* Task */}
 												<td className="px-4 py-3">
 													{editingCell?.itemId === item.id && editingCell?.field === 'task' ? (
@@ -861,6 +1027,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 							</table>
 						</div>
 					</div>
+					</>
 				)}
 
 				{/* Create New Task */}
