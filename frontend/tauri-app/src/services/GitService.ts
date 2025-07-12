@@ -21,8 +21,19 @@ export class GitService {
 			console.log(`[GitService] Created commit: ${commitHash} with message: "${message}"`);
 			return commitHash;
 		} catch (error) {
-			console.error('[GitService] Failed to create commit:', error);
-			throw new Error(`Failed to create git commit: ${error}`);
+			// Extract the actual error message, not the entire error object
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			console.error('[GitService] Failed to create commit:', errorMessage);
+			
+			// Check for no changes scenarios
+			if (errorMessage === "NO_CHANGES_TO_COMMIT" || 
+				errorMessage.includes("nothing to commit") ||
+				errorMessage.includes("Unknown error (no stderr output)")) {
+				console.log('[GitService] No changes to commit - returning NO_CHANGES');
+				return "NO_CHANGES";
+			}
+			
+			throw new Error(errorMessage);
 		}
 	}
 
@@ -63,6 +74,106 @@ export class GitService {
 			}
 			
 			throw new Error(`Failed to revert to commit: ${error}`);
+		}
+	}
+
+	/**
+	 * Check if the repository has any commits
+	 * @param osSession - The OS session for the git repository
+	 * @returns Promise<boolean> - True if repository has commits, false otherwise
+	 */
+	static async hasCommits(osSession: OsSession): Promise<boolean> {
+		const directory = osSessionGetWorkingDirectory(osSession);
+		
+		try {
+			await invoke<string>('execute_command_with_os_session', {
+				command: 'git',
+				args: ['log', '--oneline', '-n', '1'],
+				directory,
+				osSession
+			});
+			return true;
+		} catch (error) {
+			// If git log fails, it means there are no commits
+			return false;
+		}
+	}
+
+	/**
+	 * Ensure the repository has an initial commit by creating one if none exists
+	 * @param osSession - The OS session for the git repository
+	 * @returns Promise<string | null> - The commit hash if created, null if already existed
+	 */
+	static async ensureInitialCommit(osSession: OsSession): Promise<string | null> {
+		const directory = osSessionGetWorkingDirectory(osSession);
+		
+		// Check if repository already has commits
+		const hasExistingCommits = await this.hasCommits(osSession);
+		if (hasExistingCommits) {
+			console.log(`[GitService] Repository already has commits, skipping initial commit`);
+			return null;
+		}
+
+		console.log(`[GitService] No commits found, creating initial commit...`);
+
+		// Create .ariana file if it doesn't exist using shell command
+		try {
+			const arianaContent = JSON.stringify({
+				version: "1.0.0",
+				created: new Date().toISOString(),
+				description: "Ariana IDE project file"
+			}, null, 2);
+
+			// Use cat to create the file (works on both Linux and Windows)
+			await invoke<string>('execute_command_with_os_session', {
+				command: 'sh',
+				args: ['-c', `cat > .ariana << 'EOF'\n${arianaContent}\nEOF`],
+				directory,
+				osSession
+			});
+			console.log(`[GitService] Created .ariana file`);
+		} catch (error) {
+			console.error(`[GitService] Failed to create .ariana file:`, error);
+			throw new Error(`Failed to create .ariana file: ${error}`);
+		}
+
+		// Create initial commit
+		try {
+			const commitHash = await this.createCommit(osSession, "Initial commit - Ariana IDE project");
+			console.log(`[GitService] Created initial commit: ${commitHash}`);
+			return commitHash;
+		} catch (error) {
+			console.error(`[GitService] Failed to create initial commit:`, error);
+			throw new Error(`Failed to create initial commit: ${error}`);
+		}
+	}
+
+	/**
+	 * Stash any uncommitted changes
+	 * @param osSession - The OS session for the git repository
+	 * @param message - Optional stash message
+	 * @returns Promise<void>
+	 */
+	static async stashChanges(osSession: OsSession, message?: string): Promise<void> {
+		const directory = osSessionGetWorkingDirectory(osSession);
+		
+		try {
+			const args = ['stash'];
+			if (message) {
+				args.push('push', '-m', message);
+			}
+			
+			await invoke<string>('execute_command_with_os_session', {
+				command: 'git',
+				args,
+				directory,
+				osSession
+			});
+			
+			console.log(`[GitService] Successfully stashed changes${message ? ` with message: "${message}"` : ''}`);
+		} catch (error) {
+			console.error('[GitService] Failed to stash changes:', error);
+			// Don't throw - stashing is best effort
 		}
 	}
 }

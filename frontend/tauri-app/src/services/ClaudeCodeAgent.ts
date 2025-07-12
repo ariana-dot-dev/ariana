@@ -43,6 +43,8 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	private currentTask: string | null = null;
 	private currentPrompt: string | null = null;
 	private screenLines: LineItem[][] = [];
+	private terminalLines: number = 24; // Track current terminal height
+	private terminalCols: number = 80; // Track current terminal width
 	private startTime: number = 0;
 	private logPrefix: string;
 	private hasSeenTryPrompt = false;
@@ -50,8 +52,11 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	private isProcessingEvents = false;
 	private eventQueue: TerminalEvent[][] = [];
 	private lastActivityTime: number = 0;
-	private completionTimeoutId: NodeJS.Timeout | null = null;
 	private osSession: OsSession | null = null;
+	private isCompletingTask: boolean = false;
+	// Manual control state
+	private isPaused: boolean = false;
+	private isManuallyControlled: boolean = false;
 
 	constructor() {
 		super();
@@ -83,10 +88,15 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	}
 
 	/**
-	 * Override resizeTerminal to enforce 24x80 size
+	 * Override resizeTerminal to track dimensions and pass through to parent
 	 */
 	async resizeTerminal(id: string, lines: number, cols: number): Promise<void> {
-		await super.resizeTerminal(id, 24, 80);
+		// Track terminal dimensions
+		this.terminalLines = lines;
+		this.terminalCols = cols;
+		console.log(`${this.logPrefix} Terminal resized to ${lines}x${cols}`);
+		
+		await super.resizeTerminal(id, lines, cols);
 	}
 
 	/**
@@ -189,25 +199,21 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	}
 
 	/**
-	 * Get the current screen lines (last N lines where N is terminal height)
+	 * Get the current screen lines (uses terminal dimensions for proper viewport)
 	 */
-	getCurrentTuiLines(terminalHeight: number = 24): TuiLine[] {
+	getCurrentTuiLines(): TuiLine[] {
 		if (!this.terminalId) return [];
 
-		return this.screenLines.slice(-terminalHeight).map((line, index) => ({
+		// Use terminal dimensions to get only visible lines, not the full history
+		const visibleLines = this.terminalLines || 24; // Default to 24 if not set
+		const startIndex = Math.max(0, this.screenLines.length - visibleLines);
+		
+		return this.screenLines.slice(startIndex).map((line, index) => ({
 			content: line.map((item) => item.lexeme).join(""),
-			timestamp:
-				Date.now() -
-				(this.screenLines.slice(-terminalHeight).length - index) * 100,
+			timestamp: Date.now() - (this.screenLines.slice(startIndex).length - index) * 100,
 		}));
 	}
 
-	/**
-	 * Check if task is currently running
-	 */
-	isTaskRunning(): boolean {
-		return this.isRunning;
-	}
 
 	/**
 	 * Get current task information
@@ -224,16 +230,19 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	/**
 	 * Clean up resources
 	 */
-	async cleanup(): Promise<void> {
-		console.log(`${this.logPrefix} Starting cleanup...`);
+	async cleanup(preserveTerminal: boolean = false): Promise<void> {
+		console.log(`${this.logPrefix} R2,R9: Starting cleanup (preserveTerminal: ${preserveTerminal}) - terminal persistence control`);
 		
-		if (this.terminalId) {
+		// Only kill terminal if not preserving
+		if (this.terminalId && !preserveTerminal) {
 			try {
-				console.log(`${this.logPrefix} Killing terminal ${this.terminalId}`);
+				console.log(`${this.logPrefix} R2,R9: Killing terminal ${this.terminalId} - preserveTerminal is false`);
 				await this.killTerminal(this.terminalId);
 			} catch (error) {
-				console.error(`${this.logPrefix} Error killing terminal:`, error);
+				console.error(`${this.logPrefix} R2,R9: Error killing terminal:`, error);
 			}
+		} else if (this.terminalId && preserveTerminal) {
+			console.log(`${this.logPrefix} R2,R9: Preserving terminal ${this.terminalId} - will survive canvas switches and app restarts`);
 		}
 
 		console.log(`${this.logPrefix} Calling super.cleanup()`);
@@ -248,11 +257,9 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		this.isProcessingEvents = false;
 		this.eventQueue = [];
 		this.lastActivityTime = 0;
-		
-		if (this.completionTimeoutId) {
-			clearTimeout(this.completionTimeoutId);
-			this.completionTimeoutId = null;
-		}
+		this.isCompletingTask = false;
+		this.isPaused = false;
+		this.isManuallyControlled = false;
 		
 		this.removeAllListeners();
 		console.log(`${this.logPrefix} Cleanup completed`);
@@ -326,7 +333,6 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 
 		// Update last activity time
 		this.lastActivityTime = Date.now();
-		this.resetCompletionTimeout();
 
 		// Get current TUI lines for CLI agents library
 		const tuiLines = this.getCurrentTuiLines();
@@ -430,85 +436,110 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		await this.sendRawInput(this.terminalId, keyData);
 	}
 
-	private resetCompletionTimeout(): void {
-		if (this.completionTimeoutId) {
-			clearTimeout(this.completionTimeoutId);
+	// Manual control methods
+	async pauseAgent(): Promise<void> {
+		if (!this.terminalId || this.isPaused) {
+			console.log(`${this.logPrefix} R8: Cannot pause agent - no terminal (${!this.terminalId}) or already paused (${this.isPaused})`);
+			return;
 		}
 
-		// Only set timeout if we've seen the Try prompt (task has started)
-		if (this.hasSeenTryPrompt) {
-			this.completionTimeoutId = setTimeout(() => {
-				this.handleTaskCompletion();
-			}, 5000); // 5 seconds of inactivity
+		console.log(`${this.logPrefix} R8: Starting agent pause - sending escape sequences until interrupted`);
+		await this.sendEscapeUntilInterrupted();
+		this.isPaused = true;
+		console.log(`${this.logPrefix} R8: Agent successfully paused - ready for manual control`);
+		this.emit('agentPaused');
+	}
+
+	async resumeAgent(): Promise<void> {
+		if (!this.terminalId || !this.isPaused) {
+			console.log(`${this.logPrefix} R8: Cannot resume agent - no terminal (${!this.terminalId}) or not paused (${!this.isPaused})`);
+			return;
+		}
+
+		console.log(`${this.logPrefix} R8: Resuming agent - sending continue prompt and enter`);
+		await this.sendRawInput(this.terminalId, "continue");
+		await this.delay(1000);
+		await this.sendRawInput(this.terminalId, "\x0d"); // Send Enter
+		this.isPaused = false;
+		console.log(`${this.logPrefix} R8: Agent successfully resumed - continuing execution`);
+		this.emit('agentResumed');
+	}
+
+	async queuePrompt(prompt: string): Promise<void> {
+		if (!this.terminalId) {
+			console.log(`${this.logPrefix} R5,R12: Cannot queue prompt - no terminal available`);
+			throw new Error('No terminal available for queuing prompt');
+		}
+
+		console.log(`${this.logPrefix} R5,R12: Queuing prompt in existing Claude Code instance: ${prompt.substring(0, 50)}...`);
+		console.log(`${this.logPrefix} R5,R12: This will be queued and processed after current task (multi-task support)`);
+
+		// Send prompt to Claude Code (will be queued if busy)
+		for (const char of prompt) {
+			if (char === "\n") {
+				await this.sendRawInput(this.terminalId, "\\");
+				await this.delay(Math.random() * 5 + 5);
+				await this.sendRawInput(this.terminalId, "\r\n");
+			} else {
+				await this.sendRawInput(this.terminalId, char);
+			}
+			await this.delay(Math.random() * 5 + 5);
+		}
+		await this.delay(1000);
+		await this.sendRawInput(this.terminalId, "\x0d");
+
+		console.log(`${this.logPrefix} R5,R12: Prompt successfully queued in Claude Code - task marked as running`);
+		this.emit('promptQueued', { prompt });
+	}
+
+	async prepareManualCommit(): Promise<void> {
+		console.log(`${this.logPrefix} R2,R9: Preparing for manual commit - terminal will remain alive`);
+		// Don't send Ctrl+D - keep terminal alive
+		console.log(`${this.logPrefix} R2,R9: No Ctrl+D sent - persistent terminal maintained until manual commit`);
+		this.emit('readyForCommit');
+	}
+
+	private async sendEscapeUntilInterrupted(): Promise<void> {
+		console.log(`${this.logPrefix} R6,Q8: Starting escape sequence - sending escape until proper interruption detected`);
+		let attempts = 0;
+
+		while (true) {
+			await this.sendRawInput(this.terminalId!, "\x1b"); // ESC
+			await this.delay(500);
+			attempts++;
+
+			let currentLines = this.getCurrentTuiLines();
+			currentLines = currentLines.map((line) => ({ ...line, content: line.content.replaceAll(" ", " ") }));
+			const hasInterrupted = currentLines.some(line =>
+				line.content.includes("Interrupted by user")
+			);
+			const hasPrompt = currentLines.some(line =>
+				line.content.includes("│ >")
+			);
+
+			console.log(`${this.logPrefix} R6,Q8: Attempt ${attempts} - Interrupted: ${hasInterrupted}, Prompt: ${hasPrompt}`);
+
+			if (hasInterrupted && hasPrompt) {
+				console.log(`${this.logPrefix} R6,Q8: Successfully interrupted after ${attempts} attempts - found both 'Interrupted by user' and '| >' prompt`);
+				break;
+			}
+
+			if (attempts % 10 === 0) {
+				console.log(`${this.logPrefix} R6,Q8: Escape attempt ${attempts}, continuing indefinitely until proper interruption (no timeout as specified)`);
+			}
+
+			if (attempts >= 5) {
+				break; // Prevent infinite loop in case of unexpected behavior
+			}
 		}
 	}
 
-	private async handleTaskCompletion(): Promise<void> {
-		if (!this.terminalId || !this.hasSeenTryPrompt) return;
-
-		console.log(
-			this.logPrefix,
-			"Task appears to be complete after 5 seconds of inactivity, sending Ctrl+D twice...",
-		);
-
-		try {
-			await this.sendCtrlD(this.terminalId);
-			await this.delay(Math.random() * 500 + 500);
-			await this.sendCtrlD(this.terminalId);
-
-			const elapsed = Date.now() - this.startTime;
-			
-			// Create git commit as part of task completion
-			let commitHash = "";
-			if (this.osSession && this.currentPrompt) {
-				try {
-					// Add delay to ensure file system operations complete
-					await this.delay(1000);
-					
-					const { GitService } = await import('./GitService');
-					console.log(this.logPrefix, `Attempting to commit changes...`);
-					commitHash = await GitService.createCommit(this.osSession, this.currentPrompt);
-					console.log(this.logPrefix, `Successfully created commit: ${commitHash}`);
-				} catch (error) {
-					const errorString = String(error);
-					console.log(this.logPrefix, `Git commit error: ${errorString}`);
-					
-					if (errorString === "NO_CHANGES_TO_COMMIT" || errorString.toLowerCase().includes("nothing to commit")) {
-						// Check if there are actually changes that weren't detected
-						console.warn(this.logPrefix, "Git reports no changes but task completed - possible timing issue");
-						commitHash = "NO_CHANGES";
-					} else {
-						// Real git error - this indicates a repository or git configuration problem
-						console.error(this.logPrefix, "Git commit failed with error:", error);
-						
-						// Check for common git repository issues
-						if (errorString.includes("unknown revision") || 
-						    errorString.includes("ambiguous argument") || 
-						    errorString.includes("not a git repository") ||
-						    errorString.includes("detected dubious ownership")) {
-							this.emit("taskError", new Error(`Cannot complete task: Git repository error - ${errorString}`));
-							return;
-						}
-						
-						// For other git errors, still fail the task
-						this.emit("taskError", new Error(`Cannot complete task: Git commit failed - ${errorString}`));
-						return;
-					}
-				}
-			}
-
-			this.emit("taskCompleted", {
-				prompt: this.currentPrompt,
-				elapsed,
-				commitHash
-			});
-		} catch (error) {
-			console.error(
-				this.logPrefix,
-				"Error sending completion sequence:",
-				error,
-			);
-		}
+	getAgentStatus(): { isRunning: boolean; isPaused: boolean; terminalId: string | null } {
+		return {
+			isRunning: this.isRunning,
+			isPaused: this.isPaused,
+			terminalId: this.terminalId
+		};
 	}
 
 	private async processTuiInteraction(tuiLines: TuiLine[]): Promise<void> {
@@ -518,46 +549,17 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		let newLines: string[] = tuiLines.map((tuiLine) => tuiLine.content);
 
 		newLines = newLines.map((line) => line.replaceAll(" ", " "));
+		// console.log(this.logPrefix, "Processing TUI interactions with new lines:", newLines);
 
-		// console.log(this.logPrefix, "Analyzing new lines for TUI interactions:");
-		// newLines.forEach((line, i) => {
-		// 	if (line.trim()) {
-		// 		console.log(this.logPrefix, `  Line ${i}:`, JSON.stringify(line));
-		// 	}
-		// });
-
-		// // Check for trust folder confirmation
-		// const hasEnterToConfirm = newLines.some((line) =>
-		// 	line.includes("Enter to confirm"),
-		// );
-		// const hasTrustQuestion = newLines.some((line) =>
-		// 	line.includes("Do you trust the files in this folder?"),
-		// );
-
-		// if (hasEnterToConfirm && hasTrustQuestion && !this.hasSeenTrustPrompt) {
-		// 	console.log(
-		// 		this.logPrefix,
-		// 		"Found trust confirmation prompt, sending Enter...",
-		// 	);
-		// 	await this.delay(Math.random() * 50 + 50);
-		// 	await this.sendRawInput(this.terminalId, "\r");
-		// 	this.hasSeenTrustPrompt = true;
-		// 	return;
-		// }
-
-		// Check for "Yes, and don't ask again this session (shift+tab)"
-		const hasShiftTabOption = newLines.some((line) =>
-			line.includes("1. Yes"),
+		// Check for "esc to interrupt" - do nothing
+		const hasEscToInterrupt = newLines.some((line) =>
+			line.includes("esc to interrupt"),
 		);
-		if (hasShiftTabOption) {
-			console.log(
-				this.logPrefix,
-				"Found '1. Yes'",
-			);
-			await this.delay(1000);
-			await this.sendRawInput(this.terminalId, "\r");
-			await this.sendRawInput(this.terminalId, "\r");
-			await this.sendRawInput(this.terminalId, "\r");
+		if (hasEscToInterrupt) {
+			// send `x0d` and then delete
+			// await this.sendRawInput(this.terminalId, "\x0d");
+			// await this.delay(500);
+			// await this.sendRawInput(this.terminalId, "\x08");
 			return;
 		}
 
@@ -570,33 +572,81 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 				this.currentPrompt,
 			);
 			this.hasSeenTryPrompt = true;
+			console.log(
+				this.logPrefix,
+				"R8: Set hasSeenTryPrompt = true, pause button should now appear"
+			);
+			// Emit event to trigger UI update
+			this.emit("promptSent");
 			// Send the prompt key by key, simulating typing
 			for (const char of this.currentPrompt) {
 				if (char === "\n") {
 					await this.sendRawInput(this.terminalId, "\\");
-					await this.delay(Math.random() * 50 + 50);
-					await this.sendRawInput(this.terminalId, "\r");
+					await this.delay(Math.random() * 5 + 5);
+					await this.sendRawInput(this.terminalId, "\r\n");
 				} else {
 					await this.sendRawInput(this.terminalId, char);
 				}
-				await this.delay(Math.random() * 50 + 50);
+				await this.delay(Math.random() * 5 + 5);
 			}
-			await this.delay(Math.random() * 50 + 50);
-			await this.sendRawInput(this.terminalId, "\r");
+			await this.delay(1000);
+			await this.sendRawInput(this.terminalId, "\x0d");
+			// await this.sendRawInput(this.terminalId, "\x0d");
 			return;
 		}
 
-		// Check for "esc to interrupt" - do nothing
-		const hasEscToInterrupt = newLines.some((line) =>
-			line.includes("esc to interrupt"),
+		// Check for "Yes, and don't ask again this session (shift+tab)"
+		const hasShiftTabOption = newLines.some((line) =>
+			line.includes("1. Yes"),
 		);
-		if (hasEscToInterrupt) {
-			// console.log(this.logPrefix, "Found 'esc to interrupt', waiting...");
+		if (hasShiftTabOption) {
+			console.log(
+				this.logPrefix,
+				"Found '1. Yes'",
+			);
+			await this.delay(1000);
+			await this.sendRawInput(this.terminalId, "\x0d");
+			// await this.sendRawInput(this.terminalId, "\r");
+			// await this.sendRawInput(this.terminalId, "\r");
 			return;
 		}
 	}
 
 	private delay(ms: number): Promise<void> {
 		return new Promise((resolve) => setTimeout(resolve, ms));
+	}
+
+	/**
+	 * Check if a task is currently running and a prompt has been sent
+	 * Pause button should only show if agent is running AND we've sent the prompt
+	 */
+	isTaskRunning(): boolean {
+		const result = this.isRunning && this.hasSeenTryPrompt;
+		console.log(`${this.logPrefix} R8: isTaskRunning check - isRunning: ${this.isRunning}, hasSeenTryPrompt: ${this.hasSeenTryPrompt}, result: ${result}`);
+		return result;
+	}
+
+	/**
+	 * Check if agent is available to accept new prompts (terminal alive and ready)
+	 * Used to determine if we should queue prompts or create new agent
+	 */
+	isAgentAvailable(): boolean {
+		const result = !!this.terminalId && !this.isCompletingTask;
+		console.log(`${this.logPrefix} R2,R9: isAgentAvailable check - terminalId: ${!!this.terminalId}, isCompletingTask: ${this.isCompletingTask}, result: ${result}`);
+		return result;
+	}
+
+	/**
+	 * Reset task state after manual commit
+	 * Called when tasks are committed manually via the commit button
+	 */
+	resetAfterCommit(): void {
+		console.log(`${this.logPrefix} R10: Resetting agent state after manual commit`);
+		this.isRunning = false;
+		this.hasSeenTryPrompt = false;
+		this.currentTask = null;
+		this.currentPrompt = null;
+		this.isManuallyControlled = true; // Keep terminal alive but mark as manually controlled
+		console.log(`${this.logPrefix} R2,R9: Agent reset but terminal remains alive`);
 	}
 }

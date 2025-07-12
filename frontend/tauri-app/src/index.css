@@ -162,6 +162,7 @@
 * {
 	box-sizing: border-box;
 	--border: 1.5px;
+	--border-big: calc(4 * var(--border));
 }
 
 body {
@@ -176,6 +177,7 @@ body {
 	width: 100vw;
 	border-radius: 8px;
 	overflow: hidden;
+	background: transparent;
 }
 
 /* I know, terrible practice, yada yada. That's my IDE, I decide */
@@ -206,6 +208,20 @@ body {
 
 .animate-fade-in {
 	animation: fadeIn 0.5s ease-out forwards;
+}
+
+/* Marquee animation for canvas agent list */
+@keyframes marquee {
+	0% {
+		transform: translateX(0);
+	}
+	100% {
+		transform: translateX(-50%);
+	}
+}
+
+.animate-marquee {
+	animation: marquee linear infinite;
 }
 
 

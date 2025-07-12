@@ -57,6 +57,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 			try {
 				const tauriStore = await load("store.json", { autoSave: false });
 				setTauriStore(tauriStore);
+				
+				// Set up persistence callback for BackgroundAgentManager
+				// This ensures timer-based agent cleanup triggers persistence
+				const { BackgroundAgentManager } = await import('../services/BackgroundAgentManager');
+				BackgroundAgentManager.setPersistenceCallback((projectId: string) => {
+					console.log(`[Store] Persistence triggered by BackgroundAgentManager for project ${projectId}`);
+					// Force re-render to trigger the save useEffect
+					setGitProjects((prev) => [...prev]);
+				});
 				const savedState = await tauriStore.get<AppState>("appState");
 				if (savedState) {
 					setThemeState(savedState.theme);

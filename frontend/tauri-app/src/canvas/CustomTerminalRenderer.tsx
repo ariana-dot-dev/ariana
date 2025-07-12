@@ -28,6 +28,8 @@ class TerminalConnectionManager {
 		screen: LineItem[][];
 		cursorPosition: { line: number; col: number };
 		windowDimensions: { rows: number; cols: number };
+		scrollPosition: { scrollTop: number; scrollHeight: number };
+		isAtBottom: boolean;
 	}>(); // elementId -> terminal screen state
 
 	static getConnection(elementId: string): string | undefined {
@@ -58,12 +60,21 @@ class TerminalConnectionManager {
 		elementId: string, 
 		screen: LineItem[][], 
 		cursorPosition: { line: number; col: number },
-		windowDimensions: { rows: number; cols: number }
+		windowDimensions: { rows: number; cols: number },
+		scrollPosition?: { scrollTop: number; scrollHeight: number },
+		isAtBottom?: boolean
 	): void {
+		// Deep copy screen with safety checks for undefined items
+		const safeScreen = screen.map(line => 
+			line ? [...line.filter(item => item !== undefined)] : []
+		);
+		
 		TerminalConnectionManager.screenStates.set(elementId, {
-			screen: [...screen], // Deep copy to avoid mutation issues
+			screen: safeScreen,
 			cursorPosition: { ...cursorPosition },
-			windowDimensions: { ...windowDimensions }
+			windowDimensions: { ...windowDimensions },
+			scrollPosition: scrollPosition || { scrollTop: 0, scrollHeight: 0 },
+			isAtBottom: isAtBottom ?? true
 		});
 	}
 
@@ -98,6 +109,7 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 			cols: 60,
 		}
 	);
+	const [isAtBottom, setIsAtBottom] = useState(persistedState?.isAtBottom ?? true);
 	const [charDimensions, setCharDimensions] = useState({
 		width: 7.35,
 		height: 16,
@@ -115,14 +127,22 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 	// Persist state whenever it changes
 	useEffect(() => {
 		if (screen.length > 0 || cursorPosition.line > 0 || cursorPosition.col > 0) {
+			const scrollableDiv = scrollableRef.current;
+			const scrollPosition = scrollableDiv ? {
+				scrollTop: scrollableDiv.scrollTop,
+				scrollHeight: scrollableDiv.scrollHeight
+			} : { scrollTop: 0, scrollHeight: 0 };
+			
 			TerminalConnectionManager.setScreenState(
 				elementId,
 				screen,
 				cursorPosition,
-				windowDimensions
+				windowDimensions,
+				scrollPosition,
+				isAtBottom
 			);
 		}
-	}, [elementId, screen, cursorPosition, windowDimensions]);
+	}, [elementId, screen, cursorPosition, windowDimensions, isAtBottom]);
 
 	useEffect(() => {
 		if (!phantomCharRef.current) return;
@@ -245,11 +265,17 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 			if (!scrollableDiv) return;
 
 			scrollableDiv.scrollTop = scrollableDiv.scrollHeight;
+			setIsAtBottom(true);
 		};
 		inner();
 		setTimeout(inner, 10);
 		setTimeout(inner, 50);
 	}, []);
+
+	const shouldAutoScroll = useCallback(() => {
+		// Only auto-scroll if we're already at the bottom or if the user hasn't manually scrolled
+		return isAtBottom || !hasScrolledRef.current;
+	}, [isAtBottom]);
 
 	const handleTerminalEvent = useCallback((events: TerminalEvent[]) => {
 		// Batch multiple events together to reduce React renders
@@ -262,12 +288,17 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 			return e.type == "cursorMove" || e.type == "screenUpdate";
 		});
 
+		let shouldTriggerScroll = false;
+		let lastCursorLine = cursorPosition.line;
+
 		if (screenUpdates.length > 0) {
 			setScreen((oldScreen) => {
 				const newScreen = screenUpdates.reduce((acc, event) => {
 					if (event.type == "screenUpdate") {
+						shouldTriggerScroll = true; // Always scroll on full screen updates
 						return event.screen!;
 					} else if (event.type == "newLines") {
+						shouldTriggerScroll = true; // Always scroll on new lines
 						return [...acc, ...event.lines!];
 					} else if (event.type == "patch") {
 						while (event.line! >= acc.length) {
@@ -278,14 +309,16 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 							);
 						}
 						acc[event.line!] = [...event.items!];
+						
+						// Check if patch is near the bottom of the screen
+						if (event.line! >= acc.length - windowDimensions.rows) {
+							shouldTriggerScroll = true;
+						}
+						
 						return acc;
 					}
 					return acc;
 				}, oldScreen);
-
-				if (newScreen.length != oldScreen.length) {
-					scrollDown();
-				}
 
 				return newScreen;
 			});
@@ -302,10 +335,20 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 					return acc;
 				}, oldPosition);
 
+				// Check if cursor moved significantly down (indicating new content)
+				if (newPosition.line > lastCursorLine + 2) {
+					shouldTriggerScroll = true;
+				}
+
 				return newPosition;
 			});
 		}
-	}, []);
+
+		// Apply smart auto-scroll logic
+		if (shouldTriggerScroll && shouldAutoScroll()) {
+			scrollDown();
+		}
+	}, [cursorPosition.line, shouldAutoScroll, scrollDown, windowDimensions]);
 
 	const handleTerminalDisconnect = useCallback(() => {
 		TerminalConnectionManager.removeConnection(elementId);
@@ -551,13 +594,17 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 		};
 	}, [handleResize, isConnected]);
 
-	// Track scroll events to detect user interaction
+	// Track scroll events to detect user interaction and bottom position
 	useEffect(() => {
 		const scrollableDiv = scrollableRef.current;
 		if (!scrollableDiv) return;
 
 		const handleScroll = () => {
 			hasScrolledRef.current = true; // Mark that the user has scrolled
+			
+			// Check if we're at the bottom (within 10px tolerance)
+			const isNearBottom = scrollableDiv.scrollTop + scrollableDiv.clientHeight >= scrollableDiv.scrollHeight - 10;
+			setIsAtBottom(isNearBottom);
 		};
 
 		scrollableDiv.addEventListener("scroll", handleScroll);
@@ -565,6 +612,27 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 			scrollableDiv.removeEventListener("scroll", handleScroll);
 		};
 	}, [isConnected]);
+
+	// Restore scroll position and auto-scroll to bottom when terminal is restored
+	useEffect(() => {
+		if (isConnected && screen.length > 0) {
+			const scrollableDiv = scrollableRef.current;
+			if (!scrollableDiv) return;
+
+			// If terminal was previously at bottom or has persisted state indicating bottom
+			if (isAtBottom || (persistedState?.isAtBottom ?? true)) {
+				// Auto-scroll to bottom after a short delay to ensure content is rendered
+				setTimeout(() => {
+					scrollDown();
+				}, 100);
+			} else if (persistedState?.scrollPosition) {
+				// Restore exact scroll position if available
+				setTimeout(() => {
+					scrollableDiv.scrollTop = persistedState.scrollPosition.scrollTop;
+				}, 100);
+			}
+		}
+	}, [isConnected, screen.length, scrollDown, isAtBottom, persistedState]);
 
 	// Auto-focus the terminal and set initial size
 	useEffect(() => {
@@ -699,18 +767,33 @@ const Chunk = React.memo(
 		if (prevProps.charDimensions !== nextProps.charDimensions) return false;
 
 		for (let i = 0; i < prevProps.lines.length; i++) {
-			for (let j = 0; j < prevProps.lines[i].length; j++) {
+			const prevLine = prevProps.lines[i];
+			const nextLine = nextProps.lines[i];
+			
+			// Check if lines exist and have same length
+			if (!prevLine || !nextLine || prevLine.length !== nextLine.length) {
+				if (prevLine !== nextLine) return false;
+				continue;
+			}
+			
+			for (let j = 0; j < prevLine.length; j++) {
+				const prevItem = prevLine[j];
+				const nextItem = nextLine[j];
+				
+				// Check if items exist
+				if (!prevItem || !nextItem) {
+					if (prevItem !== nextItem) return false;
+					continue;
+				}
+				
 				if (
-					prevProps.lines[i][j].lexeme !== nextProps.lines[i][j].lexeme ||
-					prevProps.lines[i][j].width !== nextProps.lines[i][j].width ||
-					prevProps.lines[i][j].is_bold !== nextProps.lines[i][j].is_bold ||
-					prevProps.lines[i][j].is_italic !== nextProps.lines[i][j].is_italic ||
-					prevProps.lines[i][j].is_underline !==
-						nextProps.lines[i][j].is_underline ||
-					prevProps.lines[i][j].foreground_color !==
-						nextProps.lines[i][j].foreground_color ||
-					prevProps.lines[i][j].background_color !==
-						nextProps.lines[i][j].background_color
+					prevItem.lexeme !== nextItem.lexeme ||
+					prevItem.width !== nextItem.width ||
+					prevItem.is_bold !== nextItem.is_bold ||
+					prevItem.is_italic !== nextItem.is_italic ||
+					prevItem.is_underline !== nextItem.is_underline ||
+					prevItem.foreground_color !== nextItem.foreground_color ||
+					prevItem.background_color !== nextItem.background_color
 				) {
 					return false;
 				}
@@ -775,23 +858,42 @@ const Row = React.memo(
 					}
 				}}
 			>
-				{line.map((item, index) => (
-					<span
-						key={index}
-						className={cn("")}
-						style={{
-							backgroundColor: colorToCSS(item.background_color, isLightTheme),
-							color: colorToCSS(item.foreground_color, isLightTheme),
-							fontWeight: item.is_bold ? "bold" : "normal",
-							textDecoration: item.is_underline ? "underline" : "none",
-							fontStyle: item.is_italic ? "italic" : "normal",
-							whiteSpace: "pre-wrap",
-							width: `${charDimensions.width}px`,
-						}}
-					>
-						{lexemeMap[item.lexeme] ? lexemeMap[item.lexeme] : item.lexeme}
-					</span>
-				))}
+				{line.map((item, index) => {
+					// Handle undefined items gracefully
+					if (!item) {
+						return (
+							<span
+								key={index}
+								style={{
+									width: `${charDimensions.width}px`,
+									minWidth: `${charDimensions.width}px`,
+									whiteSpace: "pre-wrap",
+								}}
+							>
+								{" "}
+							</span>
+						);
+					}
+					
+					return (
+						<span
+							key={index}
+							className={cn("")}
+							style={{
+								backgroundColor: colorToCSS(item.background_color, isLightTheme),
+								color: colorToCSS(item.foreground_color, isLightTheme),
+								fontWeight: item.is_bold ? "bold" : "normal",
+								textDecoration: item.is_underline ? "underline" : "none",
+								fontStyle: item.is_italic ? "italic" : "normal",
+								whiteSpace: "pre-wrap",
+								width: `${charDimensions.width}px`,
+								minWidth: `${charDimensions.width}px`,
+							}}
+						>
+							{lexemeMap[item.lexeme] ? lexemeMap[item.lexeme] : item.lexeme}
+						</span>
+					);
+				})}
 			</div>
 		);
 	},
@@ -801,17 +903,29 @@ const Row = React.memo(
 		if (prevProps.isLightTheme !== nextProps.isLightTheme) return false;
 		if (prevProps.charDimensions !== nextProps.charDimensions) return false;
 
+		// Check if arrays have different lengths
+		if (prevProps.line.length !== nextProps.line.length) {
+			return false;
+		}
+
 		for (let i = 0; i < prevProps.line.length; i++) {
+			const prevItem = prevProps.line[i];
+			const nextItem = nextProps.line[i];
+			
+			// Check if either item is undefined or null
+			if (!prevItem || !nextItem) {
+				if (prevItem !== nextItem) return false;
+				continue;
+			}
+			
 			if (
-				prevProps.line[i].lexeme !== nextProps.line[i].lexeme ||
-				prevProps.line[i].width !== nextProps.line[i].width ||
-				prevProps.line[i].is_bold !== nextProps.line[i].is_bold ||
-				prevProps.line[i].is_italic !== nextProps.line[i].is_italic ||
-				prevProps.line[i].is_underline !== nextProps.line[i].is_underline ||
-				prevProps.line[i].foreground_color !==
-					nextProps.line[i].foreground_color ||
-				prevProps.line[i].background_color !==
-					nextProps.line[i].background_color
+				prevItem.lexeme !== nextItem.lexeme ||
+				prevItem.width !== nextItem.width ||
+				prevItem.is_bold !== nextItem.is_bold ||
+				prevItem.is_italic !== nextItem.is_italic ||
+				prevItem.is_underline !== nextItem.is_underline ||
+				prevItem.foreground_color !== nextItem.foreground_color ||
+				prevItem.background_color !== nextItem.background_color
 			) {
 				return false;
 			}

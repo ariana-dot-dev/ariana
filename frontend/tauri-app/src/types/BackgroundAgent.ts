@@ -2,7 +2,7 @@ import { OsSession, osSessionGetWorkingDirectory } from "../bindings/os";
 
 export type BackgroundAgentType = 'merge' | 'deploy' | 'test' | 'analyze';
 
-export type BackgroundAgentStatus = 'preparation' | 'running' | 'completed' | 'failed' | 'cancelled';
+export type BackgroundAgentStatus = 'queued' | 'preparation' | 'running' | 'completed' | 'failed' | 'cancelled';
 
 export interface BackgroundAgentState {
 	id: string;
@@ -38,6 +38,7 @@ export function createCancellationToken(): CancellationToken {
 export abstract class BackgroundAgent<TContext = any> {
 	public readonly id: string;
 	public abstract readonly type: BackgroundAgentType;
+	public abstract readonly requiresSerialization: boolean; // True if only one agent of this type can run at a time
 	public status: BackgroundAgentStatus;
 	public readonly createdAt: number;
 	public lastUpdated: number;
@@ -50,9 +51,9 @@ export abstract class BackgroundAgent<TContext = any> {
 	// Reactive listeners for UI updates
 	private listeners: Set<() => void> = new Set();
 
-	constructor(id: string, workspaceOsSession: OsSession, context: TContext) {
+	constructor(id: string, workspaceOsSession: OsSession, context: TContext, requiresSerialization: boolean = false) {
 		this.id = id;
-		this.status = 'preparation';
+		this.status = requiresSerialization ? 'queued' : 'preparation';
 		this.createdAt = Date.now();
 		this.lastUpdated = Date.now();
 		this.workspaceOsSession = workspaceOsSession;
@@ -181,9 +182,10 @@ export interface MergeResult {
 
 export class MergeAgent extends BackgroundAgent<MergeAgentContext> {
 	public readonly type: BackgroundAgentType = 'merge';
+	public readonly requiresSerialization: boolean = true; // Merge agents must run one at a time
 
 	constructor(id: string, workspaceOsSession: OsSession, context: MergeAgentContext) {
-		super(id, workspaceOsSession, context);
+		super(id, workspaceOsSession, context, true);
 	}
 
 	/**
@@ -562,11 +564,15 @@ The system will automatically commit your changes.`.trim();
 
 			const onTaskComplete = () => {
 				clearInterval(cancellationInterval);
+				claudeAgent.off('taskCompleted', onTaskComplete);
+				claudeAgent.off('taskError', onTaskError);
 				resolve();
 			};
 
 			const onTaskError = (error: any) => {
 				clearInterval(cancellationInterval);
+				claudeAgent.off('taskCompleted', onTaskComplete);
+				claudeAgent.off('taskError', onTaskError);
 				reject(new Error(`Claude Code task failed: ${error}`));
 			};
 

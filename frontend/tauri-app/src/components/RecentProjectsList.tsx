@@ -3,6 +3,7 @@ import { GitProject } from "../types/GitProject";
 import { OsSession, OsSessionKind, osSessionGetWorkingDirectory } from "../bindings/os";
 import { invoke } from "@tauri-apps/api/core";
 import { SingleChoiceList } from './ChoiceList';
+import { cn } from "../utils";
 
 interface RecentProjectsListProps {
 	projects: GitProject[];
@@ -111,9 +112,6 @@ export function RecentProjectsList({ projects, onProjectSelect }: RecentProjects
 		<div className="w-fit max-w-full">
 			<div className="flex flex-col gap-2 mb-4">
 				<h2 className="text-lg font-medium text-[var(--base-700)]">Recent Projects</h2>
-				{isValidating && (
-					<div className="text-xs text-[var(--base-500)]">Loading...</div>
-				)}
 			</div>
 
 			{validatedProjects.length === 0 && !isValidating ? (
@@ -133,7 +131,7 @@ export function RecentProjectsList({ projects, onProjectSelect }: RecentProjects
 						}
 					}}
 					getItemId={(validatedProject) => validatedProject.project.id}
-					className="max-h-48 overflow-y-auto"
+					className={cn("max-h-60 overflow-y-auto pr-2")}
 					renderItem={(validatedProject, isSelected) => (
 						<div className="flex w-80 max-w-full items-center justify-between">
 							<div className="flex-1 min-w-0">

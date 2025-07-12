@@ -7,7 +7,8 @@ import { ClaudeCodeAgent } from "../services/ClaudeCodeAgent";
 import { useGitProject } from "../contexts/GitProjectContext";
 import { ProcessManager } from "../services/ProcessManager";
 import { ProcessState } from "../types/GitProject";
-import { GitService } from "../services/GitService";
+import { TaskComponent } from "./TaskComponent";
+import { TerminalControls } from "./TerminalControls";
 
 interface TextAreaOnCanvasProps {
 	layout: ElementLayout;
@@ -40,13 +41,9 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 		startTask,
 		completeTask,
 		updateTaskPrompt,
-		revertTask,
-		restoreTask,
 		currentCanvas,
 		getCanvasLockState,
 		canEditCanvas,
-		getInProgressPrompt,
-		clearInProgressPrompt,
 		setInProgressPrompt
 	} = useGitProject();
 	
@@ -55,29 +52,44 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 	const isCanvasLocked = canvasLockState !== 'normal';
 	const canEdit = currentCanvas ? canEditCanvas(currentCanvas.id) : false;
 	
-	const [text, setText] = useState((layout.element.kind as TextAreaKind).textArea.content);
-	const [currentPrompt, setCurrentPrompt] = useState("");
+	// Multi-task state
 	const [showTerminal, setShowTerminal] = useState(false);
 	const [terminalId, setTerminalId] = useState<string | null>(null);
 	const [claudeAgent, setClaudeAgent] = useState<ClaudeCodeAgent | null>(null);
-	const [autoGoRemaining, setAutoGoRemaining] = useState(0);
 	const [dragging, setDragging] = useState(false);
+	// Terminal control state
+	const [isTerminalMaximized, setIsTerminalMaximized] = useState(false);
+	const [isAgentPaused, setIsAgentPaused] = useState(false);
 	
-	const currentPromptingTask = taskManager?.getCurrentPromptingTask();
-	const currentInProgressTask = taskManager?.getCurrentInProgressTask();
-	const completedTasks = taskManager?.getCompletedTasks() || [];
+	// Get all tasks for multi-task support
+	const allTasks = taskManager?.getTasks() || [];
+	const runningTasks = taskManager?.getRunningTasks() || [];
+	const hasRunningTasks = runningTasks.length > 0;
 	const elementId = element.id;
+	const canControlTerminal = canEdit && canvasLockState === 'normal';
+	const canStartTasks = canEdit && canvasLockState === 'normal';
 	
-	// Initialize prompt from persistent storage
+	// Force re-render when TaskManager state changes (simple pattern like original)
+	const [taskManagerUpdateTrigger, setTaskManagerUpdateTrigger] = useState(0);
+	
+	// Subscribe to TaskManager changes
 	useEffect(() => {
-		if (currentCanvas && !currentPrompt) {
-			const persistedPrompt = getInProgressPrompt(currentCanvas.id, elementId);
-			if (persistedPrompt) {
-				setCurrentPrompt(persistedPrompt);
-				setText(persistedPrompt);
-			}
+		if (!taskManager) return;
+		
+		const unsubscribe = taskManager.subscribe(() => {
+			setTaskManagerUpdateTrigger(prev => prev + 1);
+		});
+		
+		return unsubscribe;
+	}, [taskManager]);
+	
+	// Auto-create empty task when component mounts (simple, one-time check)
+	useEffect(() => {
+		if (taskManager) {
+			console.log(`[TextAreaOnCanvas] R1,R4: Auto-task creation check - current task count: ${allTasks.length}`);
+			taskManager.ensureEmptyTask();
 		}
-	}, [currentCanvas, elementId, getInProgressPrompt, currentPrompt]);
+	}, [taskManager]); // Only depend on taskManager, not tasks array
 	const textAreaRef = useRef<HTMLTextAreaElement>(null);
 	const textAreaOsSession = (element.kind as TextAreaKind).textArea.osSession; 
 	
@@ -85,7 +97,7 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 	const handleDragEndInternal = () => propOnDragEnd(element);
 
 	const startTaskWithPrompt = async (prompt: string) => {
-		if (!canEdit || currentInProgressTask || !prompt.trim()) return false;
+		if (!canEdit || hasRunningTasks || !prompt.trim()) return false;
 		
 		// CRITICAL FIX: Prevent multiple agents - check if one is already running
 		if (claudeAgent && claudeAgent.isTaskRunning()) {
@@ -100,14 +112,9 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 			setClaudeAgent(null);
 		}
 		
-		let taskId: string;
-		if (currentPromptingTask) {
-			updateTaskPrompt(currentPromptingTask.id, prompt.trim());
-			taskId = currentPromptingTask.id;
-		} else {
-			taskId = createTask(prompt.trim()) || '';
-			if (!taskId) return false;
-		}
+		// Create a new task for this prompt
+		const taskId = createTask(prompt.trim()) || '';
+		if (!taskId) return false;
 
 		try {
 			console.log(`[TextAreaOnCanvas] Creating new agent for element ${elementId}`);
@@ -148,55 +155,62 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 		}
 	};
 
-	const handleGoClick = async () => {
-		const success = await startTaskWithPrompt(currentPrompt);
-		if (success && autoGoRemaining > 0) {
-			setAutoGoRemaining(prev => Math.max(0, prev - 1));
+	const startExistingTask = async (taskId: string, prompt: string) => {
+		try {
+			console.log(`[TextAreaOnCanvas] Starting existing task ${taskId} with new agent`);
+			const agent = new ClaudeCodeAgent();
+			setClaudeAgent(agent);
+			setShowTerminal(true);
+
+			await agent.startTask(
+				textAreaOsSession || { Local: "." },
+				prompt.trim(),
+				(newTerminalId: string) => {
+					setTerminalId(newTerminalId);
+					setShowTerminal(true);
+					
+					const processId = crypto.randomUUID();
+					const processState: ProcessState = {
+						processId,
+						terminalId: newTerminalId,
+						type: 'claude-code',
+						status: 'running',
+						startTime: Date.now(),
+						elementId,
+						prompt: prompt.trim()
+					};
+					
+					ProcessManager.registerProcess(processId, agent);
+					ProcessManager.setTerminalConnection(elementId, newTerminalId);
+					addProcess(processState);
+					startTask(taskId, processId);
+				},
+			);
+
+			return true;
+		} catch (error) {
+			setShowTerminal(false);
+			setTerminalId(null);
+			return false;
 		}
 	};
 
-	useEffect(() => {
-		(layout.element.kind as TextAreaKind).textArea.content = text;
-	}, [text]);
+
 
 	// Memoize textArea object to prevent re-render loops
 	const textAreaObj = useMemo(() => (layout.element.kind as TextAreaKind).textArea, [layout.element.id]);
 
-	useEffect(() => {
-		if (currentPromptingTask) {
-			setCurrentPrompt(currentPromptingTask.prompt);
-			setText(currentPromptingTask.prompt);
-		} else if (!currentPrompt && text) {
-			setCurrentPrompt(text);
-			if (textAreaObj.shouldTriggerAutoGo) {
-				setAutoGoRemaining(1);
-				textAreaObj.shouldTriggerAutoGo = false;
-			}
-		}
-	}, [text, currentPrompt, currentPromptingTask, textAreaObj]);
+
 
 	useEffect(() => {
-		if (autoGoRemaining > 0 && currentPrompt.trim() && !currentInProgressTask && !currentPromptingTask && canEdit && !claudeAgent) {
-			const autoPress = async () => {
-				const success = await startTaskWithPrompt(currentPrompt);
-				if (success) {
-					setAutoGoRemaining(prev => Math.max(0, prev - 1));
-				}
-			};
-			const timeoutId = setTimeout(autoPress, 1500);
-			return () => clearTimeout(timeoutId); // IMPORTANT: Clear timeout on cleanup
-		}
-	}, [autoGoRemaining, currentPrompt, currentInProgressTask, currentPromptingTask, canEdit, claudeAgent]);
-
-	useEffect(() => {
-		if (!currentInProgressTask && !claudeAgent) {
+		if (!hasRunningTasks && !claudeAgent) {
 			const timeoutId = setTimeout(() => {
 				setShowTerminal(false);
 				setTerminalId(null);
 			}, 1000);
 			return () => clearTimeout(timeoutId);
 		}
-	}, [currentInProgressTask, claudeAgent]);
+	}, [hasRunningTasks, claudeAgent]);
 
 	useEffect(() => {
 		const existingProcess = getProcessByElementId(elementId);
@@ -211,10 +225,11 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 					setClaudeAgent(restoredAgent);
 				} else {
 					updateProcess(existingProcess.processId, { status: 'finished' });
-					const inProgressTask = taskManager?.getInProgressTasks().find(t => t.processId === existingProcess.processId);
-					if (inProgressTask) {
-						completeTask(inProgressTask.id, "");
-					}
+					// Mark all running tasks associated with this process as failed
+					const runningTasksForProcess = taskManager?.getRunningTasks().filter(t => t.processId === existingProcess.processId);
+					runningTasksForProcess?.forEach(task => {
+						taskManager?.failTask(task.id, "Agent process terminated");
+					});
 				}
 			} else if (existingProcess.status === 'finished' || existingProcess.status === 'completed') {
 				removeProcess(existingProcess.processId);
@@ -226,28 +241,9 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 		if (!claudeAgent) return;
 
 		const handleTaskComplete = async (result: any) => {
-			const inProgressTask = taskManager?.getCurrentInProgressTask();
-			if (!inProgressTask) return;
-			
-			// Commit hash is now provided by ClaudeCodeAgent
-			const commitHash = result.commitHash || "NO_CHANGES";
-			
-			completeTask(inProgressTask.id, commitHash);
-			setCurrentPrompt("");
-			setText("");
-			
-			// Clear the persistent prompt
-			if (currentCanvas) {
-				clearInProgressPrompt(currentCanvas.id, elementId);
-			}
-			
-			const existingProcess = getProcessByElementId(elementId);
-			if (existingProcess) {
-				updateProcess(existingProcess.processId, { status: 'finished' });
-				ProcessManager.unregisterProcess(existingProcess.processId);
-			}
-			
-			setTimeout(() => setClaudeAgent(null), 500);
+			// In the new system, task completion is handled manually via commit button
+			// This event is no longer used for auto-completion
+			console.log(`[TextAreaOnCanvas] Received taskCompleted event (ignored in manual mode):`, result);
 		};
 
 		const handleTaskError = (error: string) => {
@@ -261,19 +257,43 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 
 		const handleTaskStarted = (data: any) => {};
 		const handleScreenUpdate = (tuiLines: any) => {};
+		const handleAgentPaused = () => {
+			console.log(`[TextAreaOnCanvas] Agent paused`);
+			setIsAgentPaused(true);
+		};
+		const handleAgentResumed = () => {
+			console.log(`[TextAreaOnCanvas] Agent resumed`);
+			setIsAgentPaused(false);
+		};
+		const handlePromptQueued = (data: { prompt: string }) => {
+			console.log(`[TextAreaOnCanvas] Prompt queued:`, data.prompt.substring(0, 50));
+		};
+		const handlePromptSent = () => {
+			console.log(`[TextAreaOnCanvas] R8: Prompt sent to Claude - pause button should now be visible`);
+			// Force re-render to update button visibility
+			setTaskManagerUpdateTrigger(prev => prev + 1);
+		};
 
 		claudeAgent.on("taskCompleted", handleTaskComplete);
 		claudeAgent.on("taskError", handleTaskError);
 		claudeAgent.on("taskStarted", handleTaskStarted);
 		claudeAgent.on("screenUpdate", handleScreenUpdate);
+		claudeAgent.on("agentPaused", handleAgentPaused);
+		claudeAgent.on("agentResumed", handleAgentResumed);
+		claudeAgent.on("promptQueued", handlePromptQueued);
+		claudeAgent.on("promptSent", handlePromptSent);
 
 		return () => {
 			claudeAgent.off("taskCompleted", handleTaskComplete);
 			claudeAgent.off("taskError", handleTaskError);
 			claudeAgent.off("taskStarted", handleTaskStarted);
 			claudeAgent.off("screenUpdate", handleScreenUpdate);
+			claudeAgent.off("agentPaused", handleAgentPaused);
+			claudeAgent.off("agentResumed", handleAgentResumed);
+			claudeAgent.off("promptQueued", handlePromptQueued);
+			claudeAgent.off("promptSent", handlePromptSent);
 		};
-	}, [claudeAgent]);
+	}, [claudeAgent, elementId, getProcessByElementId, updateProcess]);
 
 	// CRITICAL: Clean up agent on component unmount
 	useEffect(() => {
@@ -286,40 +306,167 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 	}, [elementId]); // Only depend on elementId, not claudeAgent
 
 	const handleRevertTask = async (taskId: string) => {
+		if (!taskManager) return;
+		
 		try {
-			const task = taskManager?.getTask(taskId);
-			if (!task || task.status !== 'completed' || !task.commitHash || task.commitHash === "NO_CHANGES") {
-				return;
+			const success = await taskManager.performRevert(taskId, textAreaOsSession || { Local: "." });
+			if (!success) {
+				alert("Failed to revert: No target commit available or invalid task state");
 			}
-
-			const targetCommitHash = taskManager?.getRevertTargetCommit(taskId);
-			if (!targetCommitHash) return;
-			
-			await GitService.revertToCommit(textAreaOsSession || { Local: "." }, targetCommitHash);
-			revertTask(taskId);
 		} catch (error) {
 			alert(`Failed to revert: ${error}`);
 		}
 	};
 
 	const handleRestoreTask = async (taskId: string) => {
+		if (!taskManager) return;
+		
 		try {
-			const task = taskManager?.getTask(taskId);
-			if (!task || task.status !== 'completed' || !task.commitHash || task.commitHash === "NO_CHANGES") {
-				return;
+			const success = await taskManager.performRestore(taskId, textAreaOsSession || { Local: "." });
+			if (!success) {
+				alert("Failed to restore: Invalid task state");
 			}
-
-			await GitService.revertToCommit(textAreaOsSession || { Local: "." }, task.commitHash);
-			restoreTask(taskId);
 		} catch (error) {
 			alert(`Failed to restore: ${error}`);
+		}
+	};
+
+	// Multi-task control handlers
+	const handleStartTask = async (taskId: string) => {
+		const task = taskManager?.getTask(taskId);
+		if (!task || !task.prompt.trim() || !canEdit) {
+			console.log(`[TextAreaOnCanvas] R4,R12: Cannot start task ${taskId} - task missing, empty prompt, or canvas not editable`);
+			return;
+		}
+
+		console.log(`[TextAreaOnCanvas] R4,R12: Starting task ${taskId} with prompt: ${task.prompt.substring(0, 100)}...`);
+
+		try {
+			if (!claudeAgent || !claudeAgent.isAgentAvailable()) {
+				// Start new agent for existing task
+				console.log(`[TextAreaOnCanvas] R5,R14: No existing agent - launching new terminal and Claude Code for task ${taskId}`);
+				const success = await startExistingTask(taskId, task.prompt);
+				if (success) {
+					console.log(`[TextAreaOnCanvas] R5,R14: Successfully launched terminal for task ${taskId} - task marked as running`);
+				} else {
+					console.log(`[TextAreaOnCanvas] R5,R14: Failed to launch terminal for task ${taskId}`);
+				}
+			} else {
+				// Queue prompt in existing agent
+				console.log(`[TextAreaOnCanvas] R5,R12,R14: Existing agent found - queuing prompt in Claude Code for task ${taskId}`);
+				await claudeAgent.queuePrompt(task.prompt);
+				taskManager?.startTask(taskId);
+				console.log(`[TextAreaOnCanvas] R5,R12,R14: Task ${taskId} queued successfully - will be processed after current task`);
+			}
+		} catch (error) {
+			console.error(`[TextAreaOnCanvas] R5,R12,R14: Failed to start task ${taskId}:`, error);
+		}
+	};
+
+	const handleStopCommitStart = async (taskId: string) => {
+		if (!claudeAgent || !taskManager || !canEdit) {
+			console.log(`[TextAreaOnCanvas] R13: Cannot stop/commit/start for task ${taskId} - missing agent, taskManager, or not editable`);
+			return;
+		}
+
+		console.log(`[TextAreaOnCanvas] R13: Starting stop/commit/start sequence for task ${taskId} - interrupt current, commit all, start new`);
+
+		try {
+			// 1. Send escape until interrupted
+			console.log(`[TextAreaOnCanvas] R13: Step 1 - Interrupting Claude with escape sequences`);
+			await claudeAgent.pauseAgent();
+
+			// 2. Fusion and commit running tasks
+			if (hasRunningTasks) {
+				console.log(`[TextAreaOnCanvas] R13: Step 2 - Fusing ${hasRunningTasks ? runningTasks.length : 0} running tasks and committing`);
+				const fusedTask = taskManager.fuseRunningTasks();
+				const { GitService } = await import('../services/GitService');
+				const commitHash = await GitService.createCommit(
+					textAreaOsSession || { Local: "." },
+					fusedTask.prompt
+				);
+
+				// Update commit hash for the already-completed fused task
+				taskManager.updateCommitHash(fusedTask.id, commitHash);
+				
+				if (commitHash === "NO_CHANGES") {
+					console.log(`[TextAreaOnCanvas] R13: Step 2 complete - No changes to commit, task marked as completed with NO_CHANGES`);
+				} else {
+					console.log(`[TextAreaOnCanvas] R13: Step 2 complete - Committed fused task with hash: ${commitHash}`);
+				}
+				
+				// Note: Process status will be updated when new task starts in step 3
+			} else {
+				console.log(`[TextAreaOnCanvas] R13: Step 2 skipped - No running tasks to commit`);
+			}
+
+			// 3. Start new task
+			console.log(`[TextAreaOnCanvas] R13: Step 3 - Starting new task ${taskId}`);
+			await handleStartTask(taskId);
+			console.log(`[TextAreaOnCanvas] R13: Stop/commit/start sequence complete for task ${taskId}`);
+		} catch (error) {
+			console.error(`[TextAreaOnCanvas] R13: Stop/commit/start failed for task ${taskId}:`, error);
+		}
+	};
+
+	const handleCommit = async () => {
+		if (!claudeAgent || !taskManager || !hasRunningTasks) {
+			console.log(`[TextAreaOnCanvas] R10: Cannot commit - missing agent (${!claudeAgent}), taskManager (${!taskManager}), or no running tasks (${!hasRunningTasks})`);
+			return;
+		}
+
+		console.log(`[TextAreaOnCanvas] R10: Manual commit initiated - fusing ${runningTasks.length} running tasks into single commit`);
+
+		try {
+			const fusedTask = taskManager.fuseRunningTasks();
+			console.log(`[TextAreaOnCanvas] R10: Task fusion complete - creating git commit`);
+			
+			const { GitService } = await import('../services/GitService');
+			const commitHash = await GitService.createCommit(
+				textAreaOsSession || { Local: "." },
+				fusedTask.prompt
+			);
+
+			// Update commit hash for the already-completed fused task
+			taskManager.updateCommitHash(fusedTask.id, commitHash);
+
+			if (commitHash === "NO_CHANGES") {
+				console.log(`[TextAreaOnCanvas] R10: Manual commit completed - no changes to commit, task marked with NO_CHANGES`);
+			} else {
+				console.log(`[TextAreaOnCanvas] R10: Manual commit successful - hash: ${commitHash}`);
+			}
+			console.log(`[TextAreaOnCanvas] R2,R9: Agent and terminal remain alive - no cleanup performed`);
+			
+			// Reset agent state after manual commit
+			claudeAgent?.resetAfterCommit();
+			
+			// Update process status to finished since tasks are now committed
+			// but keep the process around for terminal persistence (R2, R9)
+			const existingProcess = getProcessByElementId(elementId);
+			if (existingProcess) {
+				console.log(`[TextAreaOnCanvas] R10: Updating process ${existingProcess.processId} status to 'completed' after manual commit`);
+				updateProcess(existingProcess.processId, { status: 'completed' });
+			}
+		} catch (error) {
+			console.error(`[TextAreaOnCanvas] R10: Manual commit failed:`, error);
+		}
+	};
+
+	const handleTaskPromptUpdate = (taskId: string, prompt: string) => {
+		console.log(`[TextAreaOnCanvas] R2: Updating prompt for task ${taskId} - length: ${prompt.length} characters`);
+		taskManager?.updateTaskPrompt(taskId, prompt);
+
+		// Persist to GitProject immediately
+		if (currentCanvas) {
+			console.log(`[TextAreaOnCanvas] R2: Persisting prompt update to GitProject for canvas ${currentCanvas.id}`);
+			setInProgressPrompt(currentCanvas.id, elementId, prompt);
 		}
 	};
 
 	return (
 		<motion.div
 			className={cn(
-				"absolute select-none overflow-hidden p-1",
+				"absolute select-none w-full overflow-hidden p-1",
 				isDragging ? "z-30" : "z-10",
 			)}
 			initial={{
@@ -344,208 +491,69 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 			}}
 			layout
 		>
-			<div className={cn("w-full h-full flex flex-col p-3")}>
+			<div className={cn("w-full h-full flex p-3")}>
 				<div
 					className={cn(
-						"relative flex flex-col rounded-md gap-0",
-						showTerminal ? "h-1/3" : "h-full",
+						"relative flex flex-col rounded-md gap-0 h-full",
+						showTerminal ? "w-2/5" : "w-full",
 					)}
 					style={{
 						backgroundImage:
-							"radial-gradient(circle at 3px 3px, var(--base-400-30) 1.4px, transparent 0)",
+							"radial-gradient(circle at 3px 3px, var(--base-400-30) 1px, transparent 0)",
 						backgroundSize: "24px 24px",
 						backgroundPosition: "10px 20px",
 					}}
 				>
 					<div className="h-full overflow-y-auto">
-						{completedTasks.map((task, index, array) => (
-							<div key={task.id} className="relative not-last:mb-2 group">
-								<div className="relative">
-									<textarea
-										value={task.prompt}
-										readOnly
-										spellCheck={false}
-										className={cn(
-											"w-[calc(100%-40px)] font-mono border-none text-base resize-none bg-transparent",
-											task.isReverted 
-												? "text-[var(--base-500-50)] line-through" 
-												: task.commitHash 
-													? "text-[var(--positive-500-50)]"
-													: "text-[var(--base-600-50)]", // Different color for no-change tasks
-											"cursor-default",
-											"whitespace-pre-wrap break-words overflow-wrap-anywhere",
-											"scrollbar-thin scrollbar-thumb-[var(--base-400)] scrollbar-track-transparent",
-										)}
-										rows={Math.max(1, task.prompt.split("\n").length)}
-									/>
-									<div className="absolute flex items-center gap-1" style={{
-										left: `${Math.min(task.prompt.split("\n").reduce((max, line) => Math.max(max, line.length), 0) * 9.7 + 10, cell.width - 120)}px`,
-										top: `${Math.max(0, task.prompt.split("\n").length - 1) * 24 + 2}px`
-									}}>
-										<span className="text-base">
-											{task.isReverted 
-												? '❌' 
-												: task.commitHash === "NO_CHANGES"
-													? '⚠️'
-													: task.commitHash 
-														? '✅' 
-														: '❌'
-											}
-										</span>
-										
-										{task.commitHash && task.commitHash !== "NO_CHANGES" && (
-											<button
-												onClick={() => task.isReverted ? handleRestoreTask(task.id) : handleRevertTask(task.id)}
-												disabled={!canEdit}
-												className={cn(
-													"px-2 py-0.5 text-xs rounded transition-all",
-													"opacity-0 group-hover:opacity-100",
-													!canEdit 
-														? "cursor-not-allowed opacity-10"
-														: "cursor-pointer",
-													task.isReverted
-														? "bg-[var(--positive-400)] text-[var(--blackest)] hover:bg-[var(--positive-300)]"
-														: "bg-[var(--base-400)] text-[var(--blackest)] hover:bg-[var(--base-300)]"
-												)}
-											>
-												{task.isReverted ? 'Restore' : 'Revert'}
-											</button>
-										)}
-									</div>
-								</div>
-							</div>
-						))}
-
-						{currentInProgressTask && (
-							<div className="relative">
-								<textarea
-									value={`${currentInProgressTask.prompt} 🔄`}
-									readOnly
-									spellCheck={false}
-									className={cn(
-										"w-[calc(100%-40px)] font-mono border-none text-base resize-none bg-transparent",
-										"text-[var(--base-500-50)] animate-pulse",
-										"cursor-default",
-										"whitespace-pre-wrap break-words overflow-wrap-anywhere",
-										"scrollbar-thin scrollbar-thumb-[var(--base-400)] scrollbar-track-transparent",
-									)}
-									rows={Math.max(1, currentInProgressTask.prompt.split("\n").length)}
-								/>
-							</div>
-						)}
-						<div className="relative">
-							<textarea
-								ref={textAreaRef}
-								value={currentInProgressTask ? "" : currentPrompt}
-								onChange={(e) => {
-									if (!currentInProgressTask && canEdit) {
-										setCurrentPrompt(e.target.value);
-										setText(e.target.value);
-										
-										// Persist prompt to GitProject immediately
-										if (currentCanvas) {
-											setInProgressPrompt(currentCanvas.id, elementId, e.target.value);
-										}
-										
-										if (autoGoRemaining > 0) {
-											setAutoGoRemaining(0);
-										}
-										
-										if (currentPromptingTask) {
-											updateTaskPrompt(currentPromptingTask.id, e.target.value);
-										}
-									}
-								}}
-								disabled={!canEdit || !!currentInProgressTask}
-								placeholder={
-									!canEdit 
-										? `Agent's work is ${canvasLockState} - cannot edit`
-										: currentInProgressTask 
-											? "Task in progress..." 
-											: completedTasks.length === 0 
-											? "Describe to the agent what to do..." 
-											: "Describe to the agent another thing to do..."
-								}
-								spellCheck={false}
-								className={cn(
-									"w-[calc(100%-40px)] h-fit font-bl font-mono border-none text-base resize-none",
-									"text-[var(--base-500)]",
-									"focus:text-[var(--base-500)]",
-									"placeholder:text-[var(--base-600-50)]",
-									"whitespace-pre-wrap break-words overflow-wrap-anywhere",
-									(currentInProgressTask || !canEdit) && "opacity-60 cursor-not-allowed",
-									!canEdit && "bg-[var(--base-200-20)]",
-									"scrollbar-thin scrollbar-thumb-[var(--base-400)] scrollbar-track-transparent",
-								)}
-								rows={Math.max(1, currentPrompt.split("\n").length)}
+						{/* Render all tasks */}
+						{allTasks.map((task) => (
+							<TaskComponent
+								key={task.id}
+								task={task}
+								isRunning={runningTasks.some(rt => rt.id === task.id)}
+								hasOtherRunningTasks={hasRunningTasks && !runningTasks.some(rt => rt.id === task.id)}
+								canEdit={canEdit}
+								canStartTasks={canStartTasks}
+								onStart={() => handleStartTask(task.id)}
+								onStopCommitStart={() => handleStopCommitStart(task.id)}
+								onUpdatePrompt={(prompt) => handleTaskPromptUpdate(task.id, prompt)}
+								onRevert={handleRevertTask}
+								onRestore={handleRestoreTask}
 							/>
-
-							{isCanvasLocked && (
-								<div className="absolute right-5 top-5 flex items-center gap-1 text-base text-[var(--base-600)] bg-[var(--base-100)] px-3 py-1.5 rounded-lg">
-									{canvasLockState === 'merging' && (
-										<>
-											<div className="w-3 h-3 border border-[var(--acc-400)] border-t-transparent rounded-full animate-spin"></div>
-											<span>Merging</span>
-										</>
-									)}
-									{canvasLockState === 'merged' && (
-										<>
-											<span className="">✓</span>
-											<span>Merged</span>
-										</>
-									)}
-								</div>
-							)}
-							{!currentInProgressTask && currentPrompt.trim().length > 0 && (
-								<motion.div
-									className="absolute left-0 flex justify-end"
-									animate={{
-										left: `${Math.min(currentPrompt.split("\n").reduce((max, line) => (line.length > max ? line.length : max), 0) * 9.7, cell.width - 120)}px`,
-										top: `${(currentPrompt.split("\n").length + 0.6) * 24}px`,
-									}}
-									transition={{ type: "tween", duration: 0.05, ease: "linear" }}
-								>
-									<button
-										onClick={handleGoClick}
-										disabled={!currentPrompt.trim() || !canEdit}
-										className={cn(
-											"group rounded-lg rounded-br-2xl transition-all p-0.5 bg-[var(--base-200)]",
-											currentPrompt.trim() && canEdit
-												? "cursor-pointer hover:rounded-3xl hover:bg-[var(--acc-200)] opacity-50 hover:opacity-100"
-												: "opacity-30 pointer-events-auto cursor-not-allowed",
-										)}
-									>
-										<div className="flex overflow-hidden relative p-0.5 bg-[var(--whitest)] rounded-lg group-hover:rounded-3xl rounded-br-2xl transition-all">
-											<div
-												className={cn(
-													"px-5 py-1 rounded-lg group-hover:rounded-3xl rounded-br-2xl bg-[var(--base-300)] group-hover:bg-[var(--acc-300)]  transition-all text-[var(--whitest)] z-10",
-												)}
-											>
-												Go
-											</div>
-											<div className="group-hover:block hidden absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1em] h-[400%] animate-spin bg-[var(--acc-500)] blur-[1px]"></div>
-										</div>
-									</button>
-								</motion.div>
-							)}
-						</div>
+						))}
 					</div>
 				</div>
 
+				{/* Terminal with controls */}
 				{showTerminal && terminalId && (
-					<div className="h-2/3 mt-2 opacity-70">
-						<CustomTerminalRenderer
-							elementId={`claude-terminal-${terminalId}`}
-							existingTerminalId={terminalId}
-							terminalAPI={claudeAgent || undefined}
-							onTerminalReady={(id) => {
-								console.log("Claude terminal ready:", id);
-							}}
-							onTerminalError={(error) => {
-								console.error("Claude terminal error:", error);
-							}}
-							fontSize="base"
+					<div className={cn(
+						"relative h-full mt-2",
+						isTerminalMaximized ? "w-full" : "w-3/5"
+					)}>
+						<TerminalControls
+							isTerminalMaximized={isTerminalMaximized}
+							isTerminalVisible={showTerminal}
+							isAgentPaused={isAgentPaused}
+							isAgentRunning={!!claudeAgent && claudeAgent.isTaskRunning()}
+							hasRunningTasks={hasRunningTasks}
+							canControlTerminal={canControlTerminal}
+							onToggleVisibility={() => setShowTerminal(!showTerminal)}
+							onToggleMaximize={() => setIsTerminalMaximized(!isTerminalMaximized)}
+							onPause={() => claudeAgent?.pauseAgent()}
+							onResume={() => claudeAgent?.resumeAgent()}
+							onCommit={handleCommit}
 						/>
+
+						<div className="w-full h-full opacity-70">
+							<CustomTerminalRenderer
+								elementId={`claude-terminal-${terminalId}`}
+								existingTerminalId={terminalId}
+								terminalAPI={claudeAgent || undefined}
+								onTerminalReady={(id) => console.log("Claude terminal ready:", id)}
+								onTerminalError={(error) => console.error("Claude terminal error:", error)}
+								fontSize="xs"
+							/>
+						</div>
 					</div>
 				)}
 			</div>

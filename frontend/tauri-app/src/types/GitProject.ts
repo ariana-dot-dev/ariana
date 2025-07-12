@@ -133,6 +133,12 @@ export class GitProject {
 		if (index >= -1 && index < this.canvases.length && index !== this.currentCanvasIndex) {
 			this.currentCanvasIndex = index;
 			this.lastModified = Date.now();
+			
+			// Check for running tasks with dead terminals when switching to a canvas
+			if (index >= 0 && index < this.canvases.length) {
+				this.checkAndFailOrphanedTasks(this.canvases[index]);
+			}
+			
 			this.notifyListeners('currentCanvasIndex');
 		}
 	}
@@ -142,6 +148,40 @@ export class GitProject {
 		this.backgroundAgents.push(agent);
 		this.lastModified = Date.now();
 		this.notifyListeners('backgroundAgents');
+		
+		// Set up automatic cleanup monitoring for this agent
+		this.setupAgentCleanupMonitoring(agent);
+	}
+
+	public setupAgentCleanupMonitoring(agent: BackgroundAgent): void {
+		// Import the BackgroundAgentManager to avoid circular imports
+		import('../services/BackgroundAgentManager').then(({ BackgroundAgentManager }) => {
+			// If agent is already in terminal state, handle cleanup and unlock
+			if (['completed', 'failed', 'cancelled'].includes(agent.status)) {
+				console.log(`[GitProject] Agent ${agent.id.slice(0, 8)} is already in terminal state (${agent.status}), scheduling cleanup`);
+				
+				// For failed/cancelled agents, unlock any canvases they may have locked
+				if (['failed', 'cancelled'].includes(agent.status)) {
+					this.canvases.forEach(canvas => {
+						if (canvas.lockingAgentId === agent.id) {
+							console.log(`[GitProject] Unlocking canvas ${canvas.id} from ${agent.status} agent ${agent.id.slice(0, 8)}`);
+							this.unlockCanvas(canvas.id, agent.id);
+						}
+					});
+				}
+				
+				BackgroundAgentManager.onAgentStatusChanged(agent, this);
+			} else {
+				// Subscribe to status changes for active agents
+				const unsubscribe = agent.subscribe(() => {
+					if (['completed', 'failed', 'cancelled'].includes(agent.status)) {
+						console.log(`[GitProject] Agent ${agent.id.slice(0, 8)} reached terminal state (${agent.status}), scheduling cleanup`);
+						BackgroundAgentManager.onAgentStatusChanged(agent, this);
+						unsubscribe(); // Only need to detect the first terminal state
+					}
+				});
+			}
+		});
 	}
 
 	getBackgroundAgent(agentId: string): BackgroundAgent | undefined {
@@ -550,6 +590,28 @@ export class GitProject {
 		};
 	}
 
+	/**
+	 * Create a new GitProject and ensure it has an initial commit
+	 * @param root - The OS session for the git repository
+	 * @param name - Optional project name
+	 * @returns Promise<GitProject> - The created project
+	 */
+	static async create(root: OsSession, name?: string): Promise<GitProject> {
+		const project = new GitProject(root, name);
+		
+		try {
+			// Ensure the repository has an initial commit
+			await import('../services/GitService').then(({ GitService }) => 
+				GitService.ensureInitialCommit(root)
+			);
+		} catch (error) {
+			console.error('[GitProject] Failed to ensure initial commit:', error);
+			// Don't throw - project is still usable, just without initial commit
+		}
+		
+		return project;
+	}
+
 	static fromJSON(data: any): GitProject {
 		const project = new GitProject(data.root, data.name);
 		project.id = data.id;
@@ -570,15 +632,30 @@ export class GitProject {
 		project.currentCanvasIndex = data.currentCanvasIndex >= 0 ? data.currentCanvasIndex : (project.canvases.length > 0 ? 0 : -1);
 		
 		// Restore background agents
-		project.backgroundAgents = [];
 		if (data.backgroundAgents && Array.isArray(data.backgroundAgents)) {
-			project.backgroundAgents = data.backgroundAgents.map((agentData: BackgroundAgentState) => 
+			const restoredAgents = data.backgroundAgents.map((agentData: BackgroundAgentState) => 
 				BackgroundAgent.fromJSON(agentData)
 			);
+			
+			// Set up cleanup monitoring for each restored agent
+			restoredAgents.forEach((agent: BackgroundAgent) => {
+				project.backgroundAgents.push(agent);
+				project.setupAgentCleanupMonitoring(agent);
+			});
 		}
 		
 		project.createdAt = data.createdAt || Date.now();
 		project.lastModified = data.lastModified || Date.now();
+		
+		// Check for orphaned running tasks after restoration
+		// This handles the case where the app was closed while tasks were running
+		if (project.currentCanvasIndex >= 0 && project.currentCanvasIndex < project.canvases.length) {
+			// Use setTimeout to avoid blocking the restoration process
+			setTimeout(() => {
+				project.checkAndFailOrphanedTasks(project.canvases[project.currentCanvasIndex]);
+			}, 100);
+		}
+		
 		return project;
 	}
 
@@ -674,6 +751,11 @@ export class GitProject {
 		return canvas?.runningProcesses?.find(p => p.elementId === elementId);
 	}
 
+	getElementIdByProcessId(canvasId: string, processId: string): string | undefined {
+		const canvas = this.canvases.find(c => c.id === canvasId);
+		return canvas?.runningProcesses?.find(p => p.processId === processId)?.elementId;
+	}
+
 	// In-progress prompt management
 	setInProgressPrompt(canvasId: string, elementId: string, prompt: string): boolean {
 		const canvas = this.canvases.find(c => c.id === canvasId);
@@ -695,21 +777,87 @@ export class GitProject {
 		return true;
 	}
 
-	getInProgressPrompt(canvasId: string, elementId: string): string | undefined {
+	cleanupInProgressPrompt(canvasId: string, elementId: string): void {
 		const canvas = this.canvases.find(c => c.id === canvasId);
-		return canvas?.inProgressPrompts?.get(elementId);
-	}
-
-	clearInProgressPrompt(canvasId: string, elementId: string): boolean {
-		const canvas = this.canvases.find(c => c.id === canvasId);
-		if (!canvas?.inProgressPrompts) return false;
-
-		const deleted = canvas.inProgressPrompts.delete(elementId);
-		if (deleted) {
+		if (canvas?.inProgressPrompts?.has(elementId)) {
+			canvas.inProgressPrompts.delete(elementId);
 			canvas.lastModified = Date.now();
 			this.lastModified = Date.now();
 			this.notifyListeners('canvases');
 		}
-		return deleted;
+	}
+
+
+	/**
+	 * Check for running tasks with dead terminals and fail them
+	 * Called when switching to a canvas to handle R15 requirement
+	 */
+	private async checkAndFailOrphanedTasks(canvas: GitProjectCanvas): Promise<void> {
+		if (!canvas.taskManager) return;
+		
+		// ONLY check actually running tasks, not completed ones
+		const runningTasks = canvas.taskManager.getRunningTasks();
+		if (runningTasks.length === 0) return;
+		
+		console.log(`[GitProject] R15: Checking ${runningTasks.length} running tasks for dead terminals in canvas ${canvas.id}`);
+		
+		// Check if we need to stash (only once if any task needs to be failed)
+		let needsStash = false;
+		const tasksToFail: string[] = [];
+		
+		// Import ProcessManager to check terminal availability
+		const { ProcessManager } = await import('../services/ProcessManager');
+		
+		for (const task of runningTasks) {
+			if (task.processId) {
+				// Check if the process/terminal is still alive
+				const process = ProcessManager.getProcess(task.processId);
+				if (!process) {
+					console.log(`[GitProject] R15: Running task ${task.id} has dead terminal (process ${task.processId} not found)`);
+					tasksToFail.push(task.id);
+					needsStash = true;
+				}
+			} else {
+				// No processId means the terminal was never created or already dead
+				console.log(`[GitProject] R15: Running task ${task.id} has no process ID - marking as failed`);
+				tasksToFail.push(task.id);
+				needsStash = true;
+			}
+		}
+		
+		// Perform git stash if needed (R15, Q9)
+		if (needsStash && canvas.osSession) {
+			try {
+				console.log(`[GitProject] R15: Performing git stash before marking ${tasksToFail.length} tasks as failed`);
+				const { GitService } = await import('../services/GitService');
+				await GitService.stashChanges(canvas.osSession);
+				console.log(`[GitProject] R15: Git stash completed successfully`);
+			} catch (error) {
+				console.error(`[GitProject] R15: Git stash failed:`, error);
+				// Continue with task failure even if stash fails
+			}
+		}
+		
+		// Mark tasks as failed
+		for (const taskId of tasksToFail) {
+			// Get task to find processId before failing
+			const task = canvas.taskManager.getTask(taskId);
+			const processId = (task as any)?.processId;
+			
+			canvas.taskManager.failTask(taskId, "Agent process terminated");
+			
+			// Cleanup in-progress prompt when task fails
+			if (processId) {
+				const elementId = this.getElementIdByProcessId(canvas.id, processId);
+				if (elementId) {
+					this.cleanupInProgressPrompt(canvas.id, elementId);
+				}
+			}
+		}
+		
+		if (tasksToFail.length > 0) {
+			console.log(`[GitProject] R15: Marked ${tasksToFail.length} tasks as failed due to dead terminals`);
+			this.notifyListeners('canvases');
+		}
 	}
 }
