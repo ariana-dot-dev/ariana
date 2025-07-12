@@ -242,6 +242,22 @@ export class TaskManager {
 		return true;
 	}
 
+	// Delete a prompting task (for when prompts are removed)
+	deleteTask(taskId: string): boolean {
+		const taskIndex = this.tasks.findIndex(t => t.id === taskId);
+		if (taskIndex === -1) return false;
+		
+		// Only allow deletion of prompting tasks to prevent data loss
+		const task = this.tasks[taskIndex];
+		if (task.status !== 'prompting') {
+			console.warn(`Cannot delete task ${taskId} with status ${task.status}. Only prompting tasks can be deleted.`);
+			return false;
+		}
+		
+		this.tasks.splice(taskIndex, 1);
+		return true;
+	}
+
 	// Get tasks linked to a specific agent
 	getTasksLinkedToAgent(canvasId: string): Task[] {
 		return this.tasks.filter(task => 

@@ -122,17 +122,48 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 
 	// Agent Overview handler functions
 	const handleAddPrompt = (canvasId: string, prompt: string) => {
-		if (!selectedGitProject) return;
+		console.log('🎯 [PROMPT] handleAddPrompt called - Canvas ID:', canvasId, 'Prompt:', prompt);
+		
+		if (!selectedGitProject) {
+			console.error('❌ [PROMPT] No selected git project');
+			return;
+		}
 		
 		const canvas = selectedGitProject.canvases.find(c => c.id === canvasId);
-		if (!canvas) return;
+		if (!canvas) {
+			console.error('❌ [PROMPT] Canvas not found:', canvasId);
+			return;
+		}
+		
+		console.log('✅ [PROMPT] Found canvas:', canvas.id, 'Task manager available:', !!canvas.taskManager);
 		
 		// Create a new prompting task with the provided prompt
 		const taskId = canvas.taskManager.createPromptingTask(prompt);
-		console.log(`Created new prompting task ${taskId} for canvas ${canvasId}`);
+		console.log(`✅ [PROMPT] Created new prompting task ${taskId} for canvas ${canvasId}`);
 		
 		// Save the updated project
 		updateGitProject(selectedGitProject.id);
+		console.log('💾 [PROMPT] Updated git project after adding prompt');
+	};
+
+	// Handle prompt deletion
+	const handlePromptDeletion = (promptId: string, agentId: string) => {
+		if (!selectedGitProject) return;
+		
+		const canvas = selectedGitProject.canvases.find(c => c.id === agentId);
+		if (!canvas) return;
+		
+		// If this is a task ID rather than a prompt ID, handle task deletion
+		const task = canvas.taskManager.getTask(promptId);
+		if (task && task.status === 'prompting') {
+			const deleted = canvas.taskManager.deleteTask(promptId);
+			if (deleted) {
+				console.log(`Deleted prompting task ${promptId} from canvas ${agentId}`);
+				updateGitProject(selectedGitProject.id);
+			}
+		}
+		
+		console.log(`Prompt deletion handled for prompt ${promptId} in agent ${agentId}`);
 	};
 
 	const handlePlayCanvas = (canvasId: string) => {
@@ -458,6 +489,7 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 						onCreateAgent={handleCreateCanvas}
 						taskManager={getCurrentTaskManager()}
 						onProjectUpdate={() => updateGitProject(selectedGitProject.id)}
+						onPromptDeleted={handlePromptDeletion}
 					/>
 				</div>
 			) : currentCanvas ? (

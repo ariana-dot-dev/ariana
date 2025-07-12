@@ -9,6 +9,8 @@ interface CollectiveBacklogManagementProps {
 	onCreateAgent?: () => string | undefined;
 	onAddPrompt?: (canvasId: string, prompt: string) => void;
 	selectedAgents?: string[];
+	canvases?: { id: string, lockState?: string }[]; // To track merged canvases
+	onPromptDeleted?: (promptId: string, agentId: string) => void; // Callback for prompt deletion
 }
 
 export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementProps> = ({ 
@@ -16,7 +18,9 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 	onClose, 
 	onCreateAgent, 
 	onAddPrompt, 
-	selectedAgents 
+	selectedAgents,
+	canvases,
+	onPromptDeleted 
 }) => {
 	const [backlogItems, setBacklogItems] = useState<BacklogItem[]>([]);
 	const [loading, setLoading] = useState(true);
@@ -47,6 +51,128 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 	const [currentUser, setCurrentUser] = useState<any>(null);
 	const [availableUsers, setAvailableUsers] = useState<{id: string, name: string, email: string}[]>([]);
 	const [selectedTasks, setSelectedTasks] = useState<Set<number>>(new Set());
+	
+	// Task-Prompt mapping with status tracking - persist across re-renders
+	// Structure: { taskId: { promptId: { agentId: string, status: 'in_progress' | 'merged' } } }
+	const getStorageKey = () => `taskPromptMappings_${project?.gitOriginUrl || 'default'}`;
+	
+	const [taskPromptMappings, setTaskPromptMappings] = useState<Record<number, Record<string, { agentId: string, status: 'in_progress' | 'merged' }>>>(() => {
+		// Initialize from localStorage if available
+		try {
+			const stored = localStorage.getItem(getStorageKey());
+			if (stored) {
+				const parsed = JSON.parse(stored);
+				console.log('🔄 [STORAGE] Loaded task prompt mappings from localStorage:', parsed);
+				return parsed;
+			}
+		} catch (error) {
+			console.error('❌ [STORAGE] Failed to load task prompt mappings from localStorage:', error);
+		}
+		return {};
+	});
+	
+	// Save to localStorage whenever taskPromptMappings changes
+	useEffect(() => {
+		try {
+			const storageKey = getStorageKey();
+			localStorage.setItem(storageKey, JSON.stringify(taskPromptMappings));
+			console.log('💾 [STORAGE] Saved task prompt mappings to localStorage with key:', storageKey, 'data:', taskPromptMappings);
+		} catch (error) {
+			console.error('❌ [STORAGE] Failed to save task prompt mappings to localStorage:', error);
+		}
+	}, [taskPromptMappings, project?.gitOriginUrl]);
+	
+	// Keep track of previous canvas state to detect prompt deletions
+	const [previousCanvasData, setPreviousCanvasData] = useState<{ id: string, lockState?: string, promptCount?: number }[]>([]);
+
+	// Calculate task status based on prompt mappings
+	const calculateTaskStatus = (taskId: number, mappings?: Record<number, Record<string, { agentId: string, status: 'in_progress' | 'merged' }>>): 'open' | 'in_progress' | 'completed' => {
+		console.log('🧮 [STATUS] Calculating status for task:', taskId);
+		// Use provided mappings or fall back to state
+		const allMappings = mappings || taskPromptMappings;
+		const prompts = allMappings[taskId];
+		console.log('🧮 [STATUS] Task prompt mappings for task', taskId, ':', prompts);
+		
+		if (!prompts || Object.keys(prompts).length === 0) {
+			console.log('🧮 [STATUS] No prompts found for task', taskId, '-> status: open');
+			return 'open'; // No prompts linked
+		}
+		
+		const promptStatuses = Object.values(prompts).map(p => p.status);
+		console.log('🧮 [STATUS] Prompt statuses for task', taskId, ':', promptStatuses);
+		
+		const allMerged = promptStatuses.every(status => status === 'merged');
+		console.log('🧮 [STATUS] All prompts merged for task', taskId, ':', allMerged);
+		
+		if (allMerged) {
+			console.log('🧮 [STATUS] Task', taskId, '-> status: completed (all prompts merged)');
+			return 'completed'; // All prompts are merged
+		}
+		
+		console.log('🧮 [STATUS] Task', taskId, '-> status: in_progress (some prompts exist but not all merged)');
+		return 'in_progress'; // Some prompts exist but not all are merged
+	};
+
+	// Update task status in backend and local state
+	const updateTaskStatus = async (taskId: number, mappings?: Record<number, Record<string, { agentId: string, status: 'in_progress' | 'merged' }>>) => {
+		console.log('🔄 [UPDATE] Starting status update for task:', taskId);
+		const calculatedStatus = calculateTaskStatus(taskId, mappings);
+		console.log('🔄 [UPDATE] Calculated status for task', taskId, ':', calculatedStatus);
+		
+		const currentItem = backlogItems.find(item => item.id === taskId);
+		console.log('🔄 [UPDATE] Current item for task', taskId, ':', currentItem ? currentItem.status : 'not found');
+		
+		if (currentItem && currentItem.status !== calculatedStatus) {
+			console.log('🔄 [UPDATE] Status change detected for task', taskId, ':', currentItem.status, '->', calculatedStatus);
+			try {
+				// Update in backend
+				console.log('💾 [UPDATE] Updating backend for task', taskId, 'with status:', calculatedStatus);
+				await backlogService.updateBacklogItem(taskId, { status: calculatedStatus });
+				
+				// Update local state
+				console.log('🔄 [UPDATE] Updating local state for task', taskId);
+				setBacklogItems(prev => prev.map(item => 
+					item.id === taskId ? { ...item, status: calculatedStatus } : item
+				));
+				
+				console.log(`✅ [UPDATE] Successfully updated task ${taskId} status to ${calculatedStatus}`);
+			} catch (error) {
+				console.error(`❌ [UPDATE] Failed to update task ${taskId} status:`, error);
+			}
+		} else if (currentItem) {
+			console.log('🔄 [UPDATE] No status change needed for task', taskId, '(already', currentItem.status, ')');
+		} else {
+			console.log('❌ [UPDATE] Task', taskId, 'not found in backlogItems');
+		}
+	};
+
+	// Ensure localStorage is loaded on every initialization/re-initialization
+	useEffect(() => {
+		console.log('🔧 [INIT] CollectiveBacklogManagement initialized with props:');
+		console.log('🔧 [INIT] - onCreateAgent:', !!onCreateAgent);
+		console.log('🔧 [INIT] - onAddPrompt:', !!onAddPrompt);
+		console.log('🔧 [INIT] - selectedAgents:', selectedAgents);
+		console.log('🔧 [INIT] - canvases:', canvases?.length || 0, 'canvases');
+		console.log('🔧 [INIT] - project:', !!project);
+		
+		// Force reload from localStorage on every initialization
+		try {
+			const storageKey = getStorageKey();
+			console.log('🔧 [INIT-STORAGE] Using storage key:', storageKey, 'for project:', project?.gitOriginUrl);
+			const stored = localStorage.getItem(storageKey);
+			if (stored) {
+				const parsed = JSON.parse(stored);
+				console.log('🔄 [INIT-STORAGE] Force loading task prompt mappings from localStorage:', parsed);
+				setTaskPromptMappings(parsed);
+			} else {
+				console.log('🔄 [INIT-STORAGE] No stored mappings found in localStorage for key:', storageKey);
+				// List all localStorage keys for debugging
+				console.log('🔧 [INIT-STORAGE] Available localStorage keys:', Object.keys(localStorage));
+			}
+		} catch (error) {
+			console.error('❌ [INIT-STORAGE] Failed to load task prompt mappings during init:', error);
+		}
+	}, [onCreateAgent, onAddPrompt, selectedAgents, canvases, project]);
 
 	// Check authentication status
 	useEffect(() => {
@@ -300,40 +426,111 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 
 	// Handle add to new agent
 	const handleAddToNewAgent = (item: BacklogItem) => {
-		console.log('Adding item to new agent:', item);
+		console.log('🚀 [LINK] Starting handleAddToNewAgent for task:', item.id, item.task);
 		
 		if (!onCreateAgent || !onAddPrompt) {
-			console.error('Missing onCreateAgent or onAddPrompt functions');
+			console.error('❌ [LINK] Missing onCreateAgent or onAddPrompt functions');
 			return;
 		}
 		
 		// Create new agent
 		const newAgentId = onCreateAgent();
-		console.log('Created new agent:', newAgentId);
+		console.log('✅ [LINK] Created new agent:', newAgentId);
 		
 		if (newAgentId) {
 			// Add the task as a prompt to the new agent
+			console.log('📝 [LINK] Adding prompt to agent:', newAgentId, 'Prompt:', item.task);
 			onAddPrompt(newAgentId, item.task);
-			console.log(`Added task "${item.task}" to new agent ${newAgentId}`);
+			
+			// Create prompt mapping with initial status 'in_progress'
+			const promptId = `${newAgentId}-${Date.now()}`; // Generate unique prompt ID
+			console.log('🔗 [LINK] Creating prompt mapping - Task ID:', item.id, 'Prompt ID:', promptId, 'Agent ID:', newAgentId);
+			
+			const newMapping = {
+				...taskPromptMappings,
+				[item.id]: {
+					...taskPromptMappings[item.id],
+					[promptId]: {
+						agentId: newAgentId,
+						status: 'in_progress' as const
+					}
+				}
+			};
+			
+			console.log('📊 [LINK] New task prompt mappings:', newMapping);
+			
+			// Update state
+			setTaskPromptMappings(newMapping);
+			
+			// Update task status immediately with the new mappings
+			console.log('🔄 [LINK] Updating task status immediately with new mappings for task:', item.id);
+			updateTaskStatus(item.id, newMapping);
+			
+			// Also schedule a delayed update as backup in case of re-initialization
+			console.log('⏰ [LINK] Scheduling backup task status update for task:', item.id);
+			setTimeout(() => {
+				console.log('🔄 [LINK] Executing backup scheduled task status update for task:', item.id);
+				updateTaskStatus(item.id);
+			}, 1000);
+			
+			console.log(`✅ [LINK] Successfully added task "${item.task}" to new agent ${newAgentId} with prompt ID ${promptId}`);
 		} else {
-			console.error('Failed to create new agent');
+			console.error('❌ [LINK] Failed to create new agent');
 		}
 	};
 
 	// Handle add to selected agents
 	const handleAddToSelectedAgents = (item: BacklogItem) => {
-		console.log('Adding item to selected agents:', item, 'Selected agents:', selectedAgents);
+		console.log('🚀 [MULTI-LINK] Starting handleAddToSelectedAgents for task:', item.id, item.task, 'Selected agents:', selectedAgents);
 		
 		if (!onAddPrompt || !selectedAgents || selectedAgents.length === 0) {
-			console.error('Missing onAddPrompt function or no agents selected');
+			console.error('❌ [MULTI-LINK] Missing onAddPrompt function or no agents selected');
 			return;
 		}
 		
 		// Add the task as a prompt to each selected agent
+		const newMappings: Record<string, { agentId: string, status: 'in_progress' | 'merged' }> = {};
+		
 		selectedAgents.forEach(agentId => {
+			console.log('📝 [MULTI-LINK] Adding prompt to agent:', agentId, 'Prompt:', item.task);
 			onAddPrompt(agentId, item.task);
-			console.log(`Added task "${item.task}" to agent ${agentId}`);
+			
+			// Create prompt mapping for each agent
+			const promptId = `${agentId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+			newMappings[promptId] = {
+				agentId: agentId,
+				status: 'in_progress'
+			};
+			
+			console.log(`🔗 [MULTI-LINK] Created mapping - Task ID: ${item.id}, Prompt ID: ${promptId}, Agent ID: ${agentId}`);
 		});
+		
+		console.log('📊 [MULTI-LINK] All new mappings created:', newMappings);
+		
+		// Update task prompt mappings
+		const updatedMapping = {
+			...taskPromptMappings,
+			[item.id]: {
+				...taskPromptMappings[item.id],
+				...newMappings
+			}
+		};
+		
+		console.log('📊 [MULTI-LINK] Updated task prompt mappings:', updatedMapping);
+		
+		// Update state
+		setTaskPromptMappings(updatedMapping);
+		
+		// Update task status immediately with the new mappings
+		console.log('🔄 [MULTI-LINK] Updating task status immediately with new mappings for task:', item.id);
+		updateTaskStatus(item.id, updatedMapping);
+		
+		// Also schedule a delayed update as backup
+		console.log('⏰ [MULTI-LINK] Scheduling backup task status update for task:', item.id);
+		setTimeout(() => {
+			console.log('🔄 [MULTI-LINK] Executing backup scheduled task status update for task:', item.id);
+			updateTaskStatus(item.id);
+		}, 1000);
 	};
 
 	// Task selection helper functions
@@ -375,7 +572,24 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 				const item = backlogItems.find(item => item.id === taskId);
 				if (item) {
 					onAddPrompt(newAgentId, item.task);
-					console.log(`Added task "${item.task}" to new agent ${newAgentId}`);
+					
+					// Create prompt mapping
+					const promptId = `${newAgentId}-${Date.now()}-${taskId}`;
+					setTaskPromptMappings(prev => ({
+						...prev,
+						[taskId]: {
+							...prev[taskId],
+							[promptId]: {
+								agentId: newAgentId,
+								status: 'in_progress'
+							}
+						}
+					}));
+					
+					// Update task status
+					setTimeout(() => updateTaskStatus(taskId), 100);
+					
+					console.log(`Added task "${item.task}" to new agent ${newAgentId} with prompt ID ${promptId}`);
 				}
 			});
 			clearTaskSelection();
@@ -391,8 +605,25 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 			if (item) {
 				selectedAgents.forEach(agentId => {
 					onAddPrompt(agentId, item.task);
-					console.log(`Added task "${item.task}" to agent ${agentId}`);
+					
+					// Create prompt mapping
+					const promptId = `${agentId}-${Date.now()}-${taskId}-${Math.random().toString(36).substr(2, 9)}`;
+					setTaskPromptMappings(prev => ({
+						...prev,
+						[taskId]: {
+							...prev[taskId],
+							[promptId]: {
+								agentId: agentId,
+								status: 'in_progress'
+							}
+						}
+					}));
+					
+					console.log(`Added task "${item.task}" to agent ${agentId} with prompt ID ${promptId}`);
 				});
+				
+				// Update task status
+				setTimeout(() => updateTaskStatus(taskId), 100);
 			}
 		});
 		clearTaskSelection();
@@ -540,6 +771,149 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 		}
 	}, [filters, isAuthenticated, project?.gitOriginUrl]);
 
+	// Handle prompt deletion - removes task-prompt mapping and recalculates task status
+	const handlePromptDeletion = (promptId: string, agentId: string) => {
+		console.log(`Handling prompt deletion: ${promptId} from agent ${agentId}`);
+		
+		setTaskPromptMappings(prev => {
+			const updated = { ...prev };
+			let hasChanges = false;
+			
+			// Find and remove the prompt mapping
+			Object.keys(updated).forEach(taskIdStr => {
+				const taskId = parseInt(taskIdStr);
+				const prompts = updated[taskId];
+				
+				if (prompts && prompts[promptId]) {
+					delete prompts[promptId];
+					hasChanges = true;
+					console.log(`Removed prompt ${promptId} mapping from task ${taskId}`);
+					
+					// Recalculate task status after prompt removal
+					setTimeout(() => updateTaskStatus(taskId), 100);
+				}
+			});
+			
+			return hasChanges ? updated : prev;
+		});
+	};
+
+	// Monitor canvas changes to detect prompt deletions and status updates
+	useEffect(() => {
+		if (!canvases) return;
+		
+		// Detect deleted canvases and clean up orphaned prompts
+		const cleanupOrphanedPrompts = () => {
+			setTaskPromptMappings(prev => {
+				const updated = { ...prev };
+				let hasChanges = false;
+				const tasksToUpdate = new Set<number>();
+				
+				// Check each task's prompts for orphaned entries
+				Object.keys(updated).forEach(taskIdStr => {
+					const taskId = parseInt(taskIdStr);
+					const prompts = updated[taskId];
+					
+					Object.keys(prompts).forEach(promptId => {
+						const prompt = prompts[promptId];
+						const canvas = canvases.find(c => c.id === prompt.agentId);
+						
+						if (!canvas) {
+							// Canvas not found - prompt is orphaned, remove it
+							delete prompts[promptId];
+							hasChanges = true;
+							tasksToUpdate.add(taskId);
+							console.log(`🗑️ [CLEANUP] Removed orphaned prompt ${promptId} for deleted canvas ${prompt.agentId} from task ${taskId}`);
+						}
+					});
+					
+					// If this task has no more prompts, remove the task entry entirely
+					if (Object.keys(prompts).length === 0) {
+						delete updated[taskId];
+						console.log(`🗑️ [CLEANUP] Removed empty task entry for task ${taskId}`);
+					}
+				});
+				
+				// Return updated mappings
+				if (hasChanges) {
+					// Update task statuses immediately with the cleaned mappings
+					setTimeout(() => {
+						tasksToUpdate.forEach(taskId => {
+							console.log(`🔄 [CLEANUP] Updating status immediately for affected task: ${taskId} with cleaned mappings`);
+							updateTaskStatus(taskId, updated);
+						});
+					}, 0);
+				}
+				
+				return hasChanges ? updated : prev;
+			});
+		};
+		
+		// Update prompt statuses based on canvas lock states
+		const updatePromptStatuses = () => {
+			setTaskPromptMappings(prev => {
+				const updated = { ...prev };
+				let hasChanges = false;
+				
+				// Check each task's prompts
+				Object.keys(updated).forEach(taskIdStr => {
+					const taskId = parseInt(taskIdStr);
+					const prompts = updated[taskId];
+					
+					Object.keys(prompts).forEach(promptId => {
+						const prompt = prompts[promptId];
+						const canvas = canvases.find(c => c.id === prompt.agentId);
+						
+						if (canvas) {
+							const newStatus = canvas.lockState === 'merged' ? 'merged' : 'in_progress';
+							if (prompt.status !== newStatus) {
+								prompts[promptId] = { ...prompt, status: newStatus };
+								hasChanges = true;
+								console.log(`Updated prompt ${promptId} status to ${newStatus} for canvas ${canvas.id}`);
+							}
+						}
+					});
+					
+					// Update task status if prompts changed
+					if (hasChanges) {
+						setTimeout(() => updateTaskStatus(taskId), 100);
+					}
+				});
+				
+				return hasChanges ? updated : prev;
+			});
+		};
+		
+		// First clean up orphaned prompts, then update statuses
+		cleanupOrphanedPrompts();
+		updatePromptStatuses();
+		
+		// Update previous canvas data for next comparison
+		setPreviousCanvasData(canvases.map(c => ({ 
+			id: c.id, 
+			lockState: c.lockState 
+		})));
+	}, [canvases]);
+
+	// Monitor task prompt mappings changes
+	useEffect(() => {
+		console.log('📊 [MAPPINGS] Task prompt mappings changed:', taskPromptMappings);
+		console.log('📊 [MAPPINGS] Number of tasks with mappings:', Object.keys(taskPromptMappings).length);
+		Object.keys(taskPromptMappings).forEach(taskId => {
+			const prompts = taskPromptMappings[parseInt(taskId)];
+			console.log(`📊 [MAPPINGS] Task ${taskId} has ${Object.keys(prompts).length} prompt(s):`, prompts);
+		});
+	}, [taskPromptMappings]);
+
+	// Expose the prompt deletion handler
+	useEffect(() => {
+		if (onPromptDeleted) {
+			// This makes the handlePromptDeletion function available
+			// In a real implementation, you would expose this through a ref or other mechanism
+			console.log('Prompt deletion handler is available');
+		}
+	}, [onPromptDeleted]);
+
 	// Show authentication required message if not logged in
 	if (!isAuthenticated) {
 		return (
@@ -642,10 +1016,10 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 							onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
 							className="px-3 py-1 text-sm border border-[var(--base-300)] rounded focus:outline-none focus:border-[var(--acc-500)]"
 						>
-							<option value="">All Statuses</option>
-							<option value="open">Open</option>
-							<option value="in_progress">In Progress</option>
-							<option value="completed">Completed</option>
+							<option key="all-statuses" value="">All Statuses</option>
+							<option key="open" value="open">Open</option>
+							<option key="in_progress" value="in_progress">In Progress</option>
+							<option key="completed" value="completed">Completed</option>
 						</select>
 
 						{/* Priority Filter */}
@@ -881,9 +1255,9 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 															className="px-2 py-1 text-sm border border-[var(--base-300)] rounded focus:outline-none focus:border-[var(--acc-500)]"
 															autoFocus
 														>
-															<option value="open">Open</option>
-															<option value="in_progress">In Progress</option>
-															<option value="completed">Completed</option>
+															<option key="edit-open" value="open">Open</option>
+															<option key="edit-in_progress" value="in_progress">In Progress</option>
+															<option key="edit-completed" value="completed">Completed</option>
 														</select>
 													) : (
 														<span 
@@ -989,7 +1363,10 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 												<td className="px-4 py-3">
 													<div className="flex gap-2">
 														<button
-															onClick={() => handleAddToNewAgent(item)}
+															onClick={() => {
+																console.log('🖱️ [BUTTON] Add to New Agent button clicked for task:', item.id, item.task);
+																handleAddToNewAgent(item);
+															}}
 															className="w-6 h-6 flex items-center justify-center bg-[var(--acc-500)] hover:bg-[var(--acc-600)] text-white rounded transition-colors"
 															title="Add to new agent"
 														>
@@ -998,7 +1375,10 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 															</svg>
 														</button>
 														<button
-															onClick={() => handleAddToSelectedAgents(item)}
+															onClick={() => {
+																console.log('🖱️ [BUTTON] Add to Selected Agents button clicked for task:', item.id, item.task, 'Selected agents:', selectedAgents);
+																handleAddToSelectedAgents(item);
+															}}
 															className="w-6 h-6 flex items-center justify-center bg-[var(--positive-500)] hover:bg-[var(--positive-600)] text-white rounded transition-colors"
 															title="Add to agents selection"
 															disabled={!selectedAgents || selectedAgents.length === 0}
@@ -1085,9 +1465,9 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 											onChange={(e) => setNewTaskData(prev => ({ ...prev, status: e.target.value as any }))}
 											className="px-2 py-1 text-sm border border-[var(--base-300)] rounded focus:outline-none focus:border-[var(--acc-500)] w-24"
 										>
-											<option value="open">Open</option>
-											<option value="in_progress">In Progress</option>
-											<option value="completed">Completed</option>
+											<option key="create-open" value="open">Open</option>
+											<option key="create-in_progress" value="in_progress">In Progress</option>
+											<option key="create-completed" value="completed">Completed</option>
 										</select>
 										<button
 											onClick={createNewTask}

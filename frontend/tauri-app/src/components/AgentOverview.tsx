@@ -17,6 +17,7 @@ interface AgentOverviewProps {
 	onCreateAgent?: () => string | undefined; // Returns the new agent ID
 	taskManager?: TaskManager; // Add task manager for task linking
 	onProjectUpdate?: () => void; // Callback to save project state
+	onPromptDeleted?: (promptId: string, agentId: string) => void; // Callback for prompt deletion
 }
 
 export const AgentOverview: React.FC<AgentOverviewProps> = ({
@@ -31,7 +32,8 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 	onRunTest,
 	onCreateAgent,
 	taskManager,
-	onProjectUpdate
+	onProjectUpdate,
+	onPromptDeleted
 }) => {
 	const [promptInputs, setPromptInputs] = useState<{[key: string]: string}>({});
 	const [showPromptInput, setShowPromptInput] = useState<{[key: string]: boolean}>({});
@@ -579,6 +581,8 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 						onCreateAgent={onCreateAgent}
 						onAddPrompt={onAddPrompt}
 						selectedAgents={selectedAgentIds}
+						canvases={canvases.map(c => ({ id: c.id, lockState: c.lockState }))}
+						onPromptDeleted={onPromptDeleted}
 					/>
 				</div>
 			</div>
