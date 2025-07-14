@@ -22,6 +22,7 @@ import { osSessionGetWorkingDirectory } from "./bindings/os";
 import { CommunicationPalette } from "./components/CommunicationPalette";
 import AuthPage from "./components/AuthPage";
 import { useAuth } from "./hooks/useAuth";
+import { CustomTerminal } from "./canvas/CustomTerminal";
 
 const appWindow = getCurrentWebviewWindow();
 
@@ -123,7 +124,7 @@ function App() {
 		if (selectedGitProjectId !== null) {
 			const selectedProject = store.getGitProject(selectedGitProjectId);
 			if (selectedProject) {
-				const terminalElement = Terminal.canvasElement(selectedProject.root, 1);
+				const terminalElement = CustomTerminal.canvasElement(selectedProject.root, 1);
 				selectedProject.addToCurrentCanvasElements(terminalElement)
 			}
 		}
