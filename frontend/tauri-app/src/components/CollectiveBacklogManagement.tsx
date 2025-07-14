@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import BacklogService, { BacklogItem, BacklogFilters } from '../services/BacklogService';
 import AuthService from '../services/AuthService';
 import { GitProject } from '../types/GitProject';
+import { BacklogTaskStatus, PromptMappingStatus } from '../types/StatusTypes';
 
 interface CollectiveBacklogManagementProps {
 	project?: GitProject;
@@ -42,7 +43,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 	const [newTaskData, setNewTaskData] = useState({
 		task: '',
 		priority: 3,
-		status: 'open' as const,
+		status: 'open' as BacklogTaskStatus,
 		owner: null
 	});
 
@@ -53,10 +54,10 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 	const [selectedTasks, setSelectedTasks] = useState<Set<number>>(new Set());
 	
 	// Task-Prompt mapping with status tracking - persist across re-renders
-	// Structure: { taskId: { promptId: { agentId: string, status: 'in_progress' | 'merged' } } }
+	// Structure: { taskId: { promptId: { agentId: string, status: PromptMappingStatus } } }
 	const getStorageKey = () => `taskPromptMappings_${project?.gitOriginUrl || 'default'}`;
 	
-	const [taskPromptMappings, setTaskPromptMappings] = useState<Record<number, Record<string, { agentId: string, status: 'in_progress' | 'merged' }>>>(() => {
+	const [taskPromptMappings, setTaskPromptMappings] = useState<Record<number, Record<string, { agentId: string, status: PromptMappingStatus }>>>(() => {
 		// Initialize from localStorage if available
 		try {
 			const stored = localStorage.getItem(getStorageKey());
@@ -84,7 +85,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 	const [previousCanvasData, setPreviousCanvasData] = useState<{ id: string, lockState?: string, promptCount?: number }[]>([]);
 
 	// Calculate task status based on prompt mappings
-	const calculateTaskStatus = (taskId: number, mappings?: Record<number, Record<string, { agentId: string, status: 'in_progress' | 'merged' }>>): 'open' | 'in_progress' | 'completed' => {
+	const calculateTaskStatus = (taskId: number, mappings?: Record<number, Record<string, { agentId: string, status: PromptMappingStatus }>>): BacklogTaskStatus => {
 		// Use provided mappings or fall back to state
 		const allMappings = mappings || taskPromptMappings;
 		const prompts = allMappings[taskId];
@@ -107,36 +108,29 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 		console.log(`📊 [STATUS-CALC] Task ${taskId} all merged:`, allMerged);
 		
 		if (allMerged) {
-			console.log(`📊 [STATUS-CALC] Task ${taskId} -> 'completed' (all prompts merged)`);
-			return 'completed'; // All prompts are merged
+			console.log(`📊 [STATUS-CALC] Task ${taskId} -> 'finished' (all prompts merged)`);
+			return 'finished'; // All prompts are merged
 		}
 		
 		console.log(`📊 [STATUS-CALC] Task ${taskId} -> 'in_progress' (some prompts exist but not all merged)`);
 		return 'in_progress'; // Some prompts exist but not all are merged
 	};
 
-	// IMPORTANT: There are TWO different status systems:
-	// 1. TaskStatus = 'prompting' | 'queued' | 'running' | 'paused' | 'completed' | 'failed' (GitProject/Canvas level)
-	// 2. BacklogStatus = 'open' | 'in_progress' | 'completed' (Backlog management level)
-	// 
-	// The current system uses canvas.lockState === 'merged' to determine prompt status,
-	// but we should map the actual TaskStatus to BacklogStatus properly
-	
-	// IMPORTANT: There are THREE status systems:
-	// 1. TaskStatus = 'prompting' | 'queued' | 'running' | 'paused' | 'completed' | 'failed' (Agent/Canvas level)
-	// 2. BacklogTaskStatus = 'open' | 'in_progress' | 'completed' (Backlog management level)  
-	// 3. PromptMappingStatus = 'in_progress' | 'merged' (Mapping between backlog tasks and agent prompts)
+	// IMPORTANT: There are THREE distinct status systems (see StatusTypes.ts):
+	// 1. PromptStatus = 'prompting' | 'queued' | 'running' | 'paused' | 'completed' | 'failed' (Agent/Canvas execution level)
+	// 2. BacklogTaskStatus = 'open' | 'in_progress' | 'finished' (Backlog management level)  
+	// 3. PromptMappingStatus = 'active' | 'merged' (Mapping between backlog tasks and agent prompts)
 	//
 	// MAPPING LOGIC:
-	// - Creating agent/adding prompt → PromptMappingStatus = 'in_progress'
+	// - Creating agent/adding prompt → PromptMappingStatus = 'active'
 	// - Canvas submitted for merge → PromptMappingStatus = 'merged'
 	// - Prompt deleted → Remove from mapping
 	// - No prompts mapped → BacklogTaskStatus = 'open'
-	// - All prompts 'merged' → BacklogTaskStatus = 'completed'
+	// - All prompts 'merged' → BacklogTaskStatus = 'finished'
 	// - Some prompts exist but not all 'merged' → BacklogTaskStatus = 'in_progress'
 
 	// Update task status in backend and local state
-	const updateTaskStatus = async (taskId: number, mappings?: Record<number, Record<string, { agentId: string, status: 'in_progress' | 'merged' }>>) => {
+	const updateTaskStatus = async (taskId: number, mappings?: Record<number, Record<string, { agentId: string, status: PromptMappingStatus }>>) => {
 			const calculatedStatus = calculateTaskStatus(taskId, mappings);
 			
 		const currentItem = backlogItems.find(item => item.id === taskId);
@@ -490,7 +484,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 			onAddPrompt(newAgentId, item.task);
 			console.log(`📝 [TASK-LINK] Added prompt to agent ${newAgentId}: "${item.task}"`);
 			
-			// Create prompt mapping with initial status 'in_progress'
+			// Create prompt mapping with initial status 'active'
 			const promptId = `${newAgentId}-${Date.now()}`; // Generate unique prompt ID
 			console.log(`🔗 [TASK-LINK] Creating mapping - Task ${item.id} -> Prompt ${promptId} -> Agent ${newAgentId}`);
 				
@@ -500,7 +494,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 					...taskPromptMappings[item.id],
 					[promptId]: {
 						agentId: newAgentId,
-						status: 'in_progress' as const
+						status: 'active' as const
 					}
 				}
 			};
@@ -534,7 +528,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 		}
 		
 		// Add the task as a prompt to each selected agent
-		const newMappings: Record<string, { agentId: string, status: 'in_progress' | 'merged' }> = {};
+		const newMappings: Record<string, { agentId: string, status: PromptMappingStatus }> = {};
 		
 		selectedAgents.forEach(agentId => {
 				onAddPrompt(agentId, item.task);
@@ -543,7 +537,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 			const promptId = `${agentId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 			newMappings[promptId] = {
 				agentId: agentId,
-				status: 'in_progress'
+				status: 'active'
 			};
 			
 			});
@@ -618,7 +612,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 							...prev[taskId],
 							[promptId]: {
 								agentId: newAgentId,
-								status: 'in_progress'
+								status: 'active'
 							}
 						}
 					}));
@@ -650,7 +644,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 							...prev[taskId],
 							[promptId]: {
 								agentId: agentId,
-								status: 'in_progress'
+								status: 'active'
 							}
 						}
 					}));
@@ -711,7 +705,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 		}
 		if (filters.overdue) {
 			filtered = filtered.filter(item => 
-				new Date(item.due_date) < new Date() && item.status !== 'completed'
+				new Date(item.due_date) < new Date() && item.status !== 'finished'
 			);
 		}
 		
@@ -757,7 +751,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 	// Get status color
 	const getStatusColor = (status: string) => {
 		switch (status) {
-			case 'completed':
+			case 'finished':
 				return 'bg-[var(--positive-100)] text-[var(--positive-700)] border-[var(--positive-300)]';
 			case 'in_progress':
 				return 'bg-[var(--acc-100)] text-[var(--acc-700)] border-[var(--acc-300)]';
@@ -775,7 +769,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 
 	// Check if item is overdue
 	const isOverdue = (dueDate: string, status: string) => {
-		return new Date(dueDate) < new Date() && status !== 'completed';
+		return new Date(dueDate) < new Date() && status !== 'finished';
 	};
 
 	// For collective backlog management, all authenticated users should be able to edit items
@@ -942,7 +936,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 						});
 						
 						if (canvas) {
-							const newStatus = canvas.lockState === 'merged' ? 'merged' : 'in_progress';
+							const newStatus = canvas.lockState === 'merged' ? 'merged' : 'active';
 							console.log(`🔄 [CANVAS-MONITOR] Prompt ${promptId}: ${prompt.status} → ${newStatus}`);
 							
 							if (prompt.status !== newStatus) {
@@ -1111,7 +1105,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 							<option key="all-statuses" value="">All Statuses</option>
 							<option key="open" value="open">Open</option>
 							<option key="in_progress" value="in_progress">In Progress</option>
-							<option key="completed" value="completed">Completed</option>
+							<option key="finished" value="finished">Finished</option>
 						</select>
 
 						{/* Priority Filter */}
@@ -1353,7 +1347,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 														>
 															<option key="edit-open" value="open">Open</option>
 															<option key="edit-in_progress" value="in_progress">In Progress</option>
-															<option key="edit-completed" value="completed">Completed</option>
+															<option key="edit-finished" value="finished">Finished</option>
 														</select>
 													) : (
 														<span 
@@ -1562,7 +1556,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 										>
 											<option key="create-open" value="open">Open</option>
 											<option key="create-in_progress" value="in_progress">In Progress</option>
-											<option key="create-completed" value="completed">Completed</option>
+											<option key="create-finished" value="finished">Finished</option>
 										</select>
 										<button
 											onClick={createNewTask}
@@ -1601,9 +1595,9 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 							</div>
 							<div>
 								<div className="text-2xl font-semibold text-[var(--positive-600)]">
-									{sortedAndFilteredItems.filter(item => item.status === 'completed').length}
+									{sortedAndFilteredItems.filter(item => item.status === 'finished').length}
 								</div>
-								<div className="text-sm text-[var(--base-600)]">Completed</div>
+								<div className="text-sm text-[var(--base-600)]">Finished</div>
 							</div>
 						</div>
 					</div>

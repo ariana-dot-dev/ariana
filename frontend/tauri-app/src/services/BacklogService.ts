@@ -1,10 +1,30 @@
 import AuthService from './AuthService';
 import { API_CONFIG, getApiUrl } from './ApiConfig';
+import { 
+  BacklogTaskStatus, 
+  BacklogTaskStatusAPI,
+  mapBacklogStatusToAPI,
+  mapBacklogStatusFromAPI 
+} from '../types/StatusTypes';
 
 interface BacklogItem {
   id: number;
   task: string;
-  status: 'open' | 'in_progress' | 'completed';
+  status: BacklogTaskStatus; // Internal type (uses 'finished' instead of 'completed')
+  owner: string;
+  owner_name: string;
+  owner_email: string;
+  git_repository_url: string;
+  priority: number;
+  due_date: string;
+  created_at: string;
+}
+
+// API interfaces use the API-compatible status values
+interface BacklogItemAPI {
+  id: number;
+  task: string;
+  status: BacklogTaskStatusAPI; // API type (uses 'completed' for backend compatibility)
   owner: string;
   owner_name: string;
   owner_email: string;
@@ -24,14 +44,14 @@ interface BacklogFilters {
 interface CreateBacklogItemRequest {
   git_repository_url: string;
   task: string;
-  status?: 'open' | 'in_progress' | 'completed';
+  status?: BacklogTaskStatus;
   priority?: number;
   owner?: string | null;
 }
 
 interface UpdateBacklogItemRequest {
   task?: string;
-  status?: 'open' | 'in_progress' | 'completed';
+  status?: BacklogTaskStatus;
   priority?: number;
   due_date?: string;
 }
@@ -53,24 +73,44 @@ class BacklogService {
 
     const url = getApiUrl(API_CONFIG.ENDPOINTS.BACKLOG) + (params.toString() ? `?${params.toString()}` : '');
     
-    const response = await this.authService.apiRequest<{ backlogItems: BacklogItem[] }>(url);
-    return response.backlogItems;
+    const response = await this.authService.apiRequest<{ backlogItems: BacklogItemAPI[] }>(url);
+    
+    // Map API response to internal types
+    const mappedItems: BacklogItem[] = response.backlogItems.map(item => ({
+      ...item,
+      status: mapBacklogStatusFromAPI(item.status)
+    }));
+    
+    return mappedItems;
   }
 
   async createBacklogItem(item: CreateBacklogItemRequest): Promise<BacklogItem> {
     console.log('Creating backlog item:', item);
     console.log('API URL:', getApiUrl(API_CONFIG.ENDPOINTS.BACKLOG));
     
-    const response = await this.authService.apiRequest<{ backlogItem: BacklogItem }>(
+    // Map internal types to API types for request
+    const apiItem = {
+      ...item,
+      status: item.status ? mapBacklogStatusToAPI(item.status) : undefined
+    };
+    
+    const response = await this.authService.apiRequest<{ backlogItem: BacklogItemAPI }>(
       getApiUrl(API_CONFIG.ENDPOINTS.BACKLOG),
       {
         method: 'POST',
-        body: JSON.stringify(item),
+        body: JSON.stringify(apiItem),
       }
     );
     
     console.log('Create response:', response);
-    return response.backlogItem;
+    
+    // Map API response back to internal types
+    const mappedItem: BacklogItem = {
+      ...response.backlogItem,
+      status: mapBacklogStatusFromAPI(response.backlogItem.status)
+    };
+    
+    return mappedItem;
   }
 
   async updateBacklogItem(id: number, updates: UpdateBacklogItemRequest): Promise<BacklogItem> {
@@ -79,16 +119,29 @@ class BacklogService {
     console.log(`🔄 [BACKLOG-API] Updating backlog item ${id} with:`, updates);
     console.log(`🌐 [BACKLOG-API] API URL:`, url);
     
+    // Map internal types to API types for request
+    const apiUpdates = {
+      ...updates,
+      status: updates.status ? mapBacklogStatusToAPI(updates.status) : undefined
+    };
+    
     try {
-      const response = await this.authService.apiRequest<{ backlogItem: BacklogItem }>(
+      const response = await this.authService.apiRequest<{ backlogItem: BacklogItemAPI }>(
         url,
         {
           method: 'PUT',
-          body: JSON.stringify(updates),
+          body: JSON.stringify(apiUpdates),
         }
       );
       console.log(`✅ [BACKLOG-API] Successfully updated backlog item ${id}:`, response);
-      return response.backlogItem;
+      
+      // Map API response back to internal types
+      const mappedItem: BacklogItem = {
+        ...response.backlogItem,
+        status: mapBacklogStatusFromAPI(response.backlogItem.status)
+      };
+      
+      return mappedItem;
     } catch (error) {
       console.error(`❌ [BACKLOG-API] Failed to update backlog item ${id}:`, error);
       throw error;
@@ -123,9 +176,16 @@ class BacklogService {
     console.log('Request URL:', url);
     
     try {
-      const response = await this.authService.apiRequest<{ backlogItems: BacklogItem[] }>(url);
+      const response = await this.authService.apiRequest<{ backlogItems: BacklogItemAPI[] }>(url);
       console.log('Fetch response:', response);
-      return response.backlogItems;
+      
+      // Map API response to internal types
+      const mappedItems: BacklogItem[] = response.backlogItems.map(item => ({
+        ...item,
+        status: mapBacklogStatusFromAPI(item.status)
+      }));
+      
+      return mappedItems;
     } catch (error) {
       console.error('getBacklogByRepositoryRandomId error:', error);
       throw error;
@@ -142,8 +202,15 @@ class BacklogService {
 
     const url = getApiUrl(API_CONFIG.ENDPOINTS.ADMIN_BACKLOG) + (params.toString() ? `?${params.toString()}` : '');
     
-    const response = await this.authService.apiRequest<{ backlogItems: BacklogItem[] }>(url);
-    return response.backlogItems;
+    const response = await this.authService.apiRequest<{ backlogItems: BacklogItemAPI[] }>(url);
+    
+    // Map API response to internal types
+    const mappedItems: BacklogItem[] = response.backlogItems.map(item => ({
+      ...item,
+      status: mapBacklogStatusFromAPI(item.status)
+    }));
+    
+    return mappedItems;
   }
 }
 

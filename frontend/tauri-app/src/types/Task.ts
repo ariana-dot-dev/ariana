@@ -1,12 +1,15 @@
 import { OsSession } from "../bindings/os";
+import { PromptStatus } from "./StatusTypes";
 
-export type TaskStatus = 'prompting' | 'queued' | 'running' | 'paused' | 'completed' | 'failed';
+// IMPORTANT: TaskStatus has been renamed to PromptStatus for clarity
+// When merging changes, ensure all references to TaskStatus are updated to PromptStatus
+export type TaskStatus = PromptStatus;
 
 export interface TaskBase {
 	id: string;
 	prompt: string;
 	createdAt: number;
-	status: TaskStatus;
+	status: PromptStatus;
 	linkedAgents?: string[]; // Array of canvas IDs this task is linked to
 }
 
