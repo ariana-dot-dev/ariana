@@ -69,6 +69,7 @@
     "dialog:allow-confirm", 
     "dialog:allow-message",
     "dialog:allow-open",
-    "dialog:allow-save"
+    "dialog:allow-save",
+    "shell:allow-open"
   ]
 }
