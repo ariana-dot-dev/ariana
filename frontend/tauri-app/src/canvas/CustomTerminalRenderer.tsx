@@ -11,6 +11,52 @@ import { useStore } from "../state";
 import { cn } from "../utils";
 import { OsSession } from "../bindings/os";
 
+// Group consecutive spans with identical styles for better performance and copy/paste
+function groupConsecutiveSpans(items: LineItem[]): LineItem[] {
+	if (items.length === 0) return items;
+	
+	const grouped: LineItem[] = [];
+	let currentGroup = { ...items[0] };
+	
+	for (let i = 1; i < items.length; i++) {
+		const item = items[i];
+		
+		// Check if current item has identical styling to the group
+		if (spansHaveSameStyle(currentGroup, item)) {
+			// Merge the text - preserve exact whitespace
+			currentGroup.lexeme += item.lexeme;
+			// Width should be the sum of original widths to preserve terminal positioning
+			currentGroup.width += item.width;
+		} else {
+			// Different style, push the current group and start a new one
+			grouped.push(currentGroup);
+			currentGroup = { ...item };
+		}
+	}
+	
+	// Push the final group
+	grouped.push(currentGroup);
+	
+	// Filter out empty groups that have no content
+	const filtered = grouped.filter(group => group.lexeme.length > 0 || group.width > 0);
+	
+	// DEBUG: Log the grouping result
+	console.log('DEBUG: Grouped spans:');
+	filtered.forEach((group, i) => {
+		console.log(`  Group ${i}: width=${group.width}, text="${group.lexeme}", length=${group.lexeme.length}`);
+	});
+	
+	return filtered;
+}
+
+function spansHaveSameStyle(a: LineItem, b: LineItem): boolean {
+	return a.is_bold === b.is_bold &&
+		a.is_italic === b.is_italic &&
+		a.is_underline === b.is_underline &&
+		JSON.stringify(a.foreground_color) === JSON.stringify(b.foreground_color) &&
+		JSON.stringify(a.background_color) === JSON.stringify(b.background_color);
+}
+
 interface CustomTerminalRendererProps {
 	elementId: string;
 	osSession?: OsSession;
@@ -151,6 +197,23 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 	const { isLightTheme } = useStore();
 	const logPrefix = `[CustomTerminalRenderer-${elementId}]`;
 	const api = terminalAPI || customTerminalAPI;
+
+	// Add global styles for selection
+	useEffect(() => {
+		const style = document.createElement('style');
+		style.textContent = `
+			.terminal-selection-layer::selection {
+				color: var(--whitest) !important;
+				background-color: var(--acc-500-50) !important;
+			}
+			.terminal-selection-layer::-moz-selection {
+				color: var(--whitest) !important;
+				background-color: var(--acc-500-50) !important;
+			}
+		`;
+		document.head.appendChild(style);
+		return () => document.head.removeChild(style);
+	}, []);
 
 	// Initialize state from persistent storage if available
 	const persistedState = TerminalConnectionManager.getScreenState(elementId);
@@ -900,6 +963,15 @@ const Row = React.memo(
 		const [hasAnimated, setHasAnimated] = useState(false);
 		const [isMounted, setIsMounted] = useState(false);
 
+		// DEBUG: Log the original line data
+		console.log('DEBUG: Original line data:');
+		line.forEach((item, i) => {
+			console.log(`  Item ${i}: width=${item.width}, text="${item.lexeme}", length=${item.lexeme.length}`);
+		});
+		
+		// Group consecutive spans with same styles for better performance
+		const groupedLine = groupConsecutiveSpans(line);
+
 		const isEmpty =
 			line
 				.map((l) => l.lexeme)
@@ -924,9 +996,12 @@ const Row = React.memo(
 
 		return (
 			<div
-				style={{ height: `${charDimensions.height}px` }}
+				style={{ 
+					height: `${charDimensions.height}px`,
+					position: "relative",
+				}}
 				className={cn(
-					"relative flex font-mono",
+					"font-mono",
 					// A line is invisible if it's empty, or if it's new and hasn't finished animating.
 					(isEmpty || (!hasAnimated && !isEmpty)) && "opacity-0",
 					shouldAnimate && "animate-fade-in",
@@ -937,42 +1012,97 @@ const Row = React.memo(
 					}
 				}}
 			>
-				{line.map((item, index) => {
-					// Handle undefined items gracefully
-					if (!item) {
+				{/* Single text layer for perfect copy/paste */}
+				<div
+					style={{
+						position: "absolute",
+						top: 0,
+						left: 0,
+						right: 0,
+						bottom: 0,
+						zIndex: 1,
+						whiteSpace: "pre",
+						color: "transparent",
+						userSelect: "text",
+						fontFamily: "inherit",
+						fontSize: "inherit",
+						lineHeight: `${charDimensions.height}px`,
+						letterSpacing: "0",
+						wordSpacing: "0",
+						tabSize: 4,
+						MozTabSize: 4,
+					}}
+					className="terminal-selection-layer"
+					dangerouslySetInnerHTML={{
+						__html: line.map(item => 
+							item.lexeme.replace(/ /g, '&nbsp;')
+						).join('')
+					}}
+				/>
+				
+				{/* Visual layer - grouped spans, positioned to match text layer exactly */}
+				<div 
+					style={{
+						position: "relative",
+						display: "flex",
+						height: "100%",
+						userSelect: "none",
+						fontFamily: "inherit",
+						fontSize: "inherit",
+						lineHeight: `${charDimensions.height}px`,
+						letterSpacing: "0",
+						wordSpacing: "0",
+					}}
+				>
+					{groupedLine.map((item, index) => {
+						if (!item) {
+							return (
+								<span
+									key={index}
+									style={{
+										width: `${charDimensions.width}px`,
+										height: `${charDimensions.height}px`,
+										display: "inline-block",
+										whiteSpace: "pre",
+										backgroundColor: "red", // DEBUG
+									}}
+								>
+									{" "}
+								</span>
+							);
+						}
+						
+						// Skip empty items with width 0
+						if (item.width === 0) {
+							return null;
+						}
+						
+						const text = lexemeMap[item.lexeme] ? lexemeMap[item.lexeme] : item.lexeme;
+						console.log(`DEBUG: span ${index}, width=${item.width}, text="${text}", length=${text.length}`);
+						
 						return (
 							<span
 								key={index}
 								style={{
-									width: `${charDimensions.width}px`,
-									minWidth: `${charDimensions.width}px`,
-									whiteSpace: "pre-wrap",
+									backgroundColor: colorToCSS(item.background_color, isLightTheme),
+									color: colorToCSS(item.foreground_color, isLightTheme),
+									fontWeight: item.is_bold ? "bold" : "normal",
+									textDecoration: item.is_underline ? "underline" : "none",
+									fontStyle: item.is_italic ? "italic" : "normal",
+									width: `${item.width * charDimensions.width}px`,
+									height: `${charDimensions.height}px`,
+									display: "inline-block",
+									whiteSpace: "pre",
+									overflow: "hidden",
+									textOverflow: "clip",
 								}}
-							>
-								{" "}
-							</span>
+								dangerouslySetInnerHTML={{
+									__html: text.replace(/ /g, '&nbsp;')
+								}}
+							/>
 						);
-					}
-					
-					return (
-						<span
-							key={index}
-							className={cn("")}
-							style={{
-								backgroundColor: colorToCSS(item.background_color, isLightTheme),
-								color: colorToCSS(item.foreground_color, isLightTheme),
-								fontWeight: item.is_bold ? "bold" : "normal",
-								textDecoration: item.is_underline ? "underline" : "none",
-								fontStyle: item.is_italic ? "italic" : "normal",
-								whiteSpace: "pre-wrap",
-								width: `${charDimensions.width}px`,
-								minWidth: `${charDimensions.width}px`,
-							}}
-						>
-							{lexemeMap[item.lexeme] ? lexemeMap[item.lexeme] : item.lexeme}
-						</span>
-					);
-				})}
+					})}
+				</div>
 			</div>
 		);
 	},

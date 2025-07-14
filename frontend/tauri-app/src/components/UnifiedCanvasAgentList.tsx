@@ -222,7 +222,7 @@ export const UnifiedCanvasAgentList: React.FC<UnifiedCanvasAgentListProps> = ({
 	}
 
 	return (
-		<div className="flex flex-col w-full max-w-full gap-4">
+		<div className="flex flex-col w-full h-full max-w-full gap-4">
 			{/* Canvases List */}
 			{canvasItems.length > 0 && (
 				<div className="flex flex-col gap-2">
