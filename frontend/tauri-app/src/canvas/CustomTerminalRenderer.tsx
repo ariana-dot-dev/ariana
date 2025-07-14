@@ -79,7 +79,6 @@ class TerminalConnectionManager {
 
 	static setConnection(elementId: string, terminalId: string): void {
 		TerminalConnectionManager.connections.set(elementId, terminalId);
-		console.log(`[MemoryTrack] Added connection ${elementId} -> ${terminalId}, total connections: ${TerminalConnectionManager.connections.size}`);
 		TerminalConnectionManager.startMemoryTracking();
 	}
 
@@ -90,8 +89,6 @@ class TerminalConnectionManager {
 		TerminalConnectionManager.connections.delete(elementId);
 		// Also remove screen state when connection is removed
 		TerminalConnectionManager.screenStates.delete(elementId);
-		
-		console.log(`[MemoryTrack] Removed connection ${elementId}, total connections: ${TerminalConnectionManager.connections.size}, had connection: ${hadConnection}, had screen state: ${hadScreenState}`);
 	}
 
 
@@ -117,10 +114,6 @@ class TerminalConnectionManager {
 			line ? [...line.filter(item => item !== undefined)] : []
 		);
 		
-		const previousState = TerminalConnectionManager.screenStates.get(elementId);
-		const previousLineCount = previousState?.screen.length || 0;
-		const newLineCount = safeScreen.length;
-		
 		TerminalConnectionManager.screenStates.set(elementId, {
 			screen: safeScreen,
 			cursorPosition: { ...cursorPosition },
@@ -128,11 +121,6 @@ class TerminalConnectionManager {
 			scrollPosition: scrollPosition || { scrollTop: 0, scrollHeight: 0 },
 			autoScrollEnabled: autoScrollEnabled ?? true
 		});
-		
-		// Log significant screen size changes
-		if (Math.abs(newLineCount - previousLineCount) > 100) {
-			console.log(`[MemoryTrack] Screen state updated for ${elementId}: ${previousLineCount} -> ${newLineCount} lines (${newLineCount > previousLineCount ? '+' : ''}${newLineCount - previousLineCount})`);
-		}
 	}
 
 	static hasScreenState(elementId: string): boolean {
@@ -149,11 +137,9 @@ class TerminalConnectionManager {
 		
 		const estimatedMemoryMB = (totalScreenItems * 100) / (1024 * 1024); // Rough estimate: 100 bytes per LineItem
 		
-		console.log(`[MemoryTrack] TerminalConnectionManager: ${connectionsSize} connections, ${screenStatesSize} screen states, ${totalScreenLines} total lines, ${totalScreenItems} total items (~${estimatedMemoryMB.toFixed(1)}MB)`);
-		
 		// Log individual large screen states
 		TerminalConnectionManager.screenStates.forEach((state, elementId) => {
-			if (state.screen.length > 5000) {
+			if (state.screen.length > 10000) {
 				console.log(`[MemoryTrack] Large screen state: ${elementId} has ${state.screen.length} lines`);
 			}
 		});
@@ -169,13 +155,10 @@ class TerminalConnectionManager {
 			
 			// Stop tracking if no connections remain
 			if (TerminalConnectionManager.connections.size === 0) {
-				console.log(`[MemoryTrack] No terminal connections remaining, stopping memory tracking`);
 				clearInterval(interval);
 				TerminalConnectionManager.memoryTrackingStarted = false;
 			}
 		}, 30000);
-		
-		console.log(`[MemoryTrack] Started TerminalConnectionManager memory tracking`);
 	}
 }
 
@@ -282,46 +265,23 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 
 	// Initialize terminal connection
 	useEffect(() => {
-		// let mounted = true;
-
 		const connectTerminal = async () => {
-			console.log(logPrefix, "Connecting terminal...");
-			console.log(logPrefix, "existingTerminalId:", existingTerminalId);
-			console.log(logPrefix, "current terminalId:", terminalId);
-
 			// If we have an existing terminal ID passed in, use that
 			if (existingTerminalId && !terminalId) {
-				console.log(
-					logPrefix,
-					"Using existing terminal ID:",
-					existingTerminalId,
-				);
 				setTerminalId(existingTerminalId);
 				setIsConnected(true);
 
 				// Set up event listeners based on whether terminalAPI is provided
 				if (terminalAPI) {
-					console.log(
-						logPrefix,
-						"Using terminalAPI event forwarding for visual rendering",
-					);
 					// Register with the ClaudeCodeAgent for event forwarding
 					if ('registerVisualEventHandler' in terminalAPI) {
 						(terminalAPI as any).registerVisualEventHandler(handleTerminalEvent);
 					}
 				} else {
-					console.log(
-						logPrefix,
-						"Setting up direct event listeners for existing terminal",
-					);
 					await api.onTerminalEvent(existingTerminalId, handleTerminalEvent);
 					await api.onTerminalDisconnect(existingTerminalId, handleTerminalDisconnect);
 				}
 
-				console.log(
-					logPrefix,
-					"Connected to existing terminal, notifying ready",
-				);
 				onTerminalReady?.(existingTerminalId);
 				return;
 			}
@@ -356,7 +316,6 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 
 			try {
 				const id = await api.connectTerminal(osSession);
-				// if (!mounted) return;
 
 				// Store the connection mapping
 				TerminalConnectionManager.setConnection(elementId, id);
@@ -370,18 +329,12 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 
 				onTerminalReady?.(id);
 			} catch (err) {
-				// if (!mounted) return;
 				const errorMessage = err instanceof Error ? err.message : String(err);
 				onTerminalError?.(errorMessage);
 			}
 		};
 
 		connectTerminal();
-
-		// return () => {
-		// 	mounted = false;
-		// 	// Don't kill terminals on unmount - keep connections alive for reuse
-		// };
 	}, [elementId, existingTerminalId, api]);
 
 	const scrollDown = useCallback(() => {
@@ -646,7 +599,6 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 				5,
 				Math.floor(containerRect.height / (charHeight * 1.0)),
 			);
-			// const lines = 100;
 
 			// Only resize if dimensions actually changed
 			if (windowDimensions.cols === cols && windowDimensions.rows === lines) {
@@ -656,16 +608,6 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 			isResizingRef.current = true;
 
 			try {
-				console.log(
-					logPrefix,
-					`Calling api.resizeTerminal(${terminalId}, ${lines}, ${cols})`,
-				);
-				console.log(logPrefix, "API instance type:", api.constructor.name);
-				console.log(
-					logPrefix,
-					"resizeTerminal method:",
-					api.resizeTerminal.toString().substring(0, 100),
-				);
 				await api.resizeTerminal(terminalId, lines, cols);
 				// Update our tracked dimensions only after successful resize
 				setWindowDimensions({ rows: lines, cols });
@@ -886,7 +828,6 @@ const Chunk = React.memo(
 	}) => {
 		const ref = useRef<HTMLDivElement>(null);
 		const isInView = useInView(ref);
-		
 
 		const result = (
 			<div ref={ref} className={cn("flex flex-col w-full")}>
@@ -911,51 +852,49 @@ const Chunk = React.memo(
 
 		return result;
 	},
-	(prevProps, nextProps) => {
-		
-		// deep compare
-		if (prevProps.start !== nextProps.start) return false;
-		if (prevProps.lines.length !== nextProps.lines.length) return false;
-		if (prevProps.isLightTheme !== nextProps.isLightTheme) return false;
-		if (prevProps.charDimensions !== nextProps.charDimensions) return false;
+			(prevProps, nextProps) => {
+			// deep compare
+			if (prevProps.start !== nextProps.start) return false;
+			if (prevProps.lines.length !== nextProps.lines.length) return false;
+			if (prevProps.isLightTheme !== nextProps.isLightTheme) return false;
+			if (prevProps.charDimensions !== nextProps.charDimensions) return false;
 
-		for (let i = 0; i < prevProps.lines.length; i++) {
-			const prevLine = prevProps.lines[i];
-			const nextLine = nextProps.lines[i];
-			
-			// Check if lines exist and have same length
-			if (!prevLine || !nextLine || prevLine.length !== nextLine.length) {
-				if (prevLine !== nextLine) return false;
-				continue;
-			}
-			
-			for (let j = 0; j < prevLine.length; j++) {
-				const prevItem = prevLine[j];
-				const nextItem = nextLine[j];
+			for (let i = 0; i < prevProps.lines.length; i++) {
+				const prevLine = prevProps.lines[i];
+				const nextLine = nextProps.lines[i];
 				
-				// Check if items exist
-				if (!prevItem || !nextItem) {
-					if (prevItem !== nextItem) return false;
+				// Check if lines exist and have same length
+				if (!prevLine || !nextLine || prevLine.length !== nextLine.length) {
+					if (prevLine !== nextLine) return false;
 					continue;
 				}
 				
-				if (
-					prevItem.lexeme !== nextItem.lexeme ||
-					prevItem.width !== nextItem.width ||
-					prevItem.is_bold !== nextItem.is_bold ||
-					prevItem.is_italic !== nextItem.is_italic ||
-					prevItem.is_underline !== nextItem.is_underline ||
-					prevItem.foreground_color !== nextItem.foreground_color ||
-					prevItem.background_color !== nextItem.background_color
-				) {
-					return false;
+				for (let j = 0; j < prevLine.length; j++) {
+					const prevItem = prevLine[j];
+					const nextItem = nextLine[j];
+					
+					// Check if items exist
+					if (!prevItem || !nextItem) {
+						if (prevItem !== nextItem) return false;
+						continue;
+					}
+					
+					if (
+						prevItem.lexeme !== nextItem.lexeme ||
+						prevItem.width !== nextItem.width ||
+						prevItem.is_bold !== nextItem.is_bold ||
+						prevItem.is_italic !== nextItem.is_italic ||
+						prevItem.is_underline !== nextItem.is_underline ||
+						prevItem.foreground_color !== nextItem.foreground_color ||
+						prevItem.background_color !== nextItem.background_color
+					) {
+						return false;
+					}
 				}
 			}
-		}
-		
-		
-		return true;
-	},
+
+			return true;
+		},
 );
 
 const Row = React.memo(
@@ -1112,7 +1051,6 @@ const Row = React.memo(
 		);
 	},
 	(prevProps, nextProps) => {
-		
 		// deep compare
 		if (prevProps.row !== nextProps.row) return false;
 		if (prevProps.isLightTheme !== nextProps.isLightTheme) return false;
@@ -1145,8 +1083,7 @@ const Row = React.memo(
 				return false;
 			}
 		}
-		
-		
+
 		return true;
 	},
 );
