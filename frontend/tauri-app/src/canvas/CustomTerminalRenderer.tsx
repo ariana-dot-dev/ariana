@@ -206,7 +206,9 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 			}
 		`;
 		document.head.appendChild(style);
-		return () => document.head.removeChild(style);
+		return () => {
+			document.head.removeChild(style);
+		};
 	}, []);
 
 	// Initialize state from persistent storage if available
@@ -297,16 +299,24 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 				setTerminalId(existingTerminalId);
 				setIsConnected(true);
 
-				// Set up event listeners for existing connection
-				console.log(
-					logPrefix,
-					"Setting up event listeners for existing terminal",
-				);
-				await api.onTerminalEvent(existingTerminalId, handleTerminalEvent);
-				await api.onTerminalDisconnect(
-					existingTerminalId,
-					handleTerminalDisconnect,
-				);
+				// Set up event listeners based on whether terminalAPI is provided
+				if (terminalAPI) {
+					console.log(
+						logPrefix,
+						"Using terminalAPI event forwarding for visual rendering",
+					);
+					// Register with the ClaudeCodeAgent for event forwarding
+					if ('registerVisualEventHandler' in terminalAPI) {
+						(terminalAPI as any).registerVisualEventHandler(handleTerminalEvent);
+					}
+				} else {
+					console.log(
+						logPrefix,
+						"Setting up direct event listeners for existing terminal",
+					);
+					await api.onTerminalEvent(existingTerminalId, handleTerminalEvent);
+					await api.onTerminalDisconnect(existingTerminalId, handleTerminalDisconnect);
+				}
 
 				console.log(
 					logPrefix,
@@ -782,6 +792,15 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 		}
 	}, [isConnected, handleResize]);
 
+	useEffect(() => {
+		// Cleanup function to unregister visual event handler
+		return () => {
+			if (terminalAPI && 'unregisterVisualEventHandler' in terminalAPI) {
+				(terminalAPI as any).unregisterVisualEventHandler();
+			}
+		};
+	}, [terminalAPI]);
+
 	return (
 		<div
 			ref={terminalRef}
@@ -957,12 +976,6 @@ const Row = React.memo(
 		const [hasAnimated, setHasAnimated] = useState(false);
 		const [isMounted, setIsMounted] = useState(false);
 
-		// DEBUG: Log the original line data
-		console.log('DEBUG: Original line data:');
-		line.forEach((item, i) => {
-			console.log(`  Item ${i}: width=${item.width}, text="${item.lexeme}", length=${item.lexeme.length}`);
-		});
-		
 		// Group consecutive spans with same styles for better performance
 		const groupedLine = groupConsecutiveSpans(line);
 

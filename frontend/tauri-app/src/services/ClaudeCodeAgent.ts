@@ -58,6 +58,8 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	// Manual control state
 	private isPaused: boolean = false;
 	private isManuallyControlled: boolean = false;
+	// Visual rendering support
+	private visualEventHandler: ((events: TerminalEvent[]) => void) | null = null;
 
 	constructor() {
 		super();
@@ -237,6 +239,23 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	}
 
 	/**
+	 * Register a visual event handler for the CustomTerminalRenderer
+	 * This allows the renderer to receive events for visual display
+	 */
+	registerVisualEventHandler(handler: (events: TerminalEvent[]) => void): void {
+		this.visualEventHandler = handler;
+		console.log(`${this.logPrefix} Registered visual event handler for terminal rendering`);
+	}
+
+	/**
+	 * Unregister the visual event handler
+	 */
+	unregisterVisualEventHandler(): void {
+		this.visualEventHandler = null;
+		console.log(`${this.logPrefix} Unregistered visual event handler`);
+	}
+
+	/**
 	 * Clean up resources
 	 */
 	async cleanup(preserveTerminal: boolean = false): Promise<void> {
@@ -283,13 +302,29 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		if (!this.terminalId) return;
 
 		try {
+			console.log(`${this.logPrefix} Setting up terminal event listener for terminal: ${this.terminalId}`);
+			
+			// Add counter to track callback invocations
+			let callbackCount = 0;
+			
 			this.onTerminalEvent(this.terminalId, (events: TerminalEvent[]) => {
+				callbackCount++;
+				console.log(`${this.logPrefix} ✅ Terminal event callback invoked (call #${callbackCount}): ${events.length} events`);
+				console.log(`${this.logPrefix} Event types:`, events.map(e => e.type));
+				
 				// Just update the internal state, don't process immediately
 				this.updateInternalState(events);
 			});
 			
 			// Start 1-second state checking interval
 			this.startStateCheckInterval();
+			
+			// Add periodic check to see if callback is being called
+			setInterval(() => {
+				console.log(`${this.logPrefix} Event callback status: ${callbackCount} total callbacks received`);
+			}, 10000); // Log every 10 seconds
+			
+			console.log(`${this.logPrefix} Terminal event listener setup completed`);
 		} catch (error) {
 			console.error(this.logPrefix, "❌ Error setting up ClaudeCodeAgent event listener:", error);
 		}
@@ -313,6 +348,14 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	}
 	
 	private updateInternalState(events: TerminalEvent[]): void {
+		// Add debug logging
+		console.log(`${this.logPrefix} updateInternalState called with ${events.length} events:`, events.map(e => e.type));
+		
+		// Forward events to visual renderer if registered
+		if (this.visualEventHandler) {
+			this.visualEventHandler(events);
+		}
+		
 		// Silently update internal state without processing
 		this.handleTerminalEvents(events);
 		this.lastActivityTime = Date.now();
@@ -324,6 +367,13 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		
 		// Get current TUI lines for CLI agents library
 		const tuiLines = this.getCurrentTuiLines();
+		
+		// Add debug logging
+		console.log(`${this.logPrefix} checkCurrentState: screenLines.length=${this.screenLines.length}, tuiLines.length=${tuiLines.length}`);
+		
+		if (tuiLines.length > 0) {
+			console.log(`${this.logPrefix} Processing ${tuiLines.length} TUI lines:`, tuiLines.map(line => line.content.substring(0, 100)));
+		}
 		
 		// Only emit and process if we have actual content
 		if (tuiLines.length > 0) {
@@ -338,6 +388,9 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	}
 
 	private handleTerminalEvents(events: TerminalEvent[]): void {
+		// Add debug logging
+		console.log(`${this.logPrefix} handleTerminalEvents called with ${events.length} events`);
+		
 		// Only process the latest screen state, not intermediate changes
 		let latestScreenUpdate: TerminalEvent | null = null;
 		let hasPatches = false;
@@ -345,35 +398,43 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 
 		// Find the latest complete screen update or collect patches/newLines
 		for (const event of events) {
+			console.log(`${this.logPrefix} Processing event type: ${event.type}`);
 			switch (event.type) {
 				case "screenUpdate":
 					latestScreenUpdate = event; // Use the latest screen update
 					hasPatches = false; // Screen update supersedes patches
 					hasNewLines = false; // Screen update supersedes new lines
+					console.log(`${this.logPrefix} Found screenUpdate event with ${event.screen?.length || 0} lines`);
 					break;
 				case "patch":
 					if (!latestScreenUpdate) hasPatches = true;
+					console.log(`${this.logPrefix} Found patch event for line ${event.line}`);
 					break;
 				case "newLines":
 					if (!latestScreenUpdate) hasNewLines = true;
+					console.log(`${this.logPrefix} Found newLines event with ${event.lines?.length || 0} lines`);
 					break;
 			}
 		}
 
 		// Apply the final state
 		if (latestScreenUpdate && latestScreenUpdate.screen) {
+			console.log(`${this.logPrefix} Applying screenUpdate: ${latestScreenUpdate.screen.length} lines`);
 			this.screenLines = [...latestScreenUpdate.screen];
 		} else if (hasPatches || hasNewLines) {
+			console.log(`${this.logPrefix} Applying patches/newLines: hasPatches=${hasPatches}, hasNewLines=${hasNewLines}`);
 			// Only apply patches/newLines if no complete screen update
 			for (const event of events) {
 				switch (event.type) {
 					case "newLines":
 						if (event.lines) {
+							console.log(`${this.logPrefix} Adding ${event.lines.length} new lines`);
 							this.screenLines.push(...event.lines);
 						}
 						break;
 					case "patch":
 						if (event.line !== undefined && event.items) {
+							console.log(`${this.logPrefix} Patching line ${event.line} with ${event.items.length} items`);
 							while (this.screenLines.length <= event.line) {
 								this.screenLines.push([]);
 							}
@@ -384,6 +445,8 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 			}
 		}
 
+		console.log(`${this.logPrefix} Final screenLines length: ${this.screenLines.length}`);
+		
 		// Just update the internal state, don't emit events here
 		// Events will be emitted during the 1-second state check
 	}
@@ -401,11 +464,19 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		// Check if claude is available
 		await this.sendInputLines(this.terminalId, ["which claude"]);
 		await this.delay(1000);
+		console.log(this.logPrefix, "Sent 'which claude' command, waiting for response...");
 
 		console.log(this.logPrefix, "Getting current working directory...");
 		// Get the current working directory
 		await this.sendInputLines(this.terminalId, ["pwd"]);
 		await this.delay(500);
+		console.log(this.logPrefix, "Sent 'pwd' command, waiting for response...");
+
+		// Test if terminal is responding by sending a simple echo command
+		console.log(this.logPrefix, "Testing terminal responsiveness with echo command...");
+		await this.sendInputLines(this.terminalId, ["echo 'TERMINAL_TEST_SUCCESS'"]);
+		await this.delay(1000);
+		console.log(this.logPrefix, "Sent echo test command, waiting for response...");
 
 		// Start Claude Code without prompt initially
 		const claudeCommand = "claude";
@@ -415,6 +486,7 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 			claudeCommand,
 		);
 		await this.sendInputLines(this.terminalId, [claudeCommand]);
+		console.log(this.logPrefix, "Sent 'claude' command, waiting for Claude Code to start...");
 
 		console.log(this.logPrefix, "Claude Code command sent");
 		this.emit("taskStarted", {
@@ -594,13 +666,14 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		let newLines: string[] = tuiLines.map((tuiLine) => tuiLine.content);
 
 		newLines = newLines.map((line) => line.replaceAll(" ", " "));
-		// console.log(this.logPrefix, "Processing TUI interactions with new lines:", newLines);
+		console.log(this.logPrefix, "Processing TUI interactions with new lines:", newLines);
 
 		// Check for "esc to interrupt" - do nothing
 		const hasEscToInterrupt = newLines.some((line) =>
 			line.includes("esc to interrupt"),
 		);
 		if (hasEscToInterrupt) {
+			console.log(this.logPrefix, "Found 'esc to interrupt' - doing nothing");
 			// send `x0d` and then delete
 			// await this.sendRawInput(this.terminalId, "\x0d");
 			// await this.delay(500);
@@ -644,17 +717,19 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		const hasShiftTabOption = newLines.some((line) =>
 			line.includes("1. Yes"),
 		);
-		if (hasShiftTabOption) {
+		if (hasShiftTabOption && !this.hasSeenTrustPrompt) {
 			console.log(
 				this.logPrefix,
 				"Found '1. Yes'",
 			);
+			this.hasSeenTrustPrompt = true; // Prevent repeated processing
 			await this.delay(1000);
 			await this.sendRawInput(this.terminalId, "\x0d");
-			// await this.sendRawInput(this.terminalId, "\r");
-			// await this.sendRawInput(this.terminalId, "\r");
 			return;
 		}
+		
+		// Add debug logging for unhandled content
+		console.log(this.logPrefix, "No recognized patterns found in TUI lines:", newLines);
 	}
 
 	private delay(ms: number): Promise<void> {
