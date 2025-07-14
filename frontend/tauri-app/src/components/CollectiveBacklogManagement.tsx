@@ -62,11 +62,10 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 			const stored = localStorage.getItem(getStorageKey());
 			if (stored) {
 				const parsed = JSON.parse(stored);
-				console.log('🔄 [STORAGE] Loaded task prompt mappings from localStorage:', parsed);
 				return parsed;
 			}
 		} catch (error) {
-			console.error('❌ [STORAGE] Failed to load task prompt mappings from localStorage:', error);
+			// Silently handle localStorage errors
 		}
 		return {};
 	});
@@ -76,9 +75,8 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 		try {
 			const storageKey = getStorageKey();
 			localStorage.setItem(storageKey, JSON.stringify(taskPromptMappings));
-			console.log('💾 [STORAGE] Saved task prompt mappings to localStorage with key:', storageKey, 'data:', taskPromptMappings);
 		} catch (error) {
-			console.error('❌ [STORAGE] Failed to save task prompt mappings to localStorage:', error);
+			// Silently handle localStorage errors
 		}
 	}, [taskPromptMappings, project?.gitOriginUrl]);
 	
@@ -87,118 +85,77 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 
 	// Calculate task status based on prompt mappings
 	const calculateTaskStatus = (taskId: number, mappings?: Record<number, Record<string, { agentId: string, status: 'in_progress' | 'merged' }>>): 'open' | 'in_progress' | 'completed' => {
-		console.log('🧮 [STATUS] Calculating status for task:', taskId);
-		// Use provided mappings or fall back to state
+			// Use provided mappings or fall back to state
 		const allMappings = mappings || taskPromptMappings;
 		const prompts = allMappings[taskId];
-		console.log('🧮 [STATUS] Task prompt mappings for task', taskId, ':', prompts);
-		
+			
 		if (!prompts || Object.keys(prompts).length === 0) {
-			console.log('🧮 [STATUS] No prompts found for task', taskId, '-> status: open');
-			return 'open'; // No prompts linked
+				return 'open'; // No prompts linked
 		}
 		
 		const promptStatuses = Object.values(prompts).map(p => p.status);
-		console.log('🧮 [STATUS] Prompt statuses for task', taskId, ':', promptStatuses);
-		
+			
 		const allMerged = promptStatuses.every(status => status === 'merged');
-		console.log('🧮 [STATUS] All prompts merged for task', taskId, ':', allMerged);
-		
+			
 		if (allMerged) {
-			console.log('🧮 [STATUS] Task', taskId, '-> status: completed (all prompts merged)');
-			return 'completed'; // All prompts are merged
+				return 'completed'; // All prompts are merged
 		}
 		
-		console.log('🧮 [STATUS] Task', taskId, '-> status: in_progress (some prompts exist but not all merged)');
-		return 'in_progress'; // Some prompts exist but not all are merged
+			return 'in_progress'; // Some prompts exist but not all are merged
 	};
 
 	// Update task status in backend and local state
 	const updateTaskStatus = async (taskId: number, mappings?: Record<number, Record<string, { agentId: string, status: 'in_progress' | 'merged' }>>) => {
-		console.log('🔄 [UPDATE] Starting status update for task:', taskId);
-		const calculatedStatus = calculateTaskStatus(taskId, mappings);
-		console.log('🔄 [UPDATE] Calculated status for task', taskId, ':', calculatedStatus);
-		
+			const calculatedStatus = calculateTaskStatus(taskId, mappings);
+			
 		const currentItem = backlogItems.find(item => item.id === taskId);
-		console.log('🔄 [UPDATE] Current item for task', taskId, ':', currentItem ? currentItem.status : 'not found');
-		
+			
 		if (currentItem && currentItem.status !== calculatedStatus) {
-			console.log('🔄 [UPDATE] Status change detected for task', taskId, ':', currentItem.status, '->', calculatedStatus);
-			try {
+				try {
 				// Update in backend
-				console.log('💾 [UPDATE] Updating backend for task', taskId, 'with status:', calculatedStatus);
-				await backlogService.updateBacklogItem(taskId, { status: calculatedStatus });
+					await backlogService.updateBacklogItem(taskId, { status: calculatedStatus });
 				
 				// Update local state
-				console.log('🔄 [UPDATE] Updating local state for task', taskId);
-				setBacklogItems(prev => prev.map(item => 
+					setBacklogItems(prev => prev.map(item => 
 					item.id === taskId ? { ...item, status: calculatedStatus } : item
 				));
 				
-				console.log(`✅ [UPDATE] Successfully updated task ${taskId} status to ${calculatedStatus}`);
-			} catch (error) {
-				console.error(`❌ [UPDATE] Failed to update task ${taskId} status:`, error);
+				} catch (error) {
+				// Handle update error silently
 			}
 		} else if (currentItem) {
-			console.log('🔄 [UPDATE] No status change needed for task', taskId, '(already', currentItem.status, ')');
-		} else {
-			console.log('❌ [UPDATE] Task', taskId, 'not found in backlogItems');
-		}
+			} else {
+			}
 	};
 
 	// Ensure localStorage is loaded on every initialization/re-initialization
 	useEffect(() => {
-		console.log('🔧 [INIT] CollectiveBacklogManagement initialized with props:');
-		console.log('🔧 [INIT] - onCreateAgent:', !!onCreateAgent);
-		console.log('🔧 [INIT] - onAddPrompt:', !!onAddPrompt);
-		console.log('🔧 [INIT] - selectedAgents:', selectedAgents);
-		console.log('🔧 [INIT] - canvases:', canvases?.length || 0, 'canvases');
-		console.log('🔧 [INIT] - project:', !!project);
-		
+								
 		// Force reload from localStorage on every initialization
 		try {
 			const storageKey = getStorageKey();
-			console.log('🔧 [INIT-STORAGE] Using storage key:', storageKey, 'for project:', project?.gitOriginUrl);
-			const stored = localStorage.getItem(storageKey);
+				const stored = localStorage.getItem(storageKey);
 			if (stored) {
 				const parsed = JSON.parse(stored);
-				console.log('🔄 [INIT-STORAGE] Force loading task prompt mappings from localStorage:', parsed);
 				setTaskPromptMappings(parsed);
-			} else {
-				console.log('🔄 [INIT-STORAGE] No stored mappings found in localStorage for key:', storageKey);
-				// List all localStorage keys for debugging
-				console.log('🔧 [INIT-STORAGE] Available localStorage keys:', Object.keys(localStorage));
 			}
 		} catch (error) {
-			console.error('❌ [INIT-STORAGE] Failed to load task prompt mappings during init:', error);
+			// Silently handle init errors
 		}
 	}, [onCreateAgent, onAddPrompt, selectedAgents, canvases, project]);
 
 	// Check authentication status
 	useEffect(() => {
-		console.log('🔍 [CollectiveBacklog] Authentication useEffect triggered');
-		const authState = authService.getAuthState();
-		console.log('🔍 [CollectiveBacklog] Auth state:', { isAuthenticated: authState.isAuthenticated, hasUser: !!authState.user });
-		setIsAuthenticated(authState.isAuthenticated);
+			const authState = authService.getAuthState();
+			setIsAuthenticated(authState.isAuthenticated);
 		setCurrentUser(authState.user);
 		
 		// SECURITY: Initial check - trigger repository ID detection if authenticated
-		console.log('🔍 [CollectiveBacklog] Checking fallback conditions:', {
-			isAuthenticated: authState.isAuthenticated,
-			hasProject: !!project,
-			hasGitOriginUrl: !!project?.gitOriginUrl,
-			hasRepositoryId: !!project?.repositoryId,
-			gitOriginUrl: project?.gitOriginUrl
-		});
 		
 		if (authState.isAuthenticated && project && project.gitOriginUrl && !project.repositoryId) {
-			console.log('🔑 [CollectiveBacklog] Initial auth check - triggering repository ID detection');
-			console.log('🔄 [CollectiveBacklog] Automatic fallback: Repository ID is null, retrying detection...');
 			project.retryRepositoryIdDetection().catch(error => {
 				console.error('❌ [CollectiveBacklog] Failed to retry repository ID detection:', error);
 			});
-		} else {
-			console.log('🔍 [CollectiveBacklog] Fallback conditions not met - skipping automatic retry');
 		}
 
 		// Subscribe to auth state changes
@@ -208,8 +165,6 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 			
 			// SECURITY: Trigger repository ID detection when authentication becomes available
 			if (state.isAuthenticated && project && project.gitOriginUrl && !project.repositoryId) {
-				console.log('🔑 [CollectiveBacklog] Authentication detected - triggering repository ID detection');
-				console.log('🔄 [CollectiveBacklog] Automatic fallback: Authentication changed, retrying repository ID detection...');
 				project.retryRepositoryIdDetection().catch(error => {
 					console.error('❌ [CollectiveBacklog] Failed to retry repository ID detection on auth change:', error);
 				});
@@ -225,20 +180,16 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 		
 		// Subscribe to repository ID changes
 		const unsubscribe = project.subscribe('repositoryId', () => {
-			console.log('🔄 [CollectiveBacklog] Repository ID changed notification received');
-			if (project.repositoryId && isAuthenticated) {
-				console.log('🔄 [CollectiveBacklog] Repository ID detected/changed - fetching backlog items');
-				fetchBacklogItems();
+				if (project.repositoryId && isAuthenticated) {
+					fetchBacklogItems();
 			}
 		});
 		
 		// Initial check - call fetchBacklogItems even when repositoryId is null to trigger fallback
 		if (isAuthenticated) {
 			if (project.repositoryId) {
-				console.log('🔄 [CollectiveBacklog] Initial repository ID detected - fetching backlog items');
-			} else {
-				console.log('🔄 [CollectiveBacklog] No repository ID detected - calling fetchBacklogItems to trigger fallback');
-			}
+				} else {
+				}
 			fetchBacklogItems();
 		}
 		
@@ -261,63 +212,32 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 			let items: BacklogItem[] = [];
 
 			// SECURITY: Use repository ID for secure, filtered access
-			console.log(`🔍 [CollectiveBacklog] Project state:`, {
-				hasProject: !!project,
-				gitOriginUrl: project?.gitOriginUrl,
-				repositoryId: project?.repositoryId
-			});
 			
-			// IMMEDIATE FALLBACK: Trigger repository ID detection right when we detect null
-			console.log('🔧 [CollectiveBacklog] IMMEDIATE FALLBACK condition check:');
-			console.log('🔧 [CollectiveBacklog] - project?.gitOriginUrl:', project?.gitOriginUrl);
-			console.log('🔧 [CollectiveBacklog] - !project?.repositoryId:', !project?.repositoryId);
-			console.log('🔧 [CollectiveBacklog] - project?.repositoryId === null:', project?.repositoryId === null);
-			console.log('🔧 [CollectiveBacklog] - project?.repositoryId === undefined:', project?.repositoryId === undefined);
-			console.log('🔧 [CollectiveBacklog] - typeof project?.repositoryId:', typeof project?.repositoryId);
-			console.log('🔧 [CollectiveBacklog] - project?.repositoryId value:', project?.repositoryId);
-			
+			// Automatic repository ID detection
 			if (project?.gitOriginUrl && !project?.repositoryId) {
-				console.log('🔄 [CollectiveBacklog] IMMEDIATE FALLBACK: Detected repositoryId null - triggering detection right now');
 				try {
 					await project.retryRepositoryIdDetection();
-					console.log(`🔄 [CollectiveBacklog] IMMEDIATE FALLBACK: Detection completed, new repositoryId: ${project.repositoryId}`);
 				} catch (error) {
-					console.error('❌ [CollectiveBacklog] IMMEDIATE FALLBACK failed:', error);
+					console.error('Failed to detect repository ID:', error);
 				}
-			} else {
-				console.log('🚨 [CollectiveBacklog] IMMEDIATE FALLBACK: Condition not met - no fallback triggered');
 			}
 			
 			if (project?.repositoryId) {
-				console.log(`✅ [CollectiveBacklog] Fetching backlog items for repository ID: ${project.repositoryId}`);
 				items = await backlogService.getBacklogByRepositoryRandomId(project.repositoryId);
-				console.log(`✅ [CollectiveBacklog] Successfully fetched ${items.length} items for repository`);
 			} else if (project?.gitOriginUrl && !project?.repositoryId) {
-				// AUTOMATIC FALLBACK: Try to get repository ID if missing
-				console.warn('🚨 [CollectiveBacklog] No repository ID available but git URL exists - triggering automatic fallback');
-				console.log('🔄 [CollectiveBacklog] Automatic fallback: Attempting to detect repository ID...');
+				// Try to get repository ID if missing
 				try {
 					await project.retryRepositoryIdDetection();
-					// After successful detection, try fetching again
 					if (project.repositoryId) {
-						console.log(`✅ [CollectiveBacklog] Repository ID detected after fallback: ${project.repositoryId}`);
 						items = await backlogService.getBacklogByRepositoryRandomId(project.repositoryId);
-						console.log(`✅ [CollectiveBacklog] Successfully fetched ${items.length} items after fallback`);
 					} else {
-						console.warn('🚨 [CollectiveBacklog] Repository ID detection failed - showing no items');
 						items = [];
 					}
 				} catch (error) {
-					console.error('❌ [CollectiveBacklog] Automatic fallback failed:', error);
+					console.error('Failed to detect repository ID:', error);
 					items = [];
 				}
 			} else {
-				console.warn('🚨 [CollectiveBacklog] No repository ID or git URL available - showing no items');
-				console.log('🔍 [CollectiveBacklog] Debug info:', {
-					hasProject: !!project,
-					gitOriginUrl: project?.gitOriginUrl,
-					repositoryId: project?.repositoryId
-				});
 				items = [];
 			}
 			
@@ -358,10 +278,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 
 			const updatedItem = await backlogService.updateBacklogItem(id, apiUpdates);
 			
-			console.log('Updated item from server:', updatedItem);
-			console.log('Updates sent:', updates);
-			console.log('Available users:', availableUsers);
-			
+						
 			// Update local state with the response from server
 			setBacklogItems(prev => 
 				prev.map(item => {
@@ -369,16 +286,14 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 						// If owner was changed, make sure to update owner info from available users
 						if (updates.owner) {
 							const newOwner = availableUsers.find(user => user.id === updates.owner);
-							console.log('Found new owner:', newOwner);
-							if (newOwner) {
+										if (newOwner) {
 								const finalItem = {
 									...updatedItem,
 									owner: updates.owner,
 									owner_name: newOwner.name,
 									owner_email: newOwner.email
 								};
-								console.log('Final item:', finalItem);
-								return finalItem;
+										return finalItem;
 							}
 						}
 						return updatedItem;
@@ -503,8 +418,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 
 	// Handle add to new agent
 	const handleAddToNewAgent = (item: BacklogItem) => {
-		console.log('🚀 [LINK] Starting handleAddToNewAgent for task:', item.id, item.task);
-		
+			
 		if (!onCreateAgent || !onAddPrompt) {
 			console.error('❌ [LINK] Missing onCreateAgent or onAddPrompt functions');
 			return;
@@ -512,17 +426,14 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 		
 		// Create new agent
 		const newAgentId = onCreateAgent();
-		console.log('✅ [LINK] Created new agent:', newAgentId);
-		
+			
 		if (newAgentId) {
 			// Add the task as a prompt to the new agent
-			console.log('📝 [LINK] Adding prompt to agent:', newAgentId, 'Prompt:', item.task);
-			onAddPrompt(newAgentId, item.task);
+				onAddPrompt(newAgentId, item.task);
 			
 			// Create prompt mapping with initial status 'in_progress'
 			const promptId = `${newAgentId}-${Date.now()}`; // Generate unique prompt ID
-			console.log('🔗 [LINK] Creating prompt mapping - Task ID:', item.id, 'Prompt ID:', promptId, 'Agent ID:', newAgentId);
-			
+				
 			const newMapping = {
 				...taskPromptMappings,
 				[item.id]: {
@@ -534,32 +445,26 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 				}
 			};
 			
-			console.log('📊 [LINK] New task prompt mappings:', newMapping);
-			
+				
 			// Update state
 			setTaskPromptMappings(newMapping);
 			
 			// Update task status immediately with the new mappings
-			console.log('🔄 [LINK] Updating task status immediately with new mappings for task:', item.id);
-			updateTaskStatus(item.id, newMapping);
+				updateTaskStatus(item.id, newMapping);
 			
 			// Also schedule a delayed update as backup in case of re-initialization
-			console.log('⏰ [LINK] Scheduling backup task status update for task:', item.id);
-			setTimeout(() => {
-				console.log('🔄 [LINK] Executing backup scheduled task status update for task:', item.id);
-				updateTaskStatus(item.id);
+				setTimeout(() => {
+					updateTaskStatus(item.id);
 			}, 1000);
 			
-			console.log(`✅ [LINK] Successfully added task "${item.task}" to new agent ${newAgentId} with prompt ID ${promptId}`);
-		} else {
+			} else {
 			console.error('❌ [LINK] Failed to create new agent');
 		}
 	};
 
 	// Handle add to selected agents
 	const handleAddToSelectedAgents = (item: BacklogItem) => {
-		console.log('🚀 [MULTI-LINK] Starting handleAddToSelectedAgents for task:', item.id, item.task, 'Selected agents:', selectedAgents);
-		
+			
 		if (!onAddPrompt || !selectedAgents || selectedAgents.length === 0) {
 			console.error('❌ [MULTI-LINK] Missing onAddPrompt function or no agents selected');
 			return;
@@ -569,8 +474,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 		const newMappings: Record<string, { agentId: string, status: 'in_progress' | 'merged' }> = {};
 		
 		selectedAgents.forEach(agentId => {
-			console.log('📝 [MULTI-LINK] Adding prompt to agent:', agentId, 'Prompt:', item.task);
-			onAddPrompt(agentId, item.task);
+				onAddPrompt(agentId, item.task);
 			
 			// Create prompt mapping for each agent
 			const promptId = `${agentId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -579,11 +483,9 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 				status: 'in_progress'
 			};
 			
-			console.log(`🔗 [MULTI-LINK] Created mapping - Task ID: ${item.id}, Prompt ID: ${promptId}, Agent ID: ${agentId}`);
-		});
+			});
 		
-		console.log('📊 [MULTI-LINK] All new mappings created:', newMappings);
-		
+			
 		// Update task prompt mappings
 		const updatedMapping = {
 			...taskPromptMappings,
@@ -593,20 +495,16 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 			}
 		};
 		
-		console.log('📊 [MULTI-LINK] Updated task prompt mappings:', updatedMapping);
-		
+			
 		// Update state
 		setTaskPromptMappings(updatedMapping);
 		
 		// Update task status immediately with the new mappings
-		console.log('🔄 [MULTI-LINK] Updating task status immediately with new mappings for task:', item.id);
-		updateTaskStatus(item.id, updatedMapping);
+			updateTaskStatus(item.id, updatedMapping);
 		
 		// Also schedule a delayed update as backup
-		console.log('⏰ [MULTI-LINK] Scheduling backup task status update for task:', item.id);
-		setTimeout(() => {
-			console.log('🔄 [MULTI-LINK] Executing backup scheduled task status update for task:', item.id);
-			updateTaskStatus(item.id);
+			setTimeout(() => {
+				updateTaskStatus(item.id);
 		}, 1000);
 	};
 
@@ -641,8 +539,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 		
 		// Create new agent
 		const newAgentId = onCreateAgent();
-		console.log('Created new agent for bulk tasks:', newAgentId);
-		
+			
 		if (newAgentId) {
 			// Add all selected tasks to the new agent
 			selectedTasks.forEach(taskId => {
@@ -666,8 +563,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 					// Update task status
 					setTimeout(() => updateTaskStatus(taskId), 100);
 					
-					console.log(`Added task "${item.task}" to new agent ${newAgentId} with prompt ID ${promptId}`);
-				}
+					}
 			});
 			clearTaskSelection();
 		}
@@ -696,8 +592,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 						}
 					}));
 					
-					console.log(`Added task "${item.task}" to agent ${agentId} with prompt ID ${promptId}`);
-				});
+					});
 				
 				// Update task status
 				setTimeout(() => updateTaskStatus(taskId), 100);
@@ -728,8 +623,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 			setBacklogItems(prev => prev.filter(item => !selectedTasks.has(item.id)));
 			clearTaskSelection();
 			
-			console.log(`Successfully deleted ${selectedTasks.size} tasks`);
-		} catch (err) {
+			} catch (err) {
 			console.error('Failed to delete selected tasks:', err);
 			setError(err instanceof Error ? err.message : 'Failed to delete selected tasks');
 		}
@@ -843,26 +737,14 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 	}, [backlogItems]);
 
 	useEffect(() => {
-		console.log('🔍 [CollectiveBacklog] FetchBacklogItems useEffect triggered');
-		console.log('🔍 [CollectiveBacklog] Dependencies:', { 
-			isAuthenticated, 
-			hasFilters: !!filters, 
-			gitOriginUrl: project?.gitOriginUrl,
-			repositoryId: project?.repositoryId
-		});
-		
 		if (isAuthenticated) {
-			console.log('🔄 [CollectiveBacklog] User is authenticated - calling fetchBacklogItems');
 			fetchBacklogItems();
-		} else {
-			console.log('🔍 [CollectiveBacklog] User not authenticated - skipping fetchBacklogItems');
 		}
 	}, [filters, isAuthenticated, project?.gitOriginUrl, project?.repositoryId]);
 
 	// Handle prompt deletion - removes task-prompt mapping and recalculates task status
 	const handlePromptDeletion = (promptId: string, agentId: string) => {
-		console.log(`Handling prompt deletion: ${promptId} from agent ${agentId}`);
-		
+			
 		setTaskPromptMappings(prev => {
 			const updated = { ...prev };
 			let hasChanges = false;
@@ -875,8 +757,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 				if (prompts && prompts[promptId]) {
 					delete prompts[promptId];
 					hasChanges = true;
-					console.log(`Removed prompt ${promptId} mapping from task ${taskId}`);
-					
+						
 					// Recalculate task status after prompt removal
 					setTimeout(() => updateTaskStatus(taskId), 100);
 				}
@@ -911,15 +792,13 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 							delete prompts[promptId];
 							hasChanges = true;
 							tasksToUpdate.add(taskId);
-							console.log(`🗑️ [CLEANUP] Removed orphaned prompt ${promptId} for deleted canvas ${prompt.agentId} from task ${taskId}`);
-						}
+								}
 					});
 					
 					// If this task has no more prompts, remove the task entry entirely
 					if (Object.keys(prompts).length === 0) {
 						delete updated[taskId];
-						console.log(`🗑️ [CLEANUP] Removed empty task entry for task ${taskId}`);
-					}
+							}
 				});
 				
 				// Return updated mappings
@@ -927,8 +806,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 					// Update task statuses immediately with the cleaned mappings
 					setTimeout(() => {
 						tasksToUpdate.forEach(taskId => {
-							console.log(`🔄 [CLEANUP] Updating status immediately for affected task: ${taskId} with cleaned mappings`);
-							updateTaskStatus(taskId, updated);
+									updateTaskStatus(taskId, updated);
 						});
 					}, 0);
 				}
@@ -957,8 +835,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 							if (prompt.status !== newStatus) {
 								prompts[promptId] = { ...prompt, status: newStatus };
 								hasChanges = true;
-								console.log(`Updated prompt ${promptId} status to ${newStatus} for canvas ${canvas.id}`);
-							}
+										}
 						}
 					});
 					
@@ -983,22 +860,12 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 		})));
 	}, [canvases]);
 
-	// Monitor task prompt mappings changes
-	useEffect(() => {
-		console.log('📊 [MAPPINGS] Task prompt mappings changed:', taskPromptMappings);
-		console.log('📊 [MAPPINGS] Number of tasks with mappings:', Object.keys(taskPromptMappings).length);
-		Object.keys(taskPromptMappings).forEach(taskId => {
-			const prompts = taskPromptMappings[parseInt(taskId)];
-			console.log(`📊 [MAPPINGS] Task ${taskId} has ${Object.keys(prompts).length} prompt(s):`, prompts);
-		});
-	}, [taskPromptMappings]);
 
 	// Expose the prompt deletion handler
 	useEffect(() => {
 		if (onPromptDeleted) {
 			// This makes the handlePromptDeletion function available
 			// In a real implementation, you would expose this through a ref or other mechanism
-			console.log('Prompt deletion handler is available');
 		}
 	}, [onPromptDeleted]);
 
@@ -1036,36 +903,16 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 		);
 	}
 
-	// REPOSITORY ID RENDER CHECK: Trigger API call when repositoryId is null
+	// Trigger repository ID detection if needed
 	if (isAuthenticated && project?.gitOriginUrl && !project?.repositoryId) {
-		console.log('🔍 [CollectiveBacklog] RENDER CHECK: Project state detected during render:', {
-			hasProject: !!project,
-			gitOriginUrl: project?.gitOriginUrl,
-			repositoryId: project?.repositoryId
-		});
-		console.warn('🚨 [CollectiveBacklog] No repository ID available - showing no items');
-		console.log('🔍 [CollectiveBacklog] Debug info:', {
-			hasProject: !!project,
-			gitOriginUrl: project?.gitOriginUrl,
-			repositoryId: project?.repositoryId
-		});
-		
-		// Trigger API call to detect repository ID
-		console.log('🔄 [CollectiveBacklog] RENDER CHECK: Triggering API call to detect repository ID');
-		console.log('🔄 [CollectiveBacklog] RENDER CHECK: Calling project.retryRepositoryIdDetection()');
-		
 		// Use setTimeout to avoid calling async function during render
 		setTimeout(() => {
-			console.log('🔄 [CollectiveBacklog] RENDER CHECK: Executing repository ID detection API call');
 			project.retryRepositoryIdDetection().then(() => {
-				console.log('🔄 [CollectiveBacklog] RENDER CHECK: Repository ID detection completed');
-				console.log('🔄 [CollectiveBacklog] RENDER CHECK: New repositoryId:', project.repositoryId);
 				if (project.repositoryId) {
-					console.log('🔄 [CollectiveBacklog] RENDER CHECK: Repository ID detected - triggering fetchBacklogItems');
 					fetchBacklogItems();
 				}
 			}).catch(error => {
-				console.error('❌ [CollectiveBacklog] RENDER CHECK: Repository ID detection failed:', error);
+				console.error('Repository ID detection failed:', error);
 			});
 		}, 0);
 	}
@@ -1115,32 +962,14 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 							Manage all backlog items across repositories
 						</p>
 					</div>
-					<div className="flex items-center gap-2">
-						{/* Refresh Button */}
+					{onClose && (
 						<button
-							onClick={() => {
-								console.log('🔄 [CollectiveBacklog] Manual refresh triggered');
-								console.log('🔄 [CollectiveBacklog] Automatic fallback: Manual refresh - retrying repository ID detection if needed...');
-								fetchBacklogItems();
-							}}
-							disabled={loading}
-							className="px-3 py-1 text-sm bg-[var(--acc-500)] text-white rounded hover:bg-[var(--acc-600)] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+							onClick={onClose}
+							className="text-[var(--base-500)] hover:text-[var(--base-700)] text-xl"
 						>
-							<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16" className={loading ? 'animate-spin' : ''}>
-								<path fillRule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/>
-								<path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/>
-							</svg>
-							Refresh
+							×
 						</button>
-						{onClose && (
-							<button
-								onClick={onClose}
-								className="text-[var(--base-500)] hover:text-[var(--base-700)] text-xl"
-							>
-								×
-							</button>
-						)}
-					</div>
+					)}
 				</div>
 			</div>
 
@@ -1504,7 +1333,6 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 													<div className="flex gap-2">
 														<button
 															onClick={() => {
-																console.log('🖱️ [BUTTON] Add to New Agent button clicked for task:', item.id, item.task);
 																handleAddToNewAgent(item);
 															}}
 															className="w-6 h-6 flex items-center justify-center bg-[var(--acc-500)] hover:bg-[var(--acc-600)] text-white rounded transition-colors"
@@ -1516,7 +1344,6 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 														</button>
 														<button
 															onClick={() => {
-																console.log('🖱️ [BUTTON] Add to Selected Agents button clicked for task:', item.id, item.task, 'Selected agents:', selectedAgents);
 																handleAddToSelectedAgents(item);
 															}}
 															className="w-6 h-6 flex items-center justify-center bg-[var(--positive-500)] hover:bg-[var(--positive-600)] text-white rounded transition-colors"
