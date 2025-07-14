@@ -29,7 +29,7 @@ class TerminalConnectionManager {
 		cursorPosition: { line: number; col: number };
 		windowDimensions: { rows: number; cols: number };
 		scrollPosition: { scrollTop: number; scrollHeight: number };
-		isAtBottom: boolean;
+		autoScrollEnabled: boolean;
 	}>(); // elementId -> terminal screen state
 	private static memoryTrackingStarted = false;
 
@@ -70,7 +70,7 @@ class TerminalConnectionManager {
 		cursorPosition: { line: number; col: number },
 		windowDimensions: { rows: number; cols: number },
 		scrollPosition?: { scrollTop: number; scrollHeight: number },
-		isAtBottom?: boolean
+		autoScrollEnabled?: boolean
 	): void {
 		// Deep copy screen with safety checks for undefined items
 		const safeScreen = screen.map(line => 
@@ -86,7 +86,7 @@ class TerminalConnectionManager {
 			cursorPosition: { ...cursorPosition },
 			windowDimensions: { ...windowDimensions },
 			scrollPosition: scrollPosition || { scrollTop: 0, scrollHeight: 0 },
-			isAtBottom: isAtBottom ?? true
+			autoScrollEnabled: autoScrollEnabled ?? true
 		});
 		
 		// Log significant screen size changes
@@ -165,7 +165,7 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 			cols: 60,
 		}
 	);
-	const [isAtBottom, setIsAtBottom] = useState(persistedState?.isAtBottom ?? true);
+	const [autoScrollEnabled, setAutoScrollEnabled] = useState(persistedState?.autoScrollEnabled ?? true);
 	const [charDimensions, setCharDimensions] = useState({
 		width: 7.35,
 		height: 16,
@@ -177,7 +177,7 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 	const scrollableRef = useRef<HTMLDivElement>(null);
 	const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 	const isResizingRef = useRef<boolean>(false);
-	const hasScrolledRef = useRef<boolean>(false);
+	const userScrolledUpRef = useRef<boolean>(false);
 
 
 	// Persist state whenever it changes
@@ -195,10 +195,10 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 				cursorPosition,
 				windowDimensions,
 				scrollPosition,
-				isAtBottom
+				autoScrollEnabled
 			);
 		}
-	}, [elementId, screen, cursorPosition, windowDimensions, isAtBottom]);
+	}, [elementId, screen, cursorPosition, windowDimensions, autoScrollEnabled]);
 
 	useEffect(() => {
 		if (!phantomCharRef.current) return;
@@ -316,22 +316,23 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 	}, [elementId, existingTerminalId, api]);
 
 	const scrollDown = useCallback(() => {
-		const inner = () => {
-			const scrollableDiv = scrollableRef.current;
-			if (!scrollableDiv) return;
+		const scrollableDiv = scrollableRef.current;
+		if (!scrollableDiv) return;
 
-			scrollableDiv.scrollTop = scrollableDiv.scrollHeight;
-			setIsAtBottom(true);
-		};
-		inner();
-		setTimeout(inner, 10);
-		setTimeout(inner, 50);
+		scrollableDiv.scrollTop = scrollableDiv.scrollHeight;
+	}, []);
+
+	const isAtBottom = useCallback(() => {
+		const scrollableDiv = scrollableRef.current;
+		if (!scrollableDiv) return false;
+		
+		return scrollableDiv.scrollTop + scrollableDiv.clientHeight >= scrollableDiv.scrollHeight - 5;
 	}, []);
 
 	const shouldAutoScroll = useCallback(() => {
-		// Only auto-scroll if we're already at the bottom or if the user hasn't manually scrolled
-		return isAtBottom || !hasScrolledRef.current;
-	}, [isAtBottom]);
+		// Only auto-scroll if enabled and user hasn't scrolled up
+		return autoScrollEnabled && !userScrolledUpRef.current;
+	}, [autoScrollEnabled]);
 
 	const handleTerminalEvent = useCallback((events: TerminalEvent[]) => {
 		// Batch multiple events together to reduce React renders
@@ -345,7 +346,6 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 		});
 
 		let shouldTriggerScroll = false;
-		let lastCursorLine = cursorPosition.line;
 
 		if (screenUpdates.length > 0) {
 			setScreen((oldScreen) => {
@@ -365,12 +365,6 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 							);
 						}
 						acc[event.line!] = [...event.items!];
-						
-						// Check if patch is near the bottom of the screen
-						if (event.line! >= acc.length - windowDimensions.rows) {
-							shouldTriggerScroll = true;
-						}
-						
 						return acc;
 					}
 					return acc;
@@ -391,20 +385,15 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 					return acc;
 				}, oldPosition);
 
-				// Check if cursor moved significantly down (indicating new content)
-				if (newPosition.line > lastCursorLine + 2) {
-					shouldTriggerScroll = true;
-				}
-
 				return newPosition;
 			});
 		}
 
-		// Apply smart auto-scroll logic
+		// Apply auto-scroll logic - only scroll on new lines/screen updates
 		if (shouldTriggerScroll && shouldAutoScroll()) {
 			scrollDown();
 		}
-	}, [cursorPosition.line, shouldAutoScroll, scrollDown, windowDimensions]);
+	}, [shouldAutoScroll, scrollDown, windowDimensions]);
 
 	const handleTerminalDisconnect = useCallback(() => {
 		TerminalConnectionManager.removeConnection(elementId);
@@ -591,7 +580,6 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 			}
 
 			isResizingRef.current = true;
-			scrollDown();
 
 			try {
 				console.log(
@@ -650,33 +638,52 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 		};
 	}, [handleResize, isConnected]);
 
-	// Track scroll events to detect user interaction and bottom position
+	// Track wheel events to detect user scroll and manage auto-scroll
 	useEffect(() => {
 		const scrollableDiv = scrollableRef.current;
 		if (!scrollableDiv) return;
 
-		const handleScroll = () => {
-			hasScrolledRef.current = true; // Mark that the user has scrolled
-			
-			// Check if we're at the bottom (within 10px tolerance)
-			const isNearBottom = scrollableDiv.scrollTop + scrollableDiv.clientHeight >= scrollableDiv.scrollHeight - 10;
-			setIsAtBottom(isNearBottom);
+		const handleWheel = (e: WheelEvent) => {
+			// If user scrolls up, disable auto-scroll
+			if (e.deltaY < 0) {
+				userScrolledUpRef.current = true;
+				setAutoScrollEnabled(false);
+			}
+			// If user scrolls down and reaches bottom, re-enable auto-scroll
+			else if (e.deltaY > 0) {
+				setTimeout(() => {
+					if (isAtBottom()) {
+						userScrolledUpRef.current = false;
+						setAutoScrollEnabled(true);
+					}
+				}, 100);
+			}
 		};
 
+		const handleScroll = () => {
+			// Check if user scrolled back to bottom, re-enable auto-scroll
+			if (isAtBottom() && !autoScrollEnabled) {
+				userScrolledUpRef.current = false;
+				setAutoScrollEnabled(true);
+			}
+		};
+
+		scrollableDiv.addEventListener("wheel", handleWheel);
 		scrollableDiv.addEventListener("scroll", handleScroll);
 		return () => {
+			scrollableDiv.removeEventListener("wheel", handleWheel);
 			scrollableDiv.removeEventListener("scroll", handleScroll);
 		};
-	}, [isConnected]);
+	}, [isConnected, autoScrollEnabled, isAtBottom]);
 
-	// Restore scroll position and auto-scroll to bottom when terminal is restored
+	// Restore scroll position when terminal first connects (only once)
 	useEffect(() => {
 		if (isConnected && screen.length > 0) {
 			const scrollableDiv = scrollableRef.current;
 			if (!scrollableDiv) return;
 
-			// If terminal was previously at bottom or has persisted state indicating bottom
-			if (isAtBottom || (persistedState?.isAtBottom ?? true)) {
+			// If auto-scroll is enabled (default behavior), scroll to bottom
+			if (autoScrollEnabled) {
 				// Auto-scroll to bottom after a short delay to ensure content is rendered
 				setTimeout(() => {
 					scrollDown();
@@ -688,7 +695,7 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 				}, 100);
 			}
 		}
-	}, [isConnected, screen.length, scrollDown, isAtBottom, persistedState]);
+	}, [isConnected]); // Removed screen.length, scrollDown, autoScrollEnabled, persistedState dependencies
 
 	// Auto-focus the terminal and set initial size
 	useEffect(() => {
