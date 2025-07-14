@@ -1,29 +1,9 @@
 // Additional endpoints for repository ID support
 // Add these BEFORE the app.listen() at the end of the file
 
-// Get repository by URL endpoint
-app.get('/api/repository/by-url', authenticate, async (req, res) => {
-  try {
-    const { repo_url } = req.query;
-    
-    if (!repo_url) {
-      return res.status(400).json({ error: 'repo_url parameter is required' });
-    }
-
-    console.log(`[GET /api/repository/by-url] User: ${req.user.id}, URL: ${repo_url}`);
-    
-    const repository = await db.getGitRepositoryByUrl(req.user.id, repo_url);
-    
-    if (!repository) {
-      return res.status(404).json({ error: 'Repository not found' });
-    }
-    
-    res.json({ repository });
-  } catch (error) {
-    console.error('Error fetching repository by URL:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+// SECURITY: Removed vulnerable by-url endpoint
+// URL-based endpoints allow unauthorized access to other users' repositories
+// Use secure ID-based endpoint /api/repository/backlog-id instead
 
 // Get backlog by repository random ID endpoint
 app.get('/api/repository/backlog-id', authenticate, async (req, res) => {

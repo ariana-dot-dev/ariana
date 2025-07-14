@@ -176,19 +176,74 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 
 	// Check authentication status
 	useEffect(() => {
+		console.log('🔍 [CollectiveBacklog] Authentication useEffect triggered');
 		const authState = authService.getAuthState();
+		console.log('🔍 [CollectiveBacklog] Auth state:', { isAuthenticated: authState.isAuthenticated, hasUser: !!authState.user });
 		setIsAuthenticated(authState.isAuthenticated);
 		setCurrentUser(authState.user);
+		
+		// SECURITY: Initial check - trigger repository ID detection if authenticated
+		console.log('🔍 [CollectiveBacklog] Checking fallback conditions:', {
+			isAuthenticated: authState.isAuthenticated,
+			hasProject: !!project,
+			hasGitOriginUrl: !!project?.gitOriginUrl,
+			hasRepositoryId: !!project?.repositoryId,
+			gitOriginUrl: project?.gitOriginUrl
+		});
+		
+		if (authState.isAuthenticated && project && project.gitOriginUrl && !project.repositoryId) {
+			console.log('🔑 [CollectiveBacklog] Initial auth check - triggering repository ID detection');
+			console.log('🔄 [CollectiveBacklog] Automatic fallback: Repository ID is null, retrying detection...');
+			project.retryRepositoryIdDetection().catch(error => {
+				console.error('❌ [CollectiveBacklog] Failed to retry repository ID detection:', error);
+			});
+		} else {
+			console.log('🔍 [CollectiveBacklog] Fallback conditions not met - skipping automatic retry');
+		}
 
 		// Subscribe to auth state changes
 		const unsubscribe = authService.subscribe((state) => {
 			setIsAuthenticated(state.isAuthenticated);
 			setCurrentUser(state.user);
+			
+			// SECURITY: Trigger repository ID detection when authentication becomes available
+			if (state.isAuthenticated && project && project.gitOriginUrl && !project.repositoryId) {
+				console.log('🔑 [CollectiveBacklog] Authentication detected - triggering repository ID detection');
+				console.log('🔄 [CollectiveBacklog] Automatic fallback: Authentication changed, retrying repository ID detection...');
+				project.retryRepositoryIdDetection().catch(error => {
+					console.error('❌ [CollectiveBacklog] Failed to retry repository ID detection on auth change:', error);
+				});
+			}
 		});
 
 		return unsubscribe;
-	}, [authService]);
+	}, [authService, project]);
 
+	// Watch for repository ID changes and refetch when it becomes available
+	useEffect(() => {
+		if (!project) return;
+		
+		// Subscribe to repository ID changes
+		const unsubscribe = project.subscribe('repositoryId', () => {
+			console.log('🔄 [CollectiveBacklog] Repository ID changed notification received');
+			if (project.repositoryId && isAuthenticated) {
+				console.log('🔄 [CollectiveBacklog] Repository ID detected/changed - fetching backlog items');
+				fetchBacklogItems();
+			}
+		});
+		
+		// Initial check - call fetchBacklogItems even when repositoryId is null to trigger fallback
+		if (isAuthenticated) {
+			if (project.repositoryId) {
+				console.log('🔄 [CollectiveBacklog] Initial repository ID detected - fetching backlog items');
+			} else {
+				console.log('🔄 [CollectiveBacklog] No repository ID detected - calling fetchBacklogItems to trigger fallback');
+			}
+			fetchBacklogItems();
+		}
+		
+		return unsubscribe;
+	}, [project, isAuthenticated]);
 
 	// Fetch backlog items
 	const fetchBacklogItems = async () => {
@@ -205,45 +260,65 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 
 			let items: BacklogItem[] = [];
 
-			// Check if we have a project with git origin URL for repository-specific filtering
-			if (project?.gitOriginUrl) {
-				console.log(`Fetching backlog items for repository: ${project.gitOriginUrl}`);
-				try {
-					items = await backlogService.getBacklogByRepository(project.gitOriginUrl);
-					console.log(`Successfully fetched ${items.length} items for repository`);
-				} catch (repoError) {
-					console.warn('Failed to fetch repository-specific backlog:', repoError);
-					items = [];
-				}
+			// SECURITY: Use repository ID for secure, filtered access
+			console.log(`🔍 [CollectiveBacklog] Project state:`, {
+				hasProject: !!project,
+				gitOriginUrl: project?.gitOriginUrl,
+				repositoryId: project?.repositoryId
+			});
 			
-			// Apply local filtering to results
-			if (filters.status) {
-				items = items.filter(item => item.status === filters.status);
-			}
-			if (filters.priority) {
-					items = items.filter(item => item.priority.toString() === filters.priority);
-				}
-				if (filters.owner) {
-					items = items.filter(item => item.owner === filters.owner);
-				}
-				if (filters.overdue) {
-					const now = new Date();
-					items = items.filter(item => {
-						if (!item.due_date) return false;
-						return new Date(item.due_date) < now;
-					});
+			// IMMEDIATE FALLBACK: Trigger repository ID detection right when we detect null
+			console.log('🔧 [CollectiveBacklog] IMMEDIATE FALLBACK condition check:');
+			console.log('🔧 [CollectiveBacklog] - project?.gitOriginUrl:', project?.gitOriginUrl);
+			console.log('🔧 [CollectiveBacklog] - !project?.repositoryId:', !project?.repositoryId);
+			console.log('🔧 [CollectiveBacklog] - project?.repositoryId === null:', project?.repositoryId === null);
+			console.log('🔧 [CollectiveBacklog] - project?.repositoryId === undefined:', project?.repositoryId === undefined);
+			console.log('🔧 [CollectiveBacklog] - typeof project?.repositoryId:', typeof project?.repositoryId);
+			console.log('🔧 [CollectiveBacklog] - project?.repositoryId value:', project?.repositoryId);
+			
+			if (project?.gitOriginUrl && !project?.repositoryId) {
+				console.log('🔄 [CollectiveBacklog] IMMEDIATE FALLBACK: Detected repositoryId null - triggering detection right now');
+				try {
+					await project.retryRepositoryIdDetection();
+					console.log(`🔄 [CollectiveBacklog] IMMEDIATE FALLBACK: Detection completed, new repositoryId: ${project.repositoryId}`);
+				} catch (error) {
+					console.error('❌ [CollectiveBacklog] IMMEDIATE FALLBACK failed:', error);
 				}
 			} else {
-				// Build filters object for admin endpoint (fallback when no project)
-				const filterParams: BacklogFilters = {};
-				if (filters.status) filterParams.status = filters.status;
-				if (filters.priority) filterParams.priority = filters.priority;
-				if (filters.owner) filterParams.owner = filters.owner;
-				if (filters.overdue) filterParams.overdue = filters.overdue;
-
-				// Use admin endpoint to get all backlog items across repositories
-				items = await backlogService.getAllBacklogItems(filterParams);
-				console.log('Fetching all backlog items (no project git URL available)');
+				console.log('🚨 [CollectiveBacklog] IMMEDIATE FALLBACK: Condition not met - no fallback triggered');
+			}
+			
+			if (project?.repositoryId) {
+				console.log(`✅ [CollectiveBacklog] Fetching backlog items for repository ID: ${project.repositoryId}`);
+				items = await backlogService.getBacklogByRepositoryRandomId(project.repositoryId);
+				console.log(`✅ [CollectiveBacklog] Successfully fetched ${items.length} items for repository`);
+			} else if (project?.gitOriginUrl && !project?.repositoryId) {
+				// AUTOMATIC FALLBACK: Try to get repository ID if missing
+				console.warn('🚨 [CollectiveBacklog] No repository ID available but git URL exists - triggering automatic fallback');
+				console.log('🔄 [CollectiveBacklog] Automatic fallback: Attempting to detect repository ID...');
+				try {
+					await project.retryRepositoryIdDetection();
+					// After successful detection, try fetching again
+					if (project.repositoryId) {
+						console.log(`✅ [CollectiveBacklog] Repository ID detected after fallback: ${project.repositoryId}`);
+						items = await backlogService.getBacklogByRepositoryRandomId(project.repositoryId);
+						console.log(`✅ [CollectiveBacklog] Successfully fetched ${items.length} items after fallback`);
+					} else {
+						console.warn('🚨 [CollectiveBacklog] Repository ID detection failed - showing no items');
+						items = [];
+					}
+				} catch (error) {
+					console.error('❌ [CollectiveBacklog] Automatic fallback failed:', error);
+					items = [];
+				}
+			} else {
+				console.warn('🚨 [CollectiveBacklog] No repository ID or git URL available - showing no items');
+				console.log('🔍 [CollectiveBacklog] Debug info:', {
+					hasProject: !!project,
+					gitOriginUrl: project?.gitOriginUrl,
+					repositoryId: project?.repositoryId
+				});
+				items = [];
 			}
 			
 			setBacklogItems(items);
@@ -391,9 +466,11 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 		}
 
 		try {
+			// SECURITY: Direct task creation without URL-based repository lookup
+			// The backend will handle repository association through authentication
 			const taskData = {
 				...newTaskData,
-				git_repository_url: project.gitOriginUrl
+				git_repository_url: project.gitOriginUrl // Backend still expects this for now
 			};
 			
 			const newItem = await backlogService.createBacklogItem(taskData);
@@ -766,10 +843,21 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 	}, [backlogItems]);
 
 	useEffect(() => {
+		console.log('🔍 [CollectiveBacklog] FetchBacklogItems useEffect triggered');
+		console.log('🔍 [CollectiveBacklog] Dependencies:', { 
+			isAuthenticated, 
+			hasFilters: !!filters, 
+			gitOriginUrl: project?.gitOriginUrl,
+			repositoryId: project?.repositoryId
+		});
+		
 		if (isAuthenticated) {
+			console.log('🔄 [CollectiveBacklog] User is authenticated - calling fetchBacklogItems');
 			fetchBacklogItems();
+		} else {
+			console.log('🔍 [CollectiveBacklog] User not authenticated - skipping fetchBacklogItems');
 		}
-	}, [filters, isAuthenticated, project?.gitOriginUrl]);
+	}, [filters, isAuthenticated, project?.gitOriginUrl, project?.repositoryId]);
 
 	// Handle prompt deletion - removes task-prompt mapping and recalculates task status
 	const handlePromptDeletion = (promptId: string, agentId: string) => {
@@ -948,6 +1036,40 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 		);
 	}
 
+	// REPOSITORY ID RENDER CHECK: Trigger API call when repositoryId is null
+	if (isAuthenticated && project?.gitOriginUrl && !project?.repositoryId) {
+		console.log('🔍 [CollectiveBacklog] RENDER CHECK: Project state detected during render:', {
+			hasProject: !!project,
+			gitOriginUrl: project?.gitOriginUrl,
+			repositoryId: project?.repositoryId
+		});
+		console.warn('🚨 [CollectiveBacklog] No repository ID available - showing no items');
+		console.log('🔍 [CollectiveBacklog] Debug info:', {
+			hasProject: !!project,
+			gitOriginUrl: project?.gitOriginUrl,
+			repositoryId: project?.repositoryId
+		});
+		
+		// Trigger API call to detect repository ID
+		console.log('🔄 [CollectiveBacklog] RENDER CHECK: Triggering API call to detect repository ID');
+		console.log('🔄 [CollectiveBacklog] RENDER CHECK: Calling project.retryRepositoryIdDetection()');
+		
+		// Use setTimeout to avoid calling async function during render
+		setTimeout(() => {
+			console.log('🔄 [CollectiveBacklog] RENDER CHECK: Executing repository ID detection API call');
+			project.retryRepositoryIdDetection().then(() => {
+				console.log('🔄 [CollectiveBacklog] RENDER CHECK: Repository ID detection completed');
+				console.log('🔄 [CollectiveBacklog] RENDER CHECK: New repositoryId:', project.repositoryId);
+				if (project.repositoryId) {
+					console.log('🔄 [CollectiveBacklog] RENDER CHECK: Repository ID detected - triggering fetchBacklogItems');
+					fetchBacklogItems();
+				}
+			}).catch(error => {
+				console.error('❌ [CollectiveBacklog] RENDER CHECK: Repository ID detection failed:', error);
+			});
+		}, 0);
+	}
+
 	// Show no git URL message if project has no git origin URL
 	if (!project?.gitOriginUrl) {
 		return (
@@ -993,14 +1115,32 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 							Manage all backlog items across repositories
 						</p>
 					</div>
-					{onClose && (
+					<div className="flex items-center gap-2">
+						{/* Refresh Button */}
 						<button
-							onClick={onClose}
-							className="text-[var(--base-500)] hover:text-[var(--base-700)] text-xl"
+							onClick={() => {
+								console.log('🔄 [CollectiveBacklog] Manual refresh triggered');
+								console.log('🔄 [CollectiveBacklog] Automatic fallback: Manual refresh - retrying repository ID detection if needed...');
+								fetchBacklogItems();
+							}}
+							disabled={loading}
+							className="px-3 py-1 text-sm bg-[var(--acc-500)] text-white rounded hover:bg-[var(--acc-600)] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
 						>
-							×
+							<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16" className={loading ? 'animate-spin' : ''}>
+								<path fillRule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/>
+								<path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/>
+							</svg>
+							Refresh
 						</button>
-					)}
+						{onClose && (
+							<button
+								onClick={onClose}
+								className="text-[var(--base-500)] hover:text-[var(--base-700)] text-xl"
+							>
+								×
+							</button>
+						)}
+					</div>
 				</div>
 			</div>
 

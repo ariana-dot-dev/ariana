@@ -62,6 +62,17 @@ export function GitProjectProvider({ children, gitProject }: GitProjectProviderP
 			return;
 		}
 
+		// SECURITY: Ensure repository ID is initialized for this project
+		console.log(`🔍 [GitProjectContext] Project provided: ${gitProject.name}`);
+		console.log(`🔍 [GitProjectContext] Git URL: ${gitProject.gitOriginUrl}, Repository ID: ${gitProject.repositoryId}`);
+		
+		if (gitProject.gitOriginUrl && !gitProject.repositoryId) {
+			console.log(`🔄 [GitProjectContext] Automatic fallback: Repository ID missing for active project - triggering detection`);
+			gitProject.ensureRepositoryId().catch(error => {
+				console.error(`❌ [GitProjectContext] Failed to ensure repository ID for active project:`, error);
+			});
+		}
+
 		const unsubscribeCanvases = gitProject.subscribe('canvases', () => {
 			forceUpdate(prev => prev + 1);
 		});

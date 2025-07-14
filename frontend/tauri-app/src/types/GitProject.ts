@@ -47,6 +47,7 @@ export class GitProject {
 	public createdAt: number;
 	public lastModified: number;
 	public gitOriginUrl: string | null = null; // Git origin URL for backlog filtering
+	public repositoryId: string | null = null; // Repository random ID for secure API access
 	
 	// Track original root branch to prevent root corruption
 	private originalRootBranch: string | null = null;
@@ -55,7 +56,7 @@ export class GitProject {
 	// Reactive state management
 	private listeners: Map<string, Set<() => void>> = new Map();
 
-	constructor(root: OsSession, name?: string) {
+	constructor(root: OsSession, name?: string, skipInitialization: boolean = false) {
 		this.id = crypto.randomUUID();
 		this.root = root;
 		this.name = name || this.generateDefaultName();
@@ -70,11 +71,21 @@ export class GitProject {
 		// Store root directory path for validation
 		this.rootDirectoryPath = osSessionGetWorkingDirectory(root) || '';
 		
-		// Initialize original root branch detection
-		this.initializeOriginalRootBranch();
-		
-		// Initialize git origin URL detection
-		this.initializeGitOriginUrl();
+		// Skip initialization if this is being called from fromJSON
+		if (!skipInitialization) {
+			// Initialize original root branch detection
+			this.initializeOriginalRootBranch();
+			
+			// Initialize git origin URL detection, then repository ID detection
+			console.log(`🚀 [GitProject] Constructor called for project: ${this.name}`);
+			this.initializeGitOriginUrl().then(() => {
+				// Only initialize repository ID after git origin URL is detected
+				console.log(`🚀 [GitProject] Git origin URL initialized, now initializing repository ID`);
+				this.initializeRepositoryId().catch(error => {
+					console.error(`❌ [GitProject] Failed to initialize repository ID in constructor:`, error);
+				});
+			});
+		}
 
 		console.log(this.canvases)
 	}
@@ -96,22 +107,97 @@ export class GitProject {
 
 	// Initialize git origin URL detection
 	private async initializeGitOriginUrl(): Promise<void> {
+		console.log(`🔍 [GitProject] Starting git origin URL detection for path: ${this.rootDirectoryPath}`);
 		try {
 			const originUrl = await invoke<string>('git_get_origin_url', {
 				directory: this.rootDirectoryPath,
 				osSession: this.root
 			});
 			this.gitOriginUrl = originUrl;
-			console.log(`GitProject: Git origin URL detected: ${this.gitOriginUrl}`);
+			console.log(`✅ [GitProject] Git origin URL detected: ${this.gitOriginUrl}`);
 		} catch (error) {
-			console.warn(`GitProject: Failed to detect git origin URL:`, error);
+			console.warn(`❌ [GitProject] Failed to detect git origin URL:`, error);
 			this.gitOriginUrl = null;
+		}
+		console.log(`🔍 [GitProject] Git origin URL detection completed. URL: ${this.gitOriginUrl}`);
+	}
+
+	// Initialize repository ID detection by calling backend
+	private async initializeRepositoryId(): Promise<void> {
+		console.log(`🔍 [GitProject] Starting repository ID detection for URL: ${this.gitOriginUrl}`);
+		
+		if (!this.gitOriginUrl) {
+			console.warn('🚨 [GitProject] No git origin URL available for repository ID detection');
+			return;
+		}
+
+		try {
+			// Import AuthService and API config
+			const { default: AuthService } = await import('../services/AuthService');
+			const { getApiUrl, API_CONFIG } = await import('../services/ApiConfig');
+			const authService = AuthService.getInstance();
+			
+			console.log(`🔑 [GitProject] Checking authentication state`);
+			const authState = authService.getAuthState();
+			console.log(`🔑 [GitProject] Auth state:`, authState.isAuthenticated);
+			
+			if (!authState.isAuthenticated) {
+				console.warn('🚨 [GitProject] Not authenticated - will retry when auth becomes available');
+				// Set up retry mechanism when auth becomes available
+				const unsubscribe = authService.subscribe((state) => {
+					if (state.isAuthenticated && !this.repositoryId) {
+						console.log('🔄 [GitProject] Auth detected - retrying repository ID detection');
+						this.initializeRepositoryId();
+						unsubscribe();
+					}
+				});
+				return;
+			}
+			
+			const apiUrl = getApiUrl(API_CONFIG.ENDPOINTS.REPOSITORY_INITIALIZE);
+			console.log(`🌐 [GitProject] Making API request to: ${apiUrl}`);
+			
+			// Call backend to get or create repository record
+			const response = await authService.apiRequest<{ repository: { id: number, random_id: string } }>(
+				apiUrl, 
+				{
+					method: 'POST',
+					body: JSON.stringify({ repo_url: this.gitOriginUrl })
+				}
+			);
+			
+			this.repositoryId = response.repository.random_id;
+			console.log(`✅ [GitProject] Repository ID detected: ${this.repositoryId}`);
+			this.lastModified = Date.now();
+			this.notifyListeners('repositoryId');
+		} catch (error) {
+			console.error(`❌ [GitProject] Failed to detect repository ID:`, error);
+			this.repositoryId = null;
 		}
 	}
 
 	// Get the original root branch for merge operations
 	getOriginalRootBranch(): string {
 		return this.originalRootBranch || 'main';
+	}
+
+	// Manual retry for repository ID detection
+	async retryRepositoryIdDetection(): Promise<void> {
+		console.log('🔄 [GitProject] Manual retry of repository ID detection');
+		await this.initializeRepositoryId();
+	}
+
+	// Check and initialize repository ID if missing (for startup validation)
+	async ensureRepositoryId(): Promise<void> {
+		console.log(`🔍 [GitProject] Ensuring repository ID for project: ${this.name}`);
+		if (this.gitOriginUrl && !this.repositoryId) {
+			console.log(`🔄 [GitProject] Repository ID missing - initializing for ${this.gitOriginUrl}`);
+			await this.initializeRepositoryId();
+		} else if (this.repositoryId) {
+			console.log(`✅ [GitProject] Repository ID already present: ${this.repositoryId}`);
+		} else {
+			console.log(`ℹ️ [GitProject] No git origin URL - skipping repository ID initialization`);
+		}
 	}
 
 	// Validate that a directory path is not the root (to prevent root corruption)
@@ -504,7 +590,7 @@ export class GitProject {
 	}
 
 	// Reactive event system
-	subscribe(property: 'canvases' | 'currentCanvasIndex' | 'backgroundAgents', callback: () => void): () => void {
+	subscribe(property: 'canvases' | 'currentCanvasIndex' | 'backgroundAgents' | 'repositoryId', callback: () => void): () => void {
 		if (!this.listeners.has(property)) {
 			this.listeners.set(property, new Set());
 		}
@@ -578,6 +664,7 @@ export class GitProject {
 			name: this.name,
 			root: this.root,
 			gitOriginUrl: this.gitOriginUrl,
+			repositoryId: this.repositoryId, // SECURITY: Store repository ID for restoration
 			canvases: this.canvases.map(canvas => ({
 				...canvas,
 				taskManager: canvas.taskManager.toJSON(),
@@ -613,9 +700,12 @@ export class GitProject {
 	}
 
 	static fromJSON(data: any): GitProject {
-		const project = new GitProject(data.root, data.name);
+		console.log(`🔄 [GitProject] fromJSON called for project: ${data.name}`);
+		console.log(`🔄 [GitProject] fromJSON - gitOriginUrl: ${data.gitOriginUrl}, repositoryId: ${data.repositoryId}`);
+		const project = new GitProject(data.root, data.name, true); // Skip initialization during construction
 		project.id = data.id;
 		project.gitOriginUrl = data.gitOriginUrl || null;
+		project.repositoryId = data.repositoryId || null; // SECURITY: Restore repository ID
 		project.canvases = data.canvases || [];
 		// Handle migration for canvases that don't have proper structure yet
 		project.canvases = project.canvases.map(canvas => ({
@@ -646,6 +736,25 @@ export class GitProject {
 		
 		project.createdAt = data.createdAt || Date.now();
 		project.lastModified = data.lastModified || Date.now();
+		
+		// Initialize original root branch for restored projects
+		project.initializeOriginalRootBranch();
+		
+		// SECURITY: Initialize repository ID for restored projects if not available
+		// This is critical for secure backlog access
+		console.log(`🔄 [GitProject] Restored project from JSON - repository ID: ${project.repositoryId}, URL: ${project.gitOriginUrl}`);
+		if (project.gitOriginUrl && !project.repositoryId) {
+			// Initialize repository ID since this was restored from JSON and no ID was stored
+			console.log(`🔄 [GitProject] No repository ID found in storage - initializing from backend`);
+			// Initialize immediately but asynchronously
+			project.initializeRepositoryId().catch(error => {
+				console.error(`❌ [GitProject] Failed to initialize repository ID during restoration:`, error);
+			});
+		} else if (project.gitOriginUrl && project.repositoryId) {
+			console.log(`✅ [GitProject] Repository ID already available from storage: ${project.repositoryId}`);
+		} else if (!project.gitOriginUrl) {
+			console.log(`ℹ️ [GitProject] No git origin URL - repository ID detection skipped`);
+		}
 		
 		// Check for orphaned running tasks after restoration
 		// This handles the case where the app was closed while tasks were running

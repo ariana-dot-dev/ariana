@@ -1,57 +1,61 @@
-// Additional endpoints to add to index.js for repository ID support
+// SECURITY: Secure-only endpoints for repository ID support
+// REMOVED: Vulnerable /api/repository/by-url endpoint for security
 
-// Get repository by URL endpoint
-app.get('/api/repository/by-url', authenticateRequest, async (req, res) => {
+// Get or create repository by URL - returns repository ID for authenticated user
+app.post('/api/repository/initialize', authenticate, async (c) => {
   try {
-    const { repo_url } = req.query;
+    const { repo_url } = await c.req.json();
     
     if (!repo_url) {
-      return res.status(400).json({ error: 'repo_url parameter is required' });
+      return c.json({ error: 'repo_url parameter is required' }, 400);
     }
 
-    console.log(`[GET /api/repository/by-url] User: ${req.user.id}, URL: ${repo_url}`);
+    console.log(`[POST /api/repository/initialize] User: ${c.get('user').id}, URL: ${repo_url}`);
     
-    const repository = await db.getGitRepositoryByUrl(req.user.id, repo_url);
+    // Get or create repository for authenticated user
+    const repository = await db.getOrCreateGitRepository(c.get('user').id, repo_url);
     
-    if (!repository) {
-      return res.status(404).json({ error: 'Repository not found' });
-    }
-    
-    res.json({ repository });
+    console.log(`[POST /api/repository/initialize] Repository ID: ${repository.random_id}`);
+    return c.json({ repository: { id: repository.id, random_id: repository.random_id } });
   } catch (error) {
-    console.error('Error fetching repository by URL:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('Error initializing repository:', error);
+    return c.json({ error: 'Internal server error' }, 500);
   }
 });
 
-// Get backlog by repository random ID endpoint
-app.get('/api/backlog/repository-id', authenticateRequest, async (req, res) => {
+// Get backlog by repository random ID endpoint - SECURE
+app.get('/api/repository/backlog-id', authenticate, async (c) => {
   try {
-    const { repository_id } = req.query;
+    const { repository_id } = c.req.query();
     
     if (!repository_id) {
-      return res.status(400).json({ error: 'repository_id parameter is required' });
+      return c.json({ error: 'repository_id parameter is required' }, 400);
     }
 
-    console.log(`[GET /api/backlog/repository-id] User: ${req.user.id}, Repository ID: ${repository_id}`);
+    console.log(`[GET /api/repository/backlog-id] User: ${c.get('user').id}, Repository ID: ${repository_id}`);
     
     // First verify the repository exists and belongs to the user
     const repository = await db.getGitRepositoryByRandomId(repository_id);
     if (!repository) {
-      return res.status(404).json({ error: 'Repository not found' });
+      return c.json({ error: 'Repository not found' }, 404);
     }
     
     // Check if user has access to this repository
-    if (repository.user_id !== req.user.id) {
-      return res.status(403).json({ error: 'Access denied to this repository' });
+    if (repository.user_id !== c.get('user').id) {
+      return c.json({ error: 'Access denied to this repository' }, 403);
     }
     
     const backlogItems = await db.getBacklogByRepositoryRandomId(repository_id);
     
-    console.log(`[GET /api/backlog/repository-id] Found ${backlogItems.length} items for repository ${repository_id}`);
-    res.json({ backlogItems });
+    console.log(`[GET /api/repository/backlog-id] Found ${backlogItems.length} items for repository ${repository_id}`);
+    return c.json({ backlogItems });
   } catch (error) {
     console.error('Error fetching backlog by repository ID:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    return c.json({ error: 'Internal server error' }, 500);
   }
 });
+
+// SECURITY NOTE: 
+// - Only secure ID-based endpoints are exposed
+// - No URL-based repository access allowed
+// - All access requires authentication and authorization

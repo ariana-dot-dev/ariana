@@ -13,12 +13,14 @@ export const API_CONFIG = {
     // Backlog endpoints
     BACKLOG: '/api/backlog',
     BACKLOG_STATS: '/api/backlog/stats',
-    BACKLOG_BY_REPOSITORY: '/api/backlog/repository',
-    BACKLOG_BY_REPOSITORY_ID: '/api/backlog/repository-id',
+    // SECURITY: Removed vulnerable URL-based endpoint
+    // BACKLOG_BY_REPOSITORY: '/api/backlog/repository', // DEPRECATED
+    BACKLOG_BY_REPOSITORY_ID: '/api/repository/backlog-id', // Secure ID-based endpoint
     ADMIN_BACKLOG: '/api/admin/backlog',
     
-    // Repository endpoints
-    REPOSITORY_BY_URL: '/api/repository/by-url',
+    // SECURITY: Secure repository endpoints
+    REPOSITORY_INITIALIZE: '/api/repository/initialize', // Get/create repository by URL for authenticated user
+    // REPOSITORY_BY_URL: '/api/repository/by-url', // REMOVED FOR SECURITY
     
     // Admin backlog endpoints (for collective management)
     ADMIN_BACKLOG_ITEM: '/api/admin/backlog', // For update/delete operations

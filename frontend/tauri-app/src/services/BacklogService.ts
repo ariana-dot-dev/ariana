@@ -99,35 +99,12 @@ class BacklogService {
     return this.authService.apiRequest(getApiUrl(API_CONFIG.ENDPOINTS.BACKLOG_STATS));
   }
 
-  async getBacklogByRepository(gitRepositoryUrl: string): Promise<BacklogItem[]> {
-    const params = new URLSearchParams({ git_repository_url: gitRepositoryUrl });
-    const url = getApiUrl(API_CONFIG.ENDPOINTS.BACKLOG_BY_REPOSITORY) + `?${params.toString()}`;
-    
-    console.log('Fetching backlog by repository:', gitRepositoryUrl);
-    console.log('Request URL:', url);
-    
-    try {
-      const response = await this.authService.apiRequest<{ backlogItems: BacklogItem[] }>(url);
-      console.log('Fetch response:', response);
-      return response.backlogItems;
-    } catch (error) {
-      console.error('getBacklogByRepository error:', error);
-      throw error;
-    }
-  }
+  // SECURITY: Method removed - was vulnerable to unauthorized repository access
+  // Use getBacklogByRepositoryRandomId() with secure random IDs instead
 
-  async getRepositoryByUrl(gitRepositoryUrl: string): Promise<{id: number, random_id: string} | null> {
-    try {
-      const params = new URLSearchParams({ repo_url: gitRepositoryUrl });
-      const url = getApiUrl(API_CONFIG.ENDPOINTS.REPOSITORY_BY_URL) + `?${params.toString()}`;
-      
-      const response = await this.authService.apiRequest<{ repository: {id: number, random_id: string} }>(url);
-      return response.repository;
-    } catch (error) {
-      console.error('Failed to get repository by URL:', error);
-      return null;
-    }
-  }
+  // SECURITY: getRepositoryByUrl method completely removed
+  // URL-based repository access is a security vulnerability
+  // Use repository IDs from authenticated user context instead
 
   async getBacklogByRepositoryRandomId(randomId: string): Promise<BacklogItem[]> {
     console.log('Fetching backlog by repository random ID:', randomId);

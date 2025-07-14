@@ -82,6 +82,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 							return p && p.root && p.id;
 						});
 						console.log('Store: Loaded projects after filtering:', projects.length, projects);
+						
+						// SECURITY: Ensure all projects have repository IDs if they have git URLs
+						console.log('🔍 [Store] Ensuring repository IDs for all loaded projects...');
+						projects.forEach(async (project) => {
+							try {
+								console.log(`🔍 [Store] Checking project ${project.name} - gitOriginUrl: ${project.gitOriginUrl}, repositoryId: ${project.repositoryId}`);
+								await project.ensureRepositoryId();
+							} catch (error) {
+								console.error(`❌ [Store] Failed to ensure repository ID for project ${project.name}:`, error);
+							}
+						});
+						
 						setGitProjects(projects);
 					} else if ((savedState as any).osSessions) {
 						// Migration: convert old OsSessions to GitProjects
