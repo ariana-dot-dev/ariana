@@ -85,24 +85,55 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 
 	// Calculate task status based on prompt mappings
 	const calculateTaskStatus = (taskId: number, mappings?: Record<number, Record<string, { agentId: string, status: 'in_progress' | 'merged' }>>): 'open' | 'in_progress' | 'completed' => {
-			// Use provided mappings or fall back to state
+		// Use provided mappings or fall back to state
 		const allMappings = mappings || taskPromptMappings;
 		const prompts = allMappings[taskId];
-			
+		
+		console.log(`📊 [STATUS-CALC] Calculating status for task ${taskId}:`, {
+			hasPrompts: !!prompts,
+			promptCount: prompts ? Object.keys(prompts).length : 0,
+			prompts: prompts
+		});
+		
 		if (!prompts || Object.keys(prompts).length === 0) {
-				return 'open'; // No prompts linked
+			console.log(`📊 [STATUS-CALC] Task ${taskId} -> 'open' (no prompts)`);
+			return 'open'; // No prompts linked
 		}
 		
 		const promptStatuses = Object.values(prompts).map(p => p.status);
-			
 		const allMerged = promptStatuses.every(status => status === 'merged');
-			
+		
+		console.log(`📊 [STATUS-CALC] Task ${taskId} prompt statuses:`, promptStatuses);
+		console.log(`📊 [STATUS-CALC] Task ${taskId} all merged:`, allMerged);
+		
 		if (allMerged) {
-				return 'completed'; // All prompts are merged
+			console.log(`📊 [STATUS-CALC] Task ${taskId} -> 'completed' (all prompts merged)`);
+			return 'completed'; // All prompts are merged
 		}
 		
-			return 'in_progress'; // Some prompts exist but not all are merged
+		console.log(`📊 [STATUS-CALC] Task ${taskId} -> 'in_progress' (some prompts exist but not all merged)`);
+		return 'in_progress'; // Some prompts exist but not all are merged
 	};
+
+	// IMPORTANT: There are TWO different status systems:
+	// 1. TaskStatus = 'prompting' | 'queued' | 'running' | 'paused' | 'completed' | 'failed' (GitProject/Canvas level)
+	// 2. BacklogStatus = 'open' | 'in_progress' | 'completed' (Backlog management level)
+	// 
+	// The current system uses canvas.lockState === 'merged' to determine prompt status,
+	// but we should map the actual TaskStatus to BacklogStatus properly
+	
+	// IMPORTANT: There are THREE status systems:
+	// 1. TaskStatus = 'prompting' | 'queued' | 'running' | 'paused' | 'completed' | 'failed' (Agent/Canvas level)
+	// 2. BacklogTaskStatus = 'open' | 'in_progress' | 'completed' (Backlog management level)  
+	// 3. PromptMappingStatus = 'in_progress' | 'merged' (Mapping between backlog tasks and agent prompts)
+	//
+	// MAPPING LOGIC:
+	// - Creating agent/adding prompt → PromptMappingStatus = 'in_progress'
+	// - Canvas submitted for merge → PromptMappingStatus = 'merged'
+	// - Prompt deleted → Remove from mapping
+	// - No prompts mapped → BacklogTaskStatus = 'open'
+	// - All prompts 'merged' → BacklogTaskStatus = 'completed'
+	// - Some prompts exist but not all 'merged' → BacklogTaskStatus = 'in_progress'
 
 	// Update task status in backend and local state
 	const updateTaskStatus = async (taskId: number, mappings?: Record<number, Record<string, { agentId: string, status: 'in_progress' | 'merged' }>>) => {
@@ -112,16 +143,29 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 			
 		if (currentItem && currentItem.status !== calculatedStatus) {
 				try {
+				console.log(`🔄 [STATUS-UPDATE] Updating task ${taskId} status from "${currentItem.status}" to "${calculatedStatus}"`);
+				
 				// Update in backend
-					await backlogService.updateBacklogItem(taskId, { status: calculatedStatus });
+				await backlogService.updateBacklogItem(taskId, { status: calculatedStatus });
+				console.log(`✅ [STATUS-UPDATE] Successfully updated task ${taskId} status to "${calculatedStatus}" in backend`);
 				
 				// Update local state
-					setBacklogItems(prev => prev.map(item => 
+				setBacklogItems(prev => prev.map(item => 
 					item.id === taskId ? { ...item, status: calculatedStatus } : item
 				));
+				console.log(`✅ [STATUS-UPDATE] Successfully updated task ${taskId} status to "${calculatedStatus}" in local state`);
 				
-				} catch (error) {
-				// Handle update error silently
+			} catch (error) {
+				console.error(`❌ [STATUS-UPDATE] Failed to update task ${taskId} status to "${calculatedStatus}":`, error);
+				
+				// Check if it's an authentication error
+				if (error && typeof error === 'object' && 'status' in error) {
+					if (error.status === 401) {
+						console.error(`🔐 [STATUS-UPDATE] Authentication failed for task ${taskId} - token may be expired`);
+					} else if (error.status === 403) {
+						console.error(`🚫 [STATUS-UPDATE] Permission denied for task ${taskId} - may need admin permissions`);
+					}
+				}
 			}
 		} else if (currentItem) {
 			} else {
@@ -242,6 +286,19 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 			}
 			
 			setBacklogItems(items);
+			
+			// IMPORTANT: After fetching backlog items, ensure all tasks have correct status
+			// Check if any tasks should be 'open' but aren't marked as such
+			console.log('🔄 [BACKLOG-SYNC] Checking all fetched tasks for correct status...');
+			setTimeout(() => {
+				items.forEach(item => {
+					const calculatedStatus = calculateTaskStatus(item.id);
+					if (item.status !== calculatedStatus) {
+						console.log(`🔄 [BACKLOG-SYNC] Task ${item.id} status mismatch: DB="${item.status}" vs Calculated="${calculatedStatus}" - updating...`);
+						updateTaskStatus(item.id);
+					}
+				});
+			}, 500); // Give time for state to settle
 
 			// Extract unique users from backlog items for owner selection
 			const uniqueUsers = Array.from(
@@ -426,13 +483,16 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 		
 		// Create new agent
 		const newAgentId = onCreateAgent();
+		console.log(`🔗 [TASK-LINK] Created new agent: ${newAgentId} for task ${item.id}`);
 			
 		if (newAgentId) {
 			// Add the task as a prompt to the new agent
-				onAddPrompt(newAgentId, item.task);
+			onAddPrompt(newAgentId, item.task);
+			console.log(`📝 [TASK-LINK] Added prompt to agent ${newAgentId}: "${item.task}"`);
 			
 			// Create prompt mapping with initial status 'in_progress'
 			const promptId = `${newAgentId}-${Date.now()}`; // Generate unique prompt ID
+			console.log(`🔗 [TASK-LINK] Creating mapping - Task ${item.id} -> Prompt ${promptId} -> Agent ${newAgentId}`);
 				
 			const newMapping = {
 				...taskPromptMappings,
@@ -444,13 +504,16 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 					}
 				}
 			};
+			console.log(`📊 [TASK-LINK] New mapping created:`, newMapping[item.id]);
 			
 				
 			// Update state
 			setTaskPromptMappings(newMapping);
+			console.log(`📊 [TASK-LINK] Updated task prompt mappings state:`, newMapping);
 			
 			// Update task status immediately with the new mappings
-				updateTaskStatus(item.id, newMapping);
+			console.log(`🔄 [TASK-LINK] Triggering status update for task ${item.id}`);
+			updateTaskStatus(item.id, newMapping);
 			
 			// Also schedule a delayed update as backup in case of re-initialization
 				setTimeout(() => {
@@ -744,10 +807,12 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 
 	// Handle prompt deletion - removes task-prompt mapping and recalculates task status
 	const handlePromptDeletion = (promptId: string, agentId: string) => {
+		console.log(`🗑️ [PROMPT-DELETE] Handling deletion of prompt ${promptId} from agent ${agentId}`);
 			
 		setTaskPromptMappings(prev => {
 			const updated = { ...prev };
 			let hasChanges = false;
+			const tasksToUpdate = new Set<number>();
 			
 			// Find and remove the prompt mapping
 			Object.keys(updated).forEach(taskIdStr => {
@@ -755,15 +820,47 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 				const prompts = updated[taskId];
 				
 				if (prompts && prompts[promptId]) {
+					console.log(`🗑️ [PROMPT-DELETE] Found prompt ${promptId} in task ${taskId}, removing it`);
 					delete prompts[promptId];
 					hasChanges = true;
-						
-					// Recalculate task status after prompt removal
-					setTimeout(() => updateTaskStatus(taskId), 100);
+					tasksToUpdate.add(taskId);
+					
+					// Check if this task now has no prompts left
+					const remainingPrompts = Object.keys(prompts).length;
+					console.log(`🗑️ [PROMPT-DELETE] Task ${taskId} now has ${remainingPrompts} prompts remaining`);
+					
+					if (remainingPrompts === 0) {
+						console.log(`🗑️ [PROMPT-DELETE] Task ${taskId} has no prompts left - should revert to 'open' status`);
+						// Don't delete the task entry, keep it as empty object so status calculation works
+						// The empty object will make calculateTaskStatus return 'open'
+					}
 				}
 			});
 			
+			// Update task statuses for all affected tasks
+			if (hasChanges) {
+				setTimeout(() => {
+					tasksToUpdate.forEach(taskId => {
+						console.log(`🔄 [PROMPT-DELETE] Updating status for task ${taskId} after prompt deletion`);
+						updateTaskStatus(taskId);
+					});
+				}, 100);
+			}
+			
 			return hasChanges ? updated : prev;
+		});
+	};
+
+	// Manual status sync function for debugging
+	const syncAllTaskStatuses = () => {
+		console.log('🔄 [MANUAL-SYNC] Manually syncing all task statuses...');
+		backlogItems.forEach(item => {
+			const calculatedStatus = calculateTaskStatus(item.id);
+			console.log(`🔄 [MANUAL-SYNC] Task ${item.id}: Current="${item.status}" Calculated="${calculatedStatus}"`);
+			if (item.status !== calculatedStatus) {
+				console.log(`🔄 [MANUAL-SYNC] Updating task ${item.id} from "${item.status}" to "${calculatedStatus}"`);
+				updateTaskStatus(item.id);
+			}
 		});
 	};
 
@@ -795,10 +892,13 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 								}
 					});
 					
-					// If this task has no more prompts, remove the task entry entirely
+					// If this task has no more prompts, keep the empty object
+					// Don't delete the task entry - empty object will make calculateTaskStatus return 'open'
 					if (Object.keys(prompts).length === 0) {
-						delete updated[taskId];
-							}
+						console.log(`🗑️ [CLEANUP] Task ${taskId} has no prompts left after cleanup - should revert to 'open' status`);
+						// Keep the empty prompts object instead of deleting the task entry
+						tasksToUpdate.add(taskId);
+					}
 				});
 				
 				// Return updated mappings
@@ -817,9 +917,14 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 		
 		// Update prompt statuses based on canvas lock states
 		const updatePromptStatuses = () => {
+			console.log('🔄 [CANVAS-MONITOR] Updating prompt statuses based on canvas lock states');
+			console.log('🔄 [CANVAS-MONITOR] Current canvases:', canvases?.map(c => ({ id: c.id, lockState: c.lockState })));
+			
 			setTaskPromptMappings(prev => {
 				const updated = { ...prev };
 				let hasChanges = false;
+				
+				console.log('🔄 [CANVAS-MONITOR] Current task mappings:', updated);
 				
 				// Check each task's prompts
 				Object.keys(updated).forEach(taskIdStr => {
@@ -830,20 +935,38 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 						const prompt = prompts[promptId];
 						const canvas = canvases.find(c => c.id === prompt.agentId);
 						
+						console.log(`🔄 [CANVAS-MONITOR] Checking prompt ${promptId} for agent ${prompt.agentId}:`, {
+							promptCurrentStatus: prompt.status,
+							canvasFound: !!canvas,
+							canvasLockState: canvas?.lockState
+						});
+						
 						if (canvas) {
 							const newStatus = canvas.lockState === 'merged' ? 'merged' : 'in_progress';
+							console.log(`🔄 [CANVAS-MONITOR] Prompt ${promptId}: ${prompt.status} → ${newStatus}`);
+							
 							if (prompt.status !== newStatus) {
 								prompts[promptId] = { ...prompt, status: newStatus };
 								hasChanges = true;
-										}
+								console.log(`✅ [CANVAS-MONITOR] Updated prompt ${promptId} status to ${newStatus}`);
+							}
+						} else {
+							console.warn(`⚠️ [CANVAS-MONITOR] Canvas not found for agent ${prompt.agentId}`);
 						}
 					});
 					
 					// Update task status if prompts changed
 					if (hasChanges) {
+						console.log(`🔄 [CANVAS-MONITOR] Scheduling status update for task ${taskId}`);
 						setTimeout(() => updateTaskStatus(taskId), 100);
 					}
 				});
+				
+				if (hasChanges) {
+					console.log('✅ [CANVAS-MONITOR] Prompt statuses updated, returning new mappings');
+				} else {
+					console.log('ℹ️ [CANVAS-MONITOR] No prompt status changes detected');
+				}
 				
 				return hasChanges ? updated : prev;
 			});
@@ -1028,7 +1151,11 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 
 						{/* Refresh Button */}
 						<button
-							onClick={fetchBacklogItems}
+							onClick={() => {
+								fetchBacklogItems();
+								// Also sync status after refresh
+								setTimeout(() => syncAllTaskStatuses(), 1000);
+							}}
 							className="px-3 py-1 text-sm bg-[var(--acc-500)] text-white rounded hover:bg-[var(--acc-600)] transition-colors"
 						>
 							<svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
@@ -1079,11 +1206,11 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 										</svg>
 										Add to New Agent
 									</button>
-									{selectedAgents && selectedAgents.length > 0 && (
+									{selectedAgents && selectedAgents.length > 1 && (
 										<button
 											onClick={handleAddSelectedTasksToSelectedAgents}
 											className="px-3 py-1 text-xs bg-[var(--positive-500)] text-white rounded hover:bg-[var(--positive-600)] transition-colors flex items-center gap-1"
-											title={`Add all selected tasks to ${selectedAgents.length} selected agent${selectedAgents.length !== 1 ? 's' : ''}`}
+											title={`Add all selected tasks to ${selectedAgents.length} selected agents`}
 										>
 											<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16">
 												<path d="M9.5 0a.5.5 0 0 1 .5.5.5.5 0 0 0 .5.5.5.5 0 0 1 .5.5V2a.5.5 0 0 1-.5.5h-5A.5.5 0 0 1 5 2v-.5a.5.5 0 0 1 .5-.5.5.5 0 0 0 .5-.5.5.5 0 0 1 .5-.5h3Z"/>
@@ -1342,20 +1469,21 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 																<path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
 															</svg>
 														</button>
-														<button
-															onClick={() => {
-																handleAddToSelectedAgents(item);
-															}}
-															className="w-6 h-6 flex items-center justify-center bg-[var(--positive-500)] hover:bg-[var(--positive-600)] text-white rounded transition-colors"
-															title="Add to agents selection"
-															disabled={!selectedAgents || selectedAgents.length === 0}
-														>
-															<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16">
-																<path d="M9.5 0a.5.5 0 0 1 .5.5.5.5 0 0 0 .5.5.5.5 0 0 1 .5.5V2a.5.5 0 0 1-.5.5h-5A.5.5 0 0 1 5 2v-.5a.5.5 0 0 1 .5-.5.5.5 0 0 0 .5-.5.5.5 0 0 1 .5-.5h3Z"/>
-																<path d="M3 2.5a.5.5 0 0 1 .5-.5H4a.5.5 0 0 0 0-1h-.5A1.5 1.5 0 0 0 2 2.5v12A1.5 1.5 0 0 0 3.5 16h9a1.5 1.5 0 0 0 1.5-1.5v-12A1.5 1.5 0 0 0 12.5 1H12a.5.5 0 0 0 0 1h.5a.5.5 0 0 1 .5.5v12a.5.5 0 0 1-.5.5h-9a.5.5 0 0 1-.5-.5v-12Z"/>
-																<path d="M8.5 6.5a.5.5 0 0 0-1 0V8H6a.5.5 0 0 0 0 1h1.5v1.5a.5.5 0 0 0 1 0V9H10a.5.5 0 0 0 0-1H8.5V6.5Z"/>
-															</svg>
-														</button>
+														{selectedAgents && selectedAgents.length > 0 && (
+															<button
+																onClick={() => {
+																	handleAddToSelectedAgents(item);
+																}}
+																className="w-6 h-6 flex items-center justify-center bg-[var(--positive-500)] hover:bg-[var(--positive-600)] text-white rounded transition-colors"
+																title="Add to agents selection"
+															>
+																<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16">
+																	<path d="M9.5 0a.5.5 0 0 1 .5.5.5.5 0 0 0 .5.5.5.5 0 0 1 .5.5V2a.5.5 0 0 1-.5.5h-5A.5.5 0 0 1 5 2v-.5a.5.5 0 0 1 .5-.5.5.5 0 0 0 .5-.5.5.5 0 0 1 .5-.5h3Z"/>
+																	<path d="M3 2.5a.5.5 0 0 1 .5-.5H4a.5.5 0 0 0 0-1h-.5A1.5 1.5 0 0 0 2 2.5v12A1.5 1.5 0 0 0 3.5 16h9a1.5 1.5 0 0 0 1.5-1.5v-12A1.5 1.5 0 0 0 12.5 1H12a.5.5 0 0 0 0 1h.5a.5.5 0 0 1 .5.5v12a.5.5 0 0 1-.5.5h-9a.5.5 0 0 1-.5-.5v-12Z"/>
+																	<path d="M8.5 6.5a.5.5 0 0 0-1 0V8H6a.5.5 0 0 0 0 1h1.5v1.5a.5.5 0 0 0 1 0V9H10a.5.5 0 0 0 0-1H8.5V6.5Z"/>
+																</svg>
+															</button>
+														)}
 														<button
 															onClick={() => deleteBacklogItem(item.id)}
 															className="w-6 h-6 flex items-center justify-center bg-[var(--negative-500)] hover:bg-[var(--negative-600)] text-white rounded transition-colors"

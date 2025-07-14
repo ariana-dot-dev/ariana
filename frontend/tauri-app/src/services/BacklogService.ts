@@ -75,14 +75,24 @@ class BacklogService {
 
   async updateBacklogItem(id: number, updates: UpdateBacklogItemRequest): Promise<BacklogItem> {
     // Use admin endpoint for collective backlog management (project-level permissions)
-    const response = await this.authService.apiRequest<{ backlogItem: BacklogItem }>(
-      getApiUrl(`${API_CONFIG.ENDPOINTS.ADMIN_BACKLOG_ITEM}/${id}`),
-      {
-        method: 'PUT',
-        body: JSON.stringify(updates),
-      }
-    );
-    return response.backlogItem;
+    const url = getApiUrl(`${API_CONFIG.ENDPOINTS.ADMIN_BACKLOG_ITEM}/${id}`);
+    console.log(`🔄 [BACKLOG-API] Updating backlog item ${id} with:`, updates);
+    console.log(`🌐 [BACKLOG-API] API URL:`, url);
+    
+    try {
+      const response = await this.authService.apiRequest<{ backlogItem: BacklogItem }>(
+        url,
+        {
+          method: 'PUT',
+          body: JSON.stringify(updates),
+        }
+      );
+      console.log(`✅ [BACKLOG-API] Successfully updated backlog item ${id}:`, response);
+      return response.backlogItem;
+    } catch (error) {
+      console.error(`❌ [BACKLOG-API] Failed to update backlog item ${id}:`, error);
+      throw error;
+    }
   }
 
   async deleteBacklogItem(id: number): Promise<void> {
