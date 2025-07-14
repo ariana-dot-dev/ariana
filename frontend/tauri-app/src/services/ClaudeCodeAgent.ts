@@ -7,6 +7,8 @@ import {
 import { EventEmitter } from "../utils/EventEmitter";
 import { OsSession } from "../bindings/os";
 
+const EMPTY_CHAR = " ";
+
 export interface ClaudeCodeTaskResult {
 	elapsed: number;
 	commitHash?: string;
@@ -58,6 +60,8 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	// Manual control state
 	private isPaused: boolean = false;
 	private isManuallyControlled: boolean = false;
+	// Visual rendering support
+	private visualEventHandler: ((events: TerminalEvent[]) => void) | null = null;
 
 	constructor() {
 		super();
@@ -95,7 +99,6 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		// Track terminal dimensions
 		this.terminalLines = lines;
 		this.terminalCols = cols;
-		console.log(`${this.logPrefix} Terminal resized to ${lines}x${cols}`);
 		
 		await super.resizeTerminal(id, lines, cols);
 	}
@@ -108,12 +111,6 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		prompt: string,
 		onTerminalReady?: (terminalId: string) => void,
 	): Promise<void> {
-		console.log(
-			this.logPrefix,
-			"Starting Claude Code task with prompt:",
-			prompt,
-		);
-
 		if (this.isRunning) {
 			const error = "Claude Code task is already running";
 			console.error(this.logPrefix, "❌", error);
@@ -129,28 +126,18 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		this.hasSeenTryPrompt = false;
 
 		try {
-			console.log(this.logPrefix, "Connecting terminal...");
 			await this.connectTerminal(osSession);
-			console.log(
-				this.logPrefix,
-				"Terminal connected with ID:",
-				this.terminalId,
-			);
 
 			// Set up event listeners
-			console.log(this.logPrefix, "Setting up terminal listeners...");
 			this.setupTerminalListeners();
 
 			// Notify that terminal is ready
-			console.log(this.logPrefix, "Notifying terminal ready callback...");
 			onTerminalReady?.(this.terminalId!);
 
 			// Wait a bit for terminal to be fully ready
-			console.log(this.logPrefix, "Waiting 1000ms for terminal to be ready...");
 			await this.delay(1000);
 
 			// Check if Claude Code is installed and start the process
-			console.log(this.logPrefix, "Initializing Claude Code...");
 			await this.initializeClaudeCode();
 		} catch (error) {
 			console.error(this.logPrefix, "Error starting task:", error);
@@ -212,11 +199,6 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		const visibleLines = this.terminalLines || 24; // Default to 24 if not set
 		const startIndex = Math.max(0, this.screenLines.length - visibleLines);
 		
-		// Log screen buffer growth periodically
-		if (this.screenLines.length > 0 && this.screenLines.length % 1000 === 0) {
-			console.log(`[MemoryTrack] ${this.logPrefix} Screen buffer: ${this.screenLines.length} lines, visible: ${visibleLines}, memory estimate: ~${(this.screenLines.length * 80 / 1024).toFixed(1)}KB`);
-		}
-		
 		return this.screenLines.slice(startIndex).map((line, index) => ({
 			content: line.map((item) => item.lexeme).join(""),
 			timestamp: Date.now() - (this.screenLines.slice(startIndex).length - index) * 100,
@@ -237,24 +219,33 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	}
 
 	/**
+	 * Register a visual event handler for the CustomTerminalRenderer
+	 * This allows the renderer to receive events for visual display
+	 */
+	registerVisualEventHandler(handler: (events: TerminalEvent[]) => void): void {
+		this.visualEventHandler = handler;
+	}
+
+	/**
+	 * Unregister the visual event handler
+	 */
+	unregisterVisualEventHandler(): void {
+		this.visualEventHandler = null;
+	}
+
+	/**
 	 * Clean up resources
 	 */
 	async cleanup(preserveTerminal: boolean = false): Promise<void> {
-		console.log(`${this.logPrefix} R2,R9: Starting cleanup (preserveTerminal: ${preserveTerminal}) - terminal persistence control`);
-		
 		// Only kill terminal if not preserving
 		if (this.terminalId && !preserveTerminal) {
 			try {
-				console.log(`${this.logPrefix} R2,R9: Killing terminal ${this.terminalId} - preserveTerminal is false`);
 				await this.killTerminal(this.terminalId);
 			} catch (error) {
-				console.error(`${this.logPrefix} R2,R9: Error killing terminal:`, error);
+				console.error(`${this.logPrefix} Error killing terminal:`, error);
 			}
-		} else if (this.terminalId && preserveTerminal) {
-			console.log(`${this.logPrefix} R2,R9: Preserving terminal ${this.terminalId} - will survive canvas switches and app restarts`);
 		}
 
-		console.log(`${this.logPrefix} Calling super.cleanup()`);
 		super.cleanup();
 		
 		// Stop the state check interval
@@ -274,7 +265,6 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		this.isManuallyControlled = false;
 		
 		this.removeAllListeners();
-		console.log(`${this.logPrefix} Cleanup completed`);
 	}
 
 	// Private methods
@@ -283,7 +273,12 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		if (!this.terminalId) return;
 
 		try {
+			// Add counter to track callback invocations
+			let callbackCount = 0;
+			
 			this.onTerminalEvent(this.terminalId, (events: TerminalEvent[]) => {
+				callbackCount++;
+				
 				// Just update the internal state, don't process immediately
 				this.updateInternalState(events);
 			});
@@ -298,7 +293,6 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	private startStateCheckInterval(): void {
 		if (this.stateCheckInterval) return; // Already running
 		
-		console.log(`${this.logPrefix} Starting 1-second state check interval`);
 		this.stateCheckInterval = window.setInterval(() => {
 			this.checkCurrentState();
 		}, 1000); // Check state every 1 second
@@ -308,11 +302,15 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		if (this.stateCheckInterval) {
 			window.clearInterval(this.stateCheckInterval);
 			this.stateCheckInterval = null;
-			console.log(`${this.logPrefix} Stopped state check interval`);
 		}
 	}
 	
 	private updateInternalState(events: TerminalEvent[]): void {
+		// Forward events to visual renderer if registered
+		if (this.visualEventHandler) {
+			this.visualEventHandler(events);
+		}
+		
 		// Silently update internal state without processing
 		this.handleTerminalEvents(events);
 		this.lastActivityTime = Date.now();
@@ -383,7 +381,7 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 				}
 			}
 		}
-
+		
 		// Just update the internal state, don't emit events here
 		// Events will be emitted during the 1-second state check
 	}
@@ -397,26 +395,22 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 			return;
 		}
 
-		console.log(this.logPrefix, "Checking if Claude Code is available...");
 		// Check if claude is available
 		await this.sendInputLines(this.terminalId, ["which claude"]);
 		await this.delay(1000);
 
-		console.log(this.logPrefix, "Getting current working directory...");
 		// Get the current working directory
 		await this.sendInputLines(this.terminalId, ["pwd"]);
 		await this.delay(500);
 
+		// // Test if terminal is responding by sending a simple echo command
+		// await this.sendInputLines(this.terminalId, ["echo 'TERMINAL_TEST_SUCCESS'"]);
+		// await this.delay(1000);
+
 		// Start Claude Code without prompt initially
 		const claudeCommand = "claude";
-		console.log(
-			this.logPrefix,
-			"Starting Claude Code with command:",
-			claudeCommand,
-		);
 		await this.sendInputLines(this.terminalId, [claudeCommand]);
 
-		console.log(this.logPrefix, "Claude Code command sent");
 		this.emit("taskStarted", {
 			prompt: this.currentPrompt,
 			terminalId: this.terminalId,
@@ -484,40 +478,30 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	// Manual control methods
 	async pauseAgent(): Promise<void> {
 		if (!this.terminalId || this.isPaused) {
-			console.log(`${this.logPrefix} R8: Cannot pause agent - no terminal (${!this.terminalId}) or already paused (${this.isPaused})`);
 			return;
 		}
 
-		console.log(`${this.logPrefix} R8: Starting agent pause - sending escape sequences until interrupted`);
 		await this.sendEscapeUntilInterrupted();
 		this.isPaused = true;
-		console.log(`${this.logPrefix} R8: Agent successfully paused - ready for manual control`);
 		this.emit('agentPaused');
 	}
 
 	async resumeAgent(): Promise<void> {
 		if (!this.terminalId || !this.isPaused) {
-			console.log(`${this.logPrefix} R8: Cannot resume agent - no terminal (${!this.terminalId}) or not paused (${!this.isPaused})`);
 			return;
 		}
 
-		console.log(`${this.logPrefix} R8: Resuming agent - sending continue prompt and enter`);
 		await this.sendRawInput(this.terminalId, "continue");
 		await this.delay(1000);
 		await this.sendRawInput(this.terminalId, "\x0d"); // Send Enter
 		this.isPaused = false;
-		console.log(`${this.logPrefix} R8: Agent successfully resumed - continuing execution`);
 		this.emit('agentResumed');
 	}
 
 	async queuePrompt(prompt: string): Promise<void> {
 		if (!this.terminalId) {
-			console.log(`${this.logPrefix} R5,R12: Cannot queue prompt - no terminal available`);
 			throw new Error('No terminal available for queuing prompt');
 		}
-
-		console.log(`${this.logPrefix} R5,R12: Queuing prompt in existing Claude Code instance: ${prompt.substring(0, 50)}...`);
-		console.log(`${this.logPrefix} R5,R12: This will be queued and processed after current task (multi-task support)`);
 
 		// Send prompt to Claude Code (will be queued if busy)
 		for (const char of prompt) {
@@ -533,19 +517,15 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		await this.delay(1000);
 		await this.sendRawInput(this.terminalId, "\x0d");
 
-		console.log(`${this.logPrefix} R5,R12: Prompt successfully queued in Claude Code - task marked as running`);
 		this.emit('promptQueued', { prompt });
 	}
 
 	async prepareManualCommit(): Promise<void> {
-		console.log(`${this.logPrefix} R2,R9: Preparing for manual commit - terminal will remain alive`);
 		// Don't send Ctrl+D - keep terminal alive
-		console.log(`${this.logPrefix} R2,R9: No Ctrl+D sent - persistent terminal maintained until manual commit`);
 		this.emit('readyForCommit');
 	}
 
 	private async sendEscapeUntilInterrupted(): Promise<void> {
-		console.log(`${this.logPrefix} R6,Q8: Starting escape sequence - sending escape until proper interruption detected`);
 		let attempts = 0;
 
 		while (true) {
@@ -554,7 +534,7 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 			attempts++;
 
 			let currentLines = this.getCurrentTuiLines();
-			currentLines = currentLines.map((line) => ({ ...line, content: line.content.replaceAll(" ", " ") }));
+			currentLines = currentLines.map((line) => ({ ...line, content: line.content.replaceAll(" ", " ") }));
 			const hasInterrupted = currentLines.some(line =>
 				line.content.includes("Interrupted by user")
 			);
@@ -562,15 +542,8 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 				line.content.includes("│ >")
 			);
 
-			console.log(`${this.logPrefix} R6,Q8: Attempt ${attempts} - Interrupted: ${hasInterrupted}, Prompt: ${hasPrompt}`);
-
 			if (hasInterrupted && hasPrompt) {
-				console.log(`${this.logPrefix} R6,Q8: Successfully interrupted after ${attempts} attempts - found both 'Interrupted by user' and '| >' prompt`);
 				break;
-			}
-
-			if (attempts % 10 === 0) {
-				console.log(`${this.logPrefix} R6,Q8: Escape attempt ${attempts}, continuing indefinitely until proper interruption (no timeout as specified)`);
 			}
 
 			if (attempts >= 5) {
@@ -593,34 +566,20 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		// Extract all new line content from the events
 		let newLines: string[] = tuiLines.map((tuiLine) => tuiLine.content);
 
-		newLines = newLines.map((line) => line.replaceAll(" ", " "));
-		// console.log(this.logPrefix, "Processing TUI interactions with new lines:", newLines);
+		newLines = newLines.map((line) => line.replaceAll(EMPTY_CHAR, " "));
 
 		// Check for "esc to interrupt" - do nothing
 		const hasEscToInterrupt = newLines.some((line) =>
 			line.includes("esc to interrupt"),
 		);
 		if (hasEscToInterrupt) {
-			// send `x0d` and then delete
-			// await this.sendRawInput(this.terminalId, "\x0d");
-			// await this.delay(500);
-			// await this.sendRawInput(this.terminalId, "\x08");
 			return;
 		}
 
 		// Check for "│ > Try" prompt (first time only)
 		const hasTryPrompt = newLines.some((line) => line.includes("│ >"));
 		if (hasTryPrompt && !this.hasSeenTryPrompt && this.currentPrompt) {
-			console.log(
-				this.logPrefix,
-				"Found 'Try' prompt, sending task prompt:",
-				this.currentPrompt,
-			);
 			this.hasSeenTryPrompt = true;
-			console.log(
-				this.logPrefix,
-				"R8: Set hasSeenTryPrompt = true, pause button should now appear"
-			);
 			// Emit event to trigger UI update
 			this.emit("promptSent");
 			// Send the prompt key by key, simulating typing
@@ -636,7 +595,6 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 			}
 			await this.delay(1000);
 			await this.sendRawInput(this.terminalId, "\x0d");
-			// await this.sendRawInput(this.terminalId, "\x0d");
 			return;
 		}
 
@@ -644,15 +602,10 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		const hasShiftTabOption = newLines.some((line) =>
 			line.includes("1. Yes"),
 		);
-		if (hasShiftTabOption) {
-			console.log(
-				this.logPrefix,
-				"Found '1. Yes'",
-			);
+		if (hasShiftTabOption && !this.hasSeenTrustPrompt) {
+			this.hasSeenTrustPrompt = true; // Prevent repeated processing
 			await this.delay(1000);
 			await this.sendRawInput(this.terminalId, "\x0d");
-			// await this.sendRawInput(this.terminalId, "\r");
-			// await this.sendRawInput(this.terminalId, "\r");
 			return;
 		}
 	}
@@ -666,9 +619,7 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	 * Pause button should only show if agent is running AND we've sent the prompt
 	 */
 	isTaskRunning(): boolean {
-		const result = this.isRunning && this.hasSeenTryPrompt;
-		console.log(`${this.logPrefix} R8: isTaskRunning check - isRunning: ${this.isRunning}, hasSeenTryPrompt: ${this.hasSeenTryPrompt}, result: ${result}`);
-		return result;
+		return this.isRunning && this.hasSeenTryPrompt;
 	}
 
 	/**
@@ -676,9 +627,7 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	 * Used to determine if we should queue prompts or create new agent
 	 */
 	isAgentAvailable(): boolean {
-		const result = !!this.terminalId && !this.isCompletingTask;
-		console.log(`${this.logPrefix} R2,R9: isAgentAvailable check - terminalId: ${!!this.terminalId}, isCompletingTask: ${this.isCompletingTask}, result: ${result}`);
-		return result;
+		return !!this.terminalId && !this.isCompletingTask;
 	}
 
 	/**
@@ -686,12 +635,10 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	 * Called when tasks are committed manually via the commit button
 	 */
 	resetAfterCommit(): void {
-		console.log(`${this.logPrefix} R10: Resetting agent state after manual commit`);
 		this.isRunning = false;
 		this.hasSeenTryPrompt = false;
 		this.currentTask = null;
 		this.currentPrompt = null;
 		this.isManuallyControlled = true; // Keep terminal alive but mark as manually controlled
-		console.log(`${this.logPrefix} R2,R9: Agent reset but terminal remains alive`);
 	}
 }

@@ -22,6 +22,7 @@ import { osSessionGetWorkingDirectory } from "./bindings/os";
 import { CommunicationPalette } from "./components/CommunicationPalette";
 import AuthPage from "./components/AuthPage";
 import { useAuth } from "./hooks/useAuth";
+import { CustomTerminal } from "./canvas/CustomTerminal";
 
 const appWindow = getCurrentWebviewWindow();
 
@@ -123,7 +124,7 @@ function App() {
 		if (selectedGitProjectId !== null) {
 			const selectedProject = store.getGitProject(selectedGitProjectId);
 			if (selectedProject) {
-				const terminalElement = Terminal.canvasElement(selectedProject.root, 1);
+				const terminalElement = CustomTerminal.canvasElement(selectedProject.root, 1);
 				selectedProject.addToCurrentCanvasElements(terminalElement)
 			}
 		}
@@ -197,7 +198,7 @@ function App() {
 		<InterpreterContext value={interpreter}>
 			<div
 				className={cn(
-					"relative font-sans font-[600] h-screen max-h-screen w-screen overflow-hidden selection:bg-[var(--acc-300)] text-[var(--blackest)] bg-[var(--whitest)]",
+					"relative font-sans font-[600] h-screen w-screen overflow-hidden selection:bg-[var(--acc-300)] text-[var(--blackest)] bg-[var(--whitest)]",
 					isMaximized ? "rounded-none" : "rounded-lg",
 					`theme-${store.theme}`,
 				)}
@@ -206,7 +207,7 @@ function App() {
 					className="fixed w-full h-full opacity-40 -z-10"
 					style={{ background: 'url("assets/noise.png")' }}
 				></div>
-				<div className="w-full h-full max-h-full flex flex-col justify-between gap-1.5 p-2">
+				<div className="w-full h-full flex flex-col justify-between gap-1.5 p-2">
 					{/* Custom Titlebar */}
 					<div
 						data-tauri-drag-region
@@ -335,24 +336,26 @@ function App() {
 							</div>
 						</div>
 					) : (
-						<GitProjectProvider gitProject={store.getGitProject(selectedGitProjectId) || null}>
-							{/* Diff Management Modal */}
-							{showDiffManagement && (
-								<div className="fixed inset-0 bg-[var(--base-100)] flex items-center justify-center z-[100]">
-									<div className="bg-[var(--base-100)] rounded-lg w-full h-full flex flex-col">
-										<DiffManagement 
-											onClose={() => setShowDiffManagement(false)}
-											initialState={diffManagementState}
-											onStateChange={setDiffManagementState}
-											mainTitlebarVisible={true}
-										/>
+						<div className="w-full flex-1 min-h-0 h-0 bg-">
+							<GitProjectProvider gitProject={store.getGitProject(selectedGitProjectId) || null}>
+								{/* Diff Management Modal */}
+								{showDiffManagement && (
+									<div className="fixed inset-0 bg-[var(--base-100)] flex items-center justify-center z-[100]">
+										<div className="bg-[var(--base-100)] rounded-lg w-full h-full flex flex-col">
+											<DiffManagement 
+												onClose={() => setShowDiffManagement(false)}
+												initialState={diffManagementState}
+												onStateChange={setDiffManagementState}
+												mainTitlebarVisible={true}
+											/>
+										</div>
 									</div>
-								</div>
-							)}
-							
-							<GitProjectView onGoHome={() => setSelectedGitProjectId(null)} />
-							<Repl />
-						</GitProjectProvider>
+								)}
+								
+								<GitProjectView onGoHome={() => setSelectedGitProjectId(null)} />
+								<Repl />
+							</GitProjectProvider>
+						</div>
 					)}
 
 					<div></div>
@@ -373,7 +376,12 @@ function App() {
 									try {
 										// Create a new canvas copy (agent workspace) with initial prompt
 										const initialPrompt = prompt && prompt.trim() !== 'general assistance' ? prompt.trim() : '';
-										const result = selectedProject.addCanvasCopy(() => {}, undefined, initialPrompt);
+										const result = selectedProject.addCanvasCopy(
+											() => {}, // onProgress
+											undefined, // canvas
+											initialPrompt, // initialPrompt
+											() => store.updateGitProject(selectedProject.id) // onCanvasReady - trigger state persistence
+										);
 										
 										if (result.success && result.canvasId) {
 											// Rename the canvas to the agent name

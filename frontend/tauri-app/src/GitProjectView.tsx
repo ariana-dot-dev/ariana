@@ -103,7 +103,12 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 		
 		console.log("Creating new canvas copy...");
 		
-		const result = selectedGitProject.addCanvasCopy();
+		const result = selectedGitProject.addCanvasCopy(
+			undefined, // onProgress
+			undefined, // canvas
+			undefined, // initialPrompt
+			() => updateGitProject(selectedGitProject.id) // onCanvasReady - trigger state persistence
+		);
 		
 		if (result.success && result.canvasId) {
 			selectedGitProject.setCurrentCanvasIndex(selectedGitProject.canvases.length - 1);
@@ -385,7 +390,12 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 	useEffect(() => {
 		if (selectedGitProject && selectedGitProject.canvases.length === 0) {
 			console.log("No canvases found, creating first version...");
-			const result = selectedGitProject.addCanvasCopy();
+			const result = selectedGitProject.addCanvasCopy(
+			undefined, // onProgress
+			undefined, // canvas
+			undefined, // initialPrompt
+			() => updateGitProject(selectedGitProject.id) // onCanvasReady - trigger state persistence
+		);
 			if (result.success) {
 				console.log("First canvas created with ID:", result.canvasId);
 				updateGitProject(selectedGitProject.id);
@@ -415,7 +425,7 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 		<div className="w-full h-full flex gap-1.5">
 			<div
 				className={cn(
-					"group flex flex-col gap-1.5 transition-all outline-0 rounded-md select-none relative z-50 border-[var(--acc-400-50)]",
+					"group flex flex-col gap-1.5 transition-all outline-0 rounded-md select-none relative z-50 border-[var(--acc-400-50)] h-full",
 					showCanvases
 						? "min-w-[25ch] w-[25ch] max-w-[25ch]"
 						: "w-1 my-0 hover:w-3 not-hover:bg-[var(--base-400-20)] hover:border-(length:--border)",
@@ -425,7 +435,7 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 					<>
 						{/* Back to Projects Button */}
 						{onGoHome && (
-							<div className="w-full pl-3 pt-2 pb-1">
+							<div className="w-full h-fit pl-3 pt-2 pb-1">
 								<button 
 									onClick={onGoHome}
 									className="flex items-center gap-2 text-xs text-[var(--base-600)] hover:text-[var(--base-800)] transition-colors cursor-pointer"
@@ -437,13 +447,13 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 						)}
 						
 						{/* Project Directory Header */}
-						<div className="w-full pl-3 py-2">
+						<div className="w-full h-fit pl-3 py-2">
 							<div className="text-sm text-[var(--base-500-50)]">
 								{getProjectDirectoryName()}
 							</div>
 						</div>
 						
-						<div className="flex flex-col gap-2 h-full w-full overflow-y-auto">
+						<div className="flex flex-col gap-2 flex-1 h-0 w-full overflow-y-auto">
 							<div className="flex gap-2">
 								<button
 									onClick={handleCreateCanvas}

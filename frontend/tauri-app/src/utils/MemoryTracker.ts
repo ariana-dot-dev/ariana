@@ -151,14 +151,14 @@ export class MemoryTracker {
 		// Performance timing warnings
 		if ('performance' in window) {
 			const navigation = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming;
-			if (navigation && navigation.loadEventEnd - navigation.navigationStart > 10000) {
-				console.warn(`[MemoryTrack] Slow page load detected: ${navigation.loadEventEnd - navigation.navigationStart}ms`);
+			if (navigation && navigation.loadEventEnd - (navigation as any).navigationStart > 10000) {
+				console.warn(`[MemoryTrack] Slow page load detected: ${navigation.loadEventEnd - (navigation as any).navigationStart}ms`);
 			}
 		}
 	}
 
 	private analyzeMemoryTrends(): void {
-		const recentMetrics = this.metrics.jsHeapSizes.slice(-10); // Last 10 measurements
+		const recentMetrics = this.metrics.jsHeapSizes.slice(-100); // Last 10k measurements
 		if (recentMetrics.length < 3) return;
 
 		// Check for consistent growth trend
@@ -170,7 +170,7 @@ export class MemoryTracker {
 		}
 
 		const growthRatio = growthCount / (recentMetrics.length - 1);
-		if (growthRatio > 0.7) { // 70% of measurements showing growth
+		if (growthRatio > 0.7 && growthCount > 50) { // 70% of measurements showing growth
 			const firstMeasurement = recentMetrics[0];
 			const lastMeasurement = recentMetrics[recentMetrics.length - 1];
 			const growthMB = lastMeasurement - firstMeasurement;

@@ -351,6 +351,7 @@ fn similarities_count(s1: &str, s2: &str) -> usize {
 		.sum()
 }
 
+
 const TAB_WIDTH: usize = 4; // was 8 in the legacy code – pick whichever
 
 fn cell_to_item(opt: Option<Cell>, col: u16) -> LineItem {
@@ -372,8 +373,13 @@ fn cell_to_item(opt: Option<Cell>, col: u16) -> LineItem {
 		txt = " ".repeat(tab_width);
 	}
 
+	// Fix: Ensure empty cells are treated as spaces with width 1
+	if txt.is_empty() {
+		txt = " ".to_string();
+	}
+
 	LineItem {
-		width: UnicodeWidthStr::width(txt.as_str()) as u16,
+		width: UnicodeWidthStr::width(txt.as_str()).max(1) as u16,
 		lexeme: txt,
 		is_bold: bold,
 		is_italic: italic,

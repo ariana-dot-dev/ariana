@@ -11,6 +11,46 @@ import { useStore } from "../state";
 import { cn } from "../utils";
 import { OsSession } from "../bindings/os";
 
+// Group consecutive spans with identical styles for better performance and copy/paste
+function groupConsecutiveSpans(items: LineItem[]): LineItem[] {
+	if (items.length === 0) return items;
+	
+	const grouped: LineItem[] = [];
+	let currentGroup = { ...items[0] };
+	
+	for (let i = 1; i < items.length; i++) {
+		const item = items[i];
+		
+		// Check if current item has identical styling to the group
+		if (spansHaveSameStyle(currentGroup, item)) {
+			// Merge the text - preserve exact whitespace
+			currentGroup.lexeme += item.lexeme;
+			// Width should be the sum of original widths to preserve terminal positioning
+			currentGroup.width += item.width;
+		} else {
+			// Different style, push the current group and start a new one
+			grouped.push(currentGroup);
+			currentGroup = { ...item };
+		}
+	}
+	
+	// Push the final group
+	grouped.push(currentGroup);
+	
+	// Filter out empty groups that have no content
+	const filtered = grouped.filter(group => group.lexeme.length > 0 || group.width > 0);
+	
+	return filtered;
+}
+
+function spansHaveSameStyle(a: LineItem, b: LineItem): boolean {
+	return a.is_bold === b.is_bold &&
+		a.is_italic === b.is_italic &&
+		a.is_underline === b.is_underline &&
+		JSON.stringify(a.foreground_color) === JSON.stringify(b.foreground_color) &&
+		JSON.stringify(a.background_color) === JSON.stringify(b.background_color);
+}
+
 interface CustomTerminalRendererProps {
 	elementId: string;
 	osSession?: OsSession;
@@ -29,7 +69,7 @@ class TerminalConnectionManager {
 		cursorPosition: { line: number; col: number };
 		windowDimensions: { rows: number; cols: number };
 		scrollPosition: { scrollTop: number; scrollHeight: number };
-		isAtBottom: boolean;
+		autoScrollEnabled: boolean;
 	}>(); // elementId -> terminal screen state
 	private static memoryTrackingStarted = false;
 
@@ -39,7 +79,6 @@ class TerminalConnectionManager {
 
 	static setConnection(elementId: string, terminalId: string): void {
 		TerminalConnectionManager.connections.set(elementId, terminalId);
-		console.log(`[MemoryTrack] Added connection ${elementId} -> ${terminalId}, total connections: ${TerminalConnectionManager.connections.size}`);
 		TerminalConnectionManager.startMemoryTracking();
 	}
 
@@ -50,8 +89,6 @@ class TerminalConnectionManager {
 		TerminalConnectionManager.connections.delete(elementId);
 		// Also remove screen state when connection is removed
 		TerminalConnectionManager.screenStates.delete(elementId);
-		
-		console.log(`[MemoryTrack] Removed connection ${elementId}, total connections: ${TerminalConnectionManager.connections.size}, had connection: ${hadConnection}, had screen state: ${hadScreenState}`);
 	}
 
 
@@ -70,29 +107,20 @@ class TerminalConnectionManager {
 		cursorPosition: { line: number; col: number },
 		windowDimensions: { rows: number; cols: number },
 		scrollPosition?: { scrollTop: number; scrollHeight: number },
-		isAtBottom?: boolean
+		autoScrollEnabled?: boolean
 	): void {
 		// Deep copy screen with safety checks for undefined items
 		const safeScreen = screen.map(line => 
 			line ? [...line.filter(item => item !== undefined)] : []
 		);
 		
-		const previousState = TerminalConnectionManager.screenStates.get(elementId);
-		const previousLineCount = previousState?.screen.length || 0;
-		const newLineCount = safeScreen.length;
-		
 		TerminalConnectionManager.screenStates.set(elementId, {
 			screen: safeScreen,
 			cursorPosition: { ...cursorPosition },
 			windowDimensions: { ...windowDimensions },
 			scrollPosition: scrollPosition || { scrollTop: 0, scrollHeight: 0 },
-			isAtBottom: isAtBottom ?? true
+			autoScrollEnabled: autoScrollEnabled ?? true
 		});
-		
-		// Log significant screen size changes
-		if (Math.abs(newLineCount - previousLineCount) > 100) {
-			console.log(`[MemoryTrack] Screen state updated for ${elementId}: ${previousLineCount} -> ${newLineCount} lines (${newLineCount > previousLineCount ? '+' : ''}${newLineCount - previousLineCount})`);
-		}
 	}
 
 	static hasScreenState(elementId: string): boolean {
@@ -109,11 +137,9 @@ class TerminalConnectionManager {
 		
 		const estimatedMemoryMB = (totalScreenItems * 100) / (1024 * 1024); // Rough estimate: 100 bytes per LineItem
 		
-		console.log(`[MemoryTrack] TerminalConnectionManager: ${connectionsSize} connections, ${screenStatesSize} screen states, ${totalScreenLines} total lines, ${totalScreenItems} total items (~${estimatedMemoryMB.toFixed(1)}MB)`);
-		
 		// Log individual large screen states
 		TerminalConnectionManager.screenStates.forEach((state, elementId) => {
-			if (state.screen.length > 5000) {
+			if (state.screen.length > 10000) {
 				console.log(`[MemoryTrack] Large screen state: ${elementId} has ${state.screen.length} lines`);
 			}
 		});
@@ -129,13 +155,10 @@ class TerminalConnectionManager {
 			
 			// Stop tracking if no connections remain
 			if (TerminalConnectionManager.connections.size === 0) {
-				console.log(`[MemoryTrack] No terminal connections remaining, stopping memory tracking`);
 				clearInterval(interval);
 				TerminalConnectionManager.memoryTrackingStarted = false;
 			}
 		}, 30000);
-		
-		console.log(`[MemoryTrack] Started TerminalConnectionManager memory tracking`);
 	}
 }
 
@@ -152,6 +175,25 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 	const logPrefix = `[CustomTerminalRenderer-${elementId}]`;
 	const api = terminalAPI || customTerminalAPI;
 
+	// Add global styles for selection
+	useEffect(() => {
+		const style = document.createElement('style');
+		style.textContent = `
+			.terminal-selection-layer::selection {
+				color: var(--whitest) !important;
+				background-color: var(--acc-500-50) !important;
+			}
+			.terminal-selection-layer::-moz-selection {
+				color: var(--whitest) !important;
+				background-color: var(--acc-500-50) !important;
+			}
+		`;
+		document.head.appendChild(style);
+		return () => {
+			document.head.removeChild(style);
+		};
+	}, []);
+
 	// Initialize state from persistent storage if available
 	const persistedState = TerminalConnectionManager.getScreenState(elementId);
 	
@@ -165,7 +207,7 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 			cols: 60,
 		}
 	);
-	const [isAtBottom, setIsAtBottom] = useState(persistedState?.isAtBottom ?? true);
+	const [autoScrollEnabled, setAutoScrollEnabled] = useState(persistedState?.autoScrollEnabled ?? true);
 	const [charDimensions, setCharDimensions] = useState({
 		width: 7.35,
 		height: 16,
@@ -177,7 +219,9 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 	const scrollableRef = useRef<HTMLDivElement>(null);
 	const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 	const isResizingRef = useRef<boolean>(false);
-	const hasScrolledRef = useRef<boolean>(false);
+	const userScrolledUpRef = useRef<boolean>(false);
+	
+	// Debug initial state (after refs are declared)
 
 
 	// Persist state whenever it changes
@@ -195,10 +239,10 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 				cursorPosition,
 				windowDimensions,
 				scrollPosition,
-				isAtBottom
+				autoScrollEnabled
 			);
 		}
-	}, [elementId, screen, cursorPosition, windowDimensions, isAtBottom]);
+	}, [elementId, screen, cursorPosition, windowDimensions, autoScrollEnabled]);
 
 	useEffect(() => {
 		if (!phantomCharRef.current) return;
@@ -221,38 +265,23 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 
 	// Initialize terminal connection
 	useEffect(() => {
-		// let mounted = true;
-
 		const connectTerminal = async () => {
-			console.log(logPrefix, "Connecting terminal...");
-			console.log(logPrefix, "existingTerminalId:", existingTerminalId);
-			console.log(logPrefix, "current terminalId:", terminalId);
-
 			// If we have an existing terminal ID passed in, use that
 			if (existingTerminalId && !terminalId) {
-				console.log(
-					logPrefix,
-					"Using existing terminal ID:",
-					existingTerminalId,
-				);
 				setTerminalId(existingTerminalId);
 				setIsConnected(true);
 
-				// Set up event listeners for existing connection
-				console.log(
-					logPrefix,
-					"Setting up event listeners for existing terminal",
-				);
-				await api.onTerminalEvent(existingTerminalId, handleTerminalEvent);
-				await api.onTerminalDisconnect(
-					existingTerminalId,
-					handleTerminalDisconnect,
-				);
+				// Set up event listeners based on whether terminalAPI is provided
+				if (terminalAPI) {
+					// Register with the ClaudeCodeAgent for event forwarding
+					if ('registerVisualEventHandler' in terminalAPI) {
+						(terminalAPI as any).registerVisualEventHandler(handleTerminalEvent);
+					}
+				} else {
+					await api.onTerminalEvent(existingTerminalId, handleTerminalEvent);
+					await api.onTerminalDisconnect(existingTerminalId, handleTerminalDisconnect);
+				}
 
-				console.log(
-					logPrefix,
-					"Connected to existing terminal, notifying ready",
-				);
 				onTerminalReady?.(existingTerminalId);
 				return;
 			}
@@ -287,7 +316,6 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 
 			try {
 				const id = await api.connectTerminal(osSession);
-				// if (!mounted) return;
 
 				// Store the connection mapping
 				TerminalConnectionManager.setConnection(elementId, id);
@@ -301,37 +329,32 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 
 				onTerminalReady?.(id);
 			} catch (err) {
-				// if (!mounted) return;
 				const errorMessage = err instanceof Error ? err.message : String(err);
 				onTerminalError?.(errorMessage);
 			}
 		};
 
 		connectTerminal();
-
-		// return () => {
-		// 	mounted = false;
-		// 	// Don't kill terminals on unmount - keep connections alive for reuse
-		// };
 	}, [elementId, existingTerminalId, api]);
 
 	const scrollDown = useCallback(() => {
-		const inner = () => {
-			const scrollableDiv = scrollableRef.current;
-			if (!scrollableDiv) return;
+		const scrollableDiv = scrollableRef.current;
+		if (!scrollableDiv) return;
 
-			scrollableDiv.scrollTop = scrollableDiv.scrollHeight;
-			setIsAtBottom(true);
-		};
-		inner();
-		setTimeout(inner, 10);
-		setTimeout(inner, 50);
+		scrollableDiv.scrollTop = scrollableDiv.scrollHeight;
+	}, []);
+
+	const isAtBottom = useCallback(() => {
+		const scrollableDiv = scrollableRef.current;
+		if (!scrollableDiv) return false;
+		
+		return scrollableDiv.scrollTop + scrollableDiv.clientHeight >= scrollableDiv.scrollHeight - 5;
 	}, []);
 
 	const shouldAutoScroll = useCallback(() => {
-		// Only auto-scroll if we're already at the bottom or if the user hasn't manually scrolled
-		return isAtBottom || !hasScrolledRef.current;
-	}, [isAtBottom]);
+		// Only auto-scroll if enabled and user hasn't scrolled up
+		return autoScrollEnabled && !userScrolledUpRef.current;
+	}, [autoScrollEnabled]);
 
 	const handleTerminalEvent = useCallback((events: TerminalEvent[]) => {
 		// Batch multiple events together to reduce React renders
@@ -344,18 +367,15 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 			return e.type == "cursorMove" || e.type == "screenUpdate";
 		});
 
-		let shouldTriggerScroll = false;
-		let lastCursorLine = cursorPosition.line;
-
 		if (screenUpdates.length > 0) {
 			setScreen((oldScreen) => {
 				const newScreen = screenUpdates.reduce((acc, event) => {
 					if (event.type == "screenUpdate") {
-						shouldTriggerScroll = true; // Always scroll on full screen updates
-						return event.screen!;
+						const lines = event.screen!;
+						return lines;
 					} else if (event.type == "newLines") {
-						shouldTriggerScroll = true; // Always scroll on new lines
-						return [...acc, ...event.lines!];
+						const lines = event.lines!;
+						return [...acc, ...lines];
 					} else if (event.type == "patch") {
 						while (event.line! >= acc.length) {
 							acc.push(
@@ -365,17 +385,10 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 							);
 						}
 						acc[event.line!] = [...event.items!];
-						
-						// Check if patch is near the bottom of the screen
-						if (event.line! >= acc.length - windowDimensions.rows) {
-							shouldTriggerScroll = true;
-						}
-						
 						return acc;
 					}
 					return acc;
 				}, oldScreen);
-
 				return newScreen;
 			});
 		}
@@ -391,20 +404,23 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 					return acc;
 				}, oldPosition);
 
-				// Check if cursor moved significantly down (indicating new content)
-				if (newPosition.line > lastCursorLine + 2) {
-					shouldTriggerScroll = true;
-				}
-
 				return newPosition;
 			});
 		}
 
-		// Apply smart auto-scroll logic
-		if (shouldTriggerScroll && shouldAutoScroll()) {
-			scrollDown();
+		// Simple auto-scroll logic: if not at bottom and user hasn't scrolled up, scroll down
+		if (screenUpdates.length > 0) {
+			// Always check if we should scroll after any screen update
+			setTimeout(() => {
+				const autoScrollAllowed = shouldAutoScroll();
+				const currentlyAtBottom = isAtBottom();
+				
+				if (autoScrollAllowed && !currentlyAtBottom) {
+					scrollDown();
+				}
+			}, 0);
 		}
-	}, [cursorPosition.line, shouldAutoScroll, scrollDown, windowDimensions]);
+	}, [shouldAutoScroll, scrollDown, windowDimensions]);
 
 	const handleTerminalDisconnect = useCallback(() => {
 		TerminalConnectionManager.removeConnection(elementId);
@@ -583,7 +599,6 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 				5,
 				Math.floor(containerRect.height / (charHeight * 1.0)),
 			);
-			// const lines = 100;
 
 			// Only resize if dimensions actually changed
 			if (windowDimensions.cols === cols && windowDimensions.rows === lines) {
@@ -591,19 +606,8 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 			}
 
 			isResizingRef.current = true;
-			scrollDown();
 
 			try {
-				console.log(
-					logPrefix,
-					`Calling api.resizeTerminal(${terminalId}, ${lines}, ${cols})`,
-				);
-				console.log(logPrefix, "API instance type:", api.constructor.name);
-				console.log(
-					logPrefix,
-					"resizeTerminal method:",
-					api.resizeTerminal.toString().substring(0, 100),
-				);
 				await api.resizeTerminal(terminalId, lines, cols);
 				// Update our tracked dimensions only after successful resize
 				setWindowDimensions({ rows: lines, cols });
@@ -650,33 +654,55 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 		};
 	}, [handleResize, isConnected]);
 
-	// Track scroll events to detect user interaction and bottom position
+	// Performance tracking refs
+
+
+	// Track wheel events to detect user scroll and manage auto-scroll
 	useEffect(() => {
 		const scrollableDiv = scrollableRef.current;
 		if (!scrollableDiv) return;
 
-		const handleScroll = () => {
-			hasScrolledRef.current = true; // Mark that the user has scrolled
-			
-			// Check if we're at the bottom (within 10px tolerance)
-			const isNearBottom = scrollableDiv.scrollTop + scrollableDiv.clientHeight >= scrollableDiv.scrollHeight - 10;
-			setIsAtBottom(isNearBottom);
+		const handleWheel = (e: WheelEvent) => {
+			// If user scrolls up, disable auto-scroll
+			if (e.deltaY < 0) {
+				userScrolledUpRef.current = true;
+				setAutoScrollEnabled(false);
+			}
+			// If user scrolls down and reaches bottom, re-enable auto-scroll
+			else if (e.deltaY > 0) {
+				setTimeout(() => {
+					if (isAtBottom()) {
+						userScrolledUpRef.current = false;
+						setAutoScrollEnabled(true);
+					}
+				}, 100);
+			}
 		};
 
+		const handleScroll = () => {
+			// Check if user scrolled back to bottom, re-enable auto-scroll
+			if (isAtBottom() && !autoScrollEnabled) {
+				userScrolledUpRef.current = false;
+				setAutoScrollEnabled(true);
+			}
+		};
+
+		scrollableDiv.addEventListener("wheel", handleWheel);
 		scrollableDiv.addEventListener("scroll", handleScroll);
 		return () => {
+			scrollableDiv.removeEventListener("wheel", handleWheel);
 			scrollableDiv.removeEventListener("scroll", handleScroll);
 		};
-	}, [isConnected]);
+	}, [isConnected, autoScrollEnabled, isAtBottom]);
 
-	// Restore scroll position and auto-scroll to bottom when terminal is restored
+	// Restore scroll position when terminal first connects (only once)
 	useEffect(() => {
 		if (isConnected && screen.length > 0) {
 			const scrollableDiv = scrollableRef.current;
 			if (!scrollableDiv) return;
 
-			// If terminal was previously at bottom or has persisted state indicating bottom
-			if (isAtBottom || (persistedState?.isAtBottom ?? true)) {
+			// If auto-scroll is enabled (default behavior), scroll to bottom
+			if (autoScrollEnabled) {
 				// Auto-scroll to bottom after a short delay to ensure content is rendered
 				setTimeout(() => {
 					scrollDown();
@@ -688,7 +714,7 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 				}, 100);
 			}
 		}
-	}, [isConnected, screen.length, scrollDown, isAtBottom, persistedState]);
+	}, [isConnected]); // Removed screen.length, scrollDown, autoScrollEnabled, persistedState dependencies
 
 	// Auto-focus the terminal and set initial size
 	useEffect(() => {
@@ -707,6 +733,15 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 			setTimeout(scheduleResize, 500);
 		}
 	}, [isConnected, handleResize]);
+
+	useEffect(() => {
+		// Cleanup function to unregister visual event handler
+		return () => {
+			if (terminalAPI && 'unregisterVisualEventHandler' in terminalAPI) {
+				(terminalAPI as any).unregisterVisualEventHandler();
+			}
+		};
+	}, [terminalAPI]);
 
 	return (
 		<div
@@ -793,7 +828,6 @@ const Chunk = React.memo(
 	}) => {
 		const ref = useRef<HTMLDivElement>(null);
 		const isInView = useInView(ref);
-		const renderStart = performance.now();
 
 		const result = (
 			<div ref={ref} className={cn("flex flex-col w-full")}>
@@ -816,63 +850,51 @@ const Chunk = React.memo(
 			</div>
 		);
 
-		const renderTime = performance.now() - renderStart;
-		if (renderTime > 5) { // Log slow chunk renders
-			console.warn(`[PerfTrack] Slow chunk render: ${renderTime.toFixed(2)}ms for ${lines.length} lines at start ${start}, inView: ${isInView}`);
-		}
-
 		return result;
 	},
-	(prevProps, nextProps) => {
-		const compareStart = performance.now();
-		
-		// deep compare
-		if (prevProps.start !== nextProps.start) return false;
-		if (prevProps.lines.length !== nextProps.lines.length) return false;
-		if (prevProps.isLightTheme !== nextProps.isLightTheme) return false;
-		if (prevProps.charDimensions !== nextProps.charDimensions) return false;
+			(prevProps, nextProps) => {
+			// deep compare
+			if (prevProps.start !== nextProps.start) return false;
+			if (prevProps.lines.length !== nextProps.lines.length) return false;
+			if (prevProps.isLightTheme !== nextProps.isLightTheme) return false;
+			if (prevProps.charDimensions !== nextProps.charDimensions) return false;
 
-		for (let i = 0; i < prevProps.lines.length; i++) {
-			const prevLine = prevProps.lines[i];
-			const nextLine = nextProps.lines[i];
-			
-			// Check if lines exist and have same length
-			if (!prevLine || !nextLine || prevLine.length !== nextLine.length) {
-				if (prevLine !== nextLine) return false;
-				continue;
-			}
-			
-			for (let j = 0; j < prevLine.length; j++) {
-				const prevItem = prevLine[j];
-				const nextItem = nextLine[j];
+			for (let i = 0; i < prevProps.lines.length; i++) {
+				const prevLine = prevProps.lines[i];
+				const nextLine = nextProps.lines[i];
 				
-				// Check if items exist
-				if (!prevItem || !nextItem) {
-					if (prevItem !== nextItem) return false;
+				// Check if lines exist and have same length
+				if (!prevLine || !nextLine || prevLine.length !== nextLine.length) {
+					if (prevLine !== nextLine) return false;
 					continue;
 				}
 				
-				if (
-					prevItem.lexeme !== nextItem.lexeme ||
-					prevItem.width !== nextItem.width ||
-					prevItem.is_bold !== nextItem.is_bold ||
-					prevItem.is_italic !== nextItem.is_italic ||
-					prevItem.is_underline !== nextItem.is_underline ||
-					prevItem.foreground_color !== nextItem.foreground_color ||
-					prevItem.background_color !== nextItem.background_color
-				) {
-					return false;
+				for (let j = 0; j < prevLine.length; j++) {
+					const prevItem = prevLine[j];
+					const nextItem = nextLine[j];
+					
+					// Check if items exist
+					if (!prevItem || !nextItem) {
+						if (prevItem !== nextItem) return false;
+						continue;
+					}
+					
+					if (
+						prevItem.lexeme !== nextItem.lexeme ||
+						prevItem.width !== nextItem.width ||
+						prevItem.is_bold !== nextItem.is_bold ||
+						prevItem.is_italic !== nextItem.is_italic ||
+						prevItem.is_underline !== nextItem.is_underline ||
+						prevItem.foreground_color !== nextItem.foreground_color ||
+						prevItem.background_color !== nextItem.background_color
+					) {
+						return false;
+					}
 				}
 			}
-		}
-		
-		const compareTime = performance.now() - compareStart;
-		if (compareTime > 10) { // Log slow memo comparisons
-			console.warn(`[PerfTrack] Slow chunk memo comparison: ${compareTime.toFixed(2)}ms for ${prevProps.lines.length} lines at start ${prevProps.start}`);
-		}
-		
-		return true;
-	},
+
+			return true;
+		},
 );
 
 const Row = React.memo(
@@ -892,6 +914,9 @@ const Row = React.memo(
 	}) => {
 		const [hasAnimated, setHasAnimated] = useState(false);
 		const [isMounted, setIsMounted] = useState(false);
+
+		// Group consecutive spans with same styles for better performance
+		const groupedLine = groupConsecutiveSpans(line);
 
 		const isEmpty =
 			line
@@ -917,9 +942,12 @@ const Row = React.memo(
 
 		return (
 			<div
-				style={{ height: `${charDimensions.height}px` }}
+				style={{ 
+					height: `${charDimensions.height}px`,
+					position: "relative",
+				}}
 				className={cn(
-					"relative flex font-mono",
+					"font-mono",
 					// A line is invisible if it's empty, or if it's new and hasn't finished animating.
 					(isEmpty || (!hasAnimated && !isEmpty)) && "opacity-0",
 					shouldAnimate && "animate-fade-in",
@@ -930,48 +958,99 @@ const Row = React.memo(
 					}
 				}}
 			>
-				{line.map((item, index) => {
-					// Handle undefined items gracefully
-					if (!item) {
+				{/* Single text layer for perfect copy/paste */}
+				<div
+					style={{
+						position: "absolute",
+						top: 0,
+						left: 0,
+						right: 0,
+						bottom: 0,
+						zIndex: 1,
+						whiteSpace: "pre",
+						color: "transparent",
+						userSelect: "text",
+						fontFamily: "inherit",
+						fontSize: "inherit",
+						lineHeight: `${charDimensions.height}px`,
+						letterSpacing: "0",
+						wordSpacing: "0",
+						tabSize: 4,
+						MozTabSize: 4,
+					}}
+					className="terminal-selection-layer"
+					dangerouslySetInnerHTML={{
+						__html: line.map(item => 
+							item.lexeme.replace(/ /g, '&nbsp;')
+						).join('')
+					}}
+				/>
+				
+				{/* Visual layer - grouped spans, positioned to match text layer exactly */}
+				<div 
+					style={{
+						position: "relative",
+						display: "flex",
+						height: "100%",
+						userSelect: "none",
+						fontFamily: "inherit",
+						fontSize: "inherit",
+						lineHeight: `${charDimensions.height}px`,
+						letterSpacing: "0",
+						wordSpacing: "0",
+					}}
+				>
+					{groupedLine.map((item, index) => {
+						if (!item) {
+							return (
+								<span
+									key={index}
+									style={{
+										width: `${charDimensions.width}px`,
+										height: `${charDimensions.height}px`,
+										display: "inline-block",
+										whiteSpace: "pre",
+										backgroundColor: "red", // DEBUG
+									}}
+								>
+									{" "}
+								</span>
+							);
+						}
+						
+						// Skip empty items with width 0
+						if (item.width === 0) {
+							return null;
+						}
+						
+						const text = lexemeMap[item.lexeme] ? lexemeMap[item.lexeme] : item.lexeme;
 						return (
 							<span
 								key={index}
 								style={{
-									width: `${charDimensions.width}px`,
-									minWidth: `${charDimensions.width}px`,
-									whiteSpace: "pre-wrap",
+									backgroundColor: colorToCSS(item.background_color, isLightTheme),
+									color: colorToCSS(item.foreground_color, isLightTheme),
+									fontWeight: item.is_bold ? "bold" : "normal",
+									textDecoration: item.is_underline ? "underline" : "none",
+									fontStyle: item.is_italic ? "italic" : "normal",
+									width: `${item.width * charDimensions.width}px`,
+									height: `${charDimensions.height}px`,
+									display: "inline-block",
+									whiteSpace: "pre",
+									overflow: "hidden",
+									textOverflow: "clip",
 								}}
-							>
-								{" "}
-							</span>
+								dangerouslySetInnerHTML={{
+									__html: text.replace(/ /g, '&nbsp;')
+								}}
+							/>
 						);
-					}
-					
-					return (
-						<span
-							key={index}
-							className={cn("")}
-							style={{
-								backgroundColor: colorToCSS(item.background_color, isLightTheme),
-								color: colorToCSS(item.foreground_color, isLightTheme),
-								fontWeight: item.is_bold ? "bold" : "normal",
-								textDecoration: item.is_underline ? "underline" : "none",
-								fontStyle: item.is_italic ? "italic" : "normal",
-								whiteSpace: "pre-wrap",
-								width: `${charDimensions.width}px`,
-								minWidth: `${charDimensions.width}px`,
-							}}
-						>
-							{lexemeMap[item.lexeme] ? lexemeMap[item.lexeme] : item.lexeme}
-						</span>
-					);
-				})}
+					})}
+				</div>
 			</div>
 		);
 	},
 	(prevProps, nextProps) => {
-		const compareStart = performance.now();
-		
 		// deep compare
 		if (prevProps.row !== nextProps.row) return false;
 		if (prevProps.isLightTheme !== nextProps.isLightTheme) return false;
@@ -1004,12 +1083,7 @@ const Row = React.memo(
 				return false;
 			}
 		}
-		
-		const compareTime = performance.now() - compareStart;
-		if (compareTime > 5) { // Log slow row memo comparisons
-			console.warn(`[PerfTrack] Slow row memo comparison: ${compareTime.toFixed(2)}ms for row ${prevProps.row} with ${prevProps.line.length} items`);
-		}
-		
+
 		return true;
 	},
 );

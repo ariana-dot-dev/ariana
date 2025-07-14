@@ -12,6 +12,7 @@ import "@xterm/xterm/css/xterm.css";
 import { TerminalService } from "../services/TerminalService";
 import { cn } from "../utils";
 import type { CanvasElement, ElementLayout } from "./types";
+import { osSessionToString } from "../bindings/os";
 
 interface TerminalOnCanvasProps {
 	layout: ElementLayout;
@@ -214,8 +215,9 @@ const TerminalOnCanvas: React.FC<TerminalOnCanvasProps> = ({
 				TerminalService.onDisconnect(connectionId, handleDisconnect);
 
 				// Show connection info
+				const connectionString = terminal.getConnectionString ? terminal.getConnectionString() : osSessionToString(terminal.osSession || terminal._osSession);
 				xtermRef.current.write(
-					`\x1b[32mConnected to ${terminal.getConnectionString()}\x1b[0m\r\n`,
+					`\x1b[32mConnected to ${connectionString}\x1b[0m\r\n`,
 				);
 			} catch (error) {
 				console.error("Failed to set up terminal:", error);
@@ -325,7 +327,7 @@ const TerminalOnCanvas: React.FC<TerminalOnCanvasProps> = ({
 				{/* Header */}
 				<div className="flex items-center justify-between p-2 border-b border-[var(--acc-600)]/20 bg-[var(--base-500)]/50">
 					<span className="text-xs ">
-						💻 {terminal.getConnectionString()}
+						💻 {terminal.getConnectionString ? terminal.getConnectionString() : osSessionToString(terminal.osSession || terminal._osSession)}
 					</span>
 					<div className="flex items-center gap-2">
 						{/* Connection status indicator */}
