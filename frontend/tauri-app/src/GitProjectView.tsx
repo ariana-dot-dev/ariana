@@ -5,6 +5,7 @@ import { useGitProject } from "./contexts/GitProjectContext";
 import { cn } from "./utils";
 import { useStore } from "./state";
 import { UnifiedCanvasAgentList } from "./components/UnifiedCanvasAgentList";
+import { AgentOverview } from "./components/AgentOverview";
 import { osSessionGetWorkingDirectory } from "./bindings/os";
 
 interface GitProjectViewProps {
@@ -22,12 +23,14 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 		cancelBackgroundAgent,
 		forceRemoveBackgroundAgent,
 		getCanvasLockState,
-		canEditCanvas
+		canEditCanvas,
+		getCurrentTaskManager
 	} = useGitProject();
 	const { updateGitProject, removeGitProject } = useStore();
 	const [showCanvases, setShowCanvases] = useState(true);
 	const [mergingCanvases, setMergingCanvases] = useState<Set<string>>(new Set());
 	const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+	const [viewMode, setViewMode] = useState<'canvas' | 'overview'>('canvas');
 
 	const canvasesHoveredRef = useRef(false);
 
@@ -95,8 +98,8 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 	};
 
 	// Handle canvas creation
-	const handleCreateCanvas = () => {
-		if (!selectedGitProject) return;
+	const handleCreateCanvas = (): string | undefined => {
+		if (!selectedGitProject) return undefined;
 		
 		console.log("Creating new canvas copy...");
 		
@@ -109,18 +112,134 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 			setSelectedItemId(result.canvasId);
 			// Trigger state update to save to disk
 			updateGitProject(selectedGitProject.id);
+			return result.canvasId;
 		} else {
 			console.error("Failed to create canvas copy:", result.error);
 			alert(`Failed to create canvas copy: ${result.error}`);
+			return undefined;
 		}
 	};
 
-	// Handle unified item selection (canvas or background agent)
+	// Agent Overview handler functions
+	const handleAddPrompt = (canvasId: string, prompt: string) => {
+		console.log('🎯 [PROMPT] handleAddPrompt called - Canvas ID:', canvasId, 'Prompt:', prompt);
+		
+		if (!selectedGitProject) {
+			console.error('❌ [PROMPT] No selected git project');
+			return;
+		}
+		
+		const canvas = selectedGitProject.canvases.find(c => c.id === canvasId);
+		if (!canvas) {
+			console.error('❌ [PROMPT] Canvas not found:', canvasId);
+			return;
+		}
+		
+		console.log('✅ [PROMPT] Found canvas:', canvas.id, 'Task manager available:', !!canvas.taskManager);
+		
+		// Create a new prompting task with the provided prompt
+		const taskId = canvas.taskManager.createPromptingTask(prompt);
+		console.log(`✅ [PROMPT] Created new prompting task ${taskId} for canvas ${canvasId}`);
+		
+		// Save the updated project
+		updateGitProject(selectedGitProject.id);
+		console.log('💾 [PROMPT] Updated git project after adding prompt');
+	};
+
+	// Handle prompt deletion
+	const handlePromptDeletion = (promptId: string, agentId: string) => {
+		if (!selectedGitProject) return;
+		
+		const canvas = selectedGitProject.canvases.find(c => c.id === agentId);
+		if (!canvas) return;
+		
+		// If this is a task ID rather than a prompt ID, handle task deletion
+		const task = canvas.taskManager.getTask(promptId);
+		if (task && task.status === 'prompting') {
+			const deleted = canvas.taskManager.deleteTask(promptId);
+			if (deleted) {
+				console.log(`Deleted prompting task ${promptId} from canvas ${agentId}`);
+				updateGitProject(selectedGitProject.id);
+			}
+		}
+		
+		console.log(`Prompt deletion handled for prompt ${promptId} in agent ${agentId}`);
+	};
+
+	const handlePlayCanvas = (canvasId: string) => {
+		if (!selectedGitProject) return;
+		
+		const canvas = selectedGitProject.canvases.find(c => c.id === canvasId);
+		if (!canvas) return;
+		
+		// Switch to this canvas and let the user interact with it
+		const canvasIndex = selectedGitProject.canvases.findIndex(c => c.id === canvasId);
+		if (canvasIndex !== -1) {
+			selectedGitProject.setCurrentCanvasIndex(canvasIndex);
+			updateGitProject(selectedGitProject.id);
+			setSelectedItemId(canvasId);
+			// Switch to canvas view
+			setViewMode('canvas');
+		}
+	};
+
+	const handlePauseCanvas = (canvasId: string) => {
+		if (!selectedGitProject) return;
+		
+		const canvas = selectedGitProject.canvases.find(c => c.id === canvasId);
+		if (!canvas) return;
+		
+		// For now, we'll just log this since there's no direct pause mechanism for tasks
+		// In a full implementation, this would interact with running processes
+		console.log(`Pause requested for canvas ${canvasId}`);
+		
+		// Cancel any running background agents for this canvas
+		const runningAgents = getBackgroundAgents().filter(agent => 
+			agent.status === 'running' && agent.context && 
+			(agent.context as any).canvasId === canvasId
+		);
+		
+		runningAgents.forEach(agent => {
+			cancelBackgroundAgent(agent.id);
+		});
+	};
+
+	const handleRunTest = (canvasId: string) => {
+		if (!selectedGitProject) return;
+		
+		const canvas = selectedGitProject.canvases.find(c => c.id === canvasId);
+		if (!canvas?.osSession) return;
+		
+		// This would typically run tests in the canvas workspace
+		// For now, we'll just log and potentially switch to the canvas
+		console.log(`Run test requested for canvas ${canvasId}`);
+		
+		// Switch to this canvas so user can see the test results
+		const canvasIndex = selectedGitProject.canvases.findIndex(c => c.id === canvasId);
+		if (canvasIndex !== -1) {
+			selectedGitProject.setCurrentCanvasIndex(canvasIndex);
+			updateGitProject(selectedGitProject.id);
+			setSelectedItemId(canvasId);
+			// Switch to canvas view
+			setViewMode('canvas');
+		}
+	};
+
+	// Handle unified item selection (canvas, background agent, or overview)
 	const handleItemSelect = (itemId: string | null) => {
 		if (!itemId || !selectedGitProject) {
 			setSelectedItemId(null);
+			setViewMode('canvas');
 			return;
 		}
+
+		// Check if it's the overview
+		if (itemId === 'agent-overview') {
+			setViewMode('overview');
+			setSelectedItemId(itemId);
+			return;
+		}
+
 
 		// Check if it's a canvas
 		const canvasIndex = selectedGitProject.canvases.findIndex(c => c.id === itemId);
@@ -129,6 +248,7 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 			selectedGitProject.setCurrentCanvasIndex(canvasIndex);
 			updateGitProject(selectedGitProject.id);
 			setSelectedItemId(itemId);
+			setViewMode('canvas');
 			return;
 		}
 
@@ -137,11 +257,13 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 		if (agent) {
 			// It's a background agent - just select it for status display
 			setSelectedItemId(itemId);
+			setViewMode('canvas');
 			return;
 		}
 
 		// Unknown item
 		setSelectedItemId(null);
+		setViewMode('canvas');
 	};
 
 	// Get the directory name from the project root
@@ -210,38 +332,48 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 		
 		try {
 			const canvas = selectedGitProject.canvases.find(c => c.id === canvasId);
-			if (!canvas?.osSession) {
-				console.warn("Canvas osSession is not ready yet. Cannot delete workspace.");
+			
+			if (!canvas) return;
+			
+			// Check if we can delete even without osSession (for canvases that failed to initialize)
+			if (!canvas.osSession && canvas.lockState !== 'loading') {
+				// Canvas doesn't have a workspace yet, so we can just remove it from the project
+				const confirmed = window.confirm(`Are you sure you want to remove this agent? It doesn't appear to have a workspace created yet.`);
+				if (confirmed) {
+					selectedGitProject.removeCanvas(canvasId);
+					updateGitProject(selectedGitProject.id);
+				}
 				return;
 			}
 
-			let deletePath = "";
-			if ('Local' in canvas.osSession) {
-				deletePath = canvas.osSession.Local;
-			} else if ('Wsl' in canvas.osSession) {
-				deletePath = canvas.osSession.Wsl.working_directory;
-			}
-
-			if (!deletePath) return;
-
-			const confirmed = window.confirm(`Are you sure you want to permanently delete this workspace and all its files? This action cannot be undone.\n\nPath: ${deletePath}`);
-			if (confirmed) {
-				// Try to return to pool first (for reuse if possible)
-				try {
-					await selectedGitProject.returnCanvasCopy(canvasId);
-				} catch (returnError) {
-					console.warn('Could not return canvas to pool, deleting instead:', returnError);
-					// Delete from filesystem using osSession-aware deletion
-					await invoke("delete_path_with_os_session", { 
-						path: deletePath, 
-						osSession: canvas.osSession 
-					});
+			// Handle case where osSession exists
+			if (canvas.osSession) {
+				let deletePath = "";
+				if ('Local' in canvas.osSession) {
+					deletePath = canvas.osSession.Local;
+				} else if ('Wsl' in canvas.osSession) {
+					deletePath = canvas.osSession.Wsl.working_directory;
 				}
-				
-				// Remove from project
-				selectedGitProject.removeCanvas(canvasId);
-				updateGitProject(selectedGitProject.id);
-				console.log(`Deleted workspace from project: ${canvasId}`);
+
+				if (!deletePath) return;
+
+				const confirmed = window.confirm(`Are you sure you want to permanently delete this workspace and all its files? This action cannot be undone.\n\nPath: ${deletePath}`);
+				if (confirmed) {
+					// Try to return to pool first (for reuse if possible)
+					try {
+						await selectedGitProject.returnCanvasCopy(canvasId);
+					} catch (returnError) {
+						// Delete from filesystem using osSession-aware deletion
+						await invoke("delete_path_with_os_session", { 
+							path: deletePath, 
+							osSession: canvas.osSession 
+						});
+					}
+					
+					// Remove from project
+					selectedGitProject.removeCanvas(canvasId);
+					updateGitProject(selectedGitProject.id);
+				}
 			}
 		} catch (error) {
 			console.error("Failed to delete workspace:", error);
@@ -263,12 +395,21 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 		}
 	}, [selectedGitProject?.id, selectedGitProject?.canvases.length, updateGitProject]);
 
-	// Sync selectedItemId with current canvas
+	// Show overview when no canvases are available
 	useEffect(() => {
-		if (currentCanvas && selectedItemId !== currentCanvas.id) {
+		if (selectedGitProject && selectedGitProject.canvases.length === 0 && viewMode === 'canvas') {
+			setViewMode('overview');
+			setSelectedItemId('agent-overview');
+		}
+	}, [selectedGitProject?.canvases.length, viewMode]);
+
+	// Sync selectedItemId with current canvas (only in canvas mode)
+	useEffect(() => {
+		if (viewMode === 'canvas' && currentCanvas && selectedItemId !== currentCanvas.id) {
 			setSelectedItemId(currentCanvas.id);
 		}
-	}, [currentCanvas?.id, selectedItemId]);
+	}, [currentCanvas?.id, selectedItemId, viewMode]);
+
 
 	return selectedGitProject ? (
 		<div className="w-full h-full flex gap-1.5">
@@ -303,12 +444,29 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 						</div>
 						
 						<div className="flex flex-col gap-2 h-full w-full overflow-y-auto">
-							<button
-								onClick={handleCreateCanvas}
-								className="self-end w-fit text-xs px-3 py-2 bg-[var(--positive-100-50)] border-[var(--positive-600-50)] hover:border-[var(--positive-600-70)] border-dashed hover:border-solid border-(length:--border) cursor-pointer hover:bg-[var(--positive-100-70)] text-[var(--positive-600-50)] hover:text-[var(--positive-600)] rounded-xl transition-colors flex items-center justify-center gap-2"
-							>
-								<span>+ New Agent</span>
-							</button>
+							<div className="flex gap-2">
+								<button
+									onClick={handleCreateCanvas}
+									className="flex-1 px-3 py-2 text-sm border-[var(--base-300)] border-dashed hover:border-solid border-(length:--border) cursor-pointer hover:bg-[var(--acc-100-70)] text-[var(--acc-800-70)] rounded-lg transition-colors flex items-center justify-center gap-2"
+								>
+									<span>+ new edit</span>
+								</button>
+							</div>
+
+							{/* Agent Overview Item */}
+							<div className="flex flex-col gap-1">
+								<button
+									onClick={() => handleItemSelect('agent-overview')}
+									className={`w-full px-3 py-2 text-sm rounded-lg transition-colors text-left flex items-center gap-2 ${
+										selectedItemId === 'agent-overview'
+											? 'bg-[var(--acc-500)] text-white'
+											: 'hover:bg-[var(--acc-100-70)] text-[var(--base-700)]'
+									}`}
+								>
+									<span>📊</span>
+									<span>Agent Overview</span>
+								</button>
+							</div>
 
 							{/* Unified Canvas and Agent List */}
 							<UnifiedCanvasAgentList
@@ -326,7 +484,25 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 					</>
 				)}
 			</div>
-			{currentCanvas ? (
+			{viewMode === 'overview' ? (
+				<div className="w-full h-full animate-fade-in opacity-100">
+					<AgentOverview
+						canvases={selectedGitProject.canvases}
+						backgroundAgents={getBackgroundAgents()}
+						project={selectedGitProject}
+						onAddPrompt={handleAddPrompt}
+						onPlayCanvas={handlePlayCanvas}
+						onPauseCanvas={handlePauseCanvas}
+						onDeleteCanvas={deleteWorkspace}
+						onMergeCanvas={handleMergeCanvas}
+						onRunTest={handleRunTest}
+						onCreateAgent={handleCreateCanvas}
+						taskManager={getCurrentTaskManager()}
+						onProjectUpdate={() => updateGitProject(selectedGitProject.id)}
+						onPromptDeleted={handlePromptDeletion}
+					/>
+				</div>
+			) : currentCanvas ? (
 				<div className="w-full h-full animate-fade-in opacity-100" key={currentCanvas.id}>
 					{currentCanvas.lockState === 'loading' ? (
 						<div className="w-full h-full flex items-center justify-center">

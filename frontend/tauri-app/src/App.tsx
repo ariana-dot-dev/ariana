@@ -20,6 +20,8 @@ import { GitProjectProvider } from "./contexts/GitProjectContext";
 import GitProjectView from "./GitProjectView";
 import { osSessionGetWorkingDirectory } from "./bindings/os";
 import { CommunicationPalette } from "./components/CommunicationPalette";
+import AuthPage from "./components/AuthPage";
+import { useAuth } from "./hooks/useAuth";
 
 const appWindow = getCurrentWebviewWindow();
 
@@ -30,12 +32,14 @@ const THEMES = ["light", "light-sand", "semi-sky", "dark", "ghi", "ghost"];
 function App() {
 	const store = useStore();
 	const { userEmail, loading, error: _error, setUserEmail } = useUserConfig();
+	const { isAuthenticated, user, isValidating, login, logout } = useAuth();
 	const [isMaximized, setIsMaximized] = useState(false);
 	const [interpreter, setInterpreter] = useState<Interpreter | null>(null);
 	const [selectedGitProjectId, setSelectedGitProjectId] = useState<string | null>(null);
 	const [showDiffManagement, setShowDiffManagement] = useState(false);
 	const [diffManagementState, setDiffManagementState] = useState<any>(null);
 	const [showCommunicationPalette, setShowCommunicationPalette] = useState(false);
+	const [authError, setAuthError] = useState<string | null>(null);
 	const { isLightTheme } = store;
 
 	useEffect(() => {
@@ -155,7 +159,7 @@ function App() {
 		setShowCommunicationPalette(!showCommunicationPalette);
 	};
 
-	if (loading) {
+	if (loading || isValidating) {
 		return (
 			<div
 				className={cn(
@@ -163,6 +167,28 @@ function App() {
 				)}
 			>
 				Loading user config...
+			</div>
+		);
+	}
+
+	// Show authentication page if not authenticated
+	if (!isAuthenticated) {
+		return (
+			<div className={cn(`theme-${store.theme}`)}>
+				<AuthPage 
+					onAuthenticated={(token, user) => {
+						login(token, user);
+						setAuthError(null);
+					}}
+					onError={(error) => {
+						setAuthError(error);
+					}}
+				/>
+				{authError && (
+					<div className="fixed bottom-4 right-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg">
+						{authError}
+					</div>
+				)}
 			</div>
 		);
 	}
@@ -272,11 +298,21 @@ function App() {
 								type="button"
 								onClick={toggleCommunicationPalette}
 								className={cn(
-									"opacity-0 group-hover:opacity-90 px-1.5 py-1 text-xs bg-[var(--base-400-20)] hover:bg-[var(--acc-400-50)] rounded-r-md transition-colors cursor-pointer",
+									"opacity-0 group-hover:opacity-90 px-1.5 py-1 text-xs bg-[var(--base-400-20)] hover:bg-[var(--acc-400-50)] transition-colors cursor-pointer",
 								)}
 								title="Open Communication Palette"
 							>
 								💬
+							</button>
+							<button
+								type="button"
+								onClick={logout}
+								className={cn(
+									"opacity-0 group-hover:opacity-90 px-1.5 py-1 text-xs bg-[var(--base-400-20)] hover:bg-red-500 hover:text-white rounded-r-md transition-colors cursor-pointer",
+								)}
+								title={`Logout (${user?.name || user?.email})`}
+							>
+								🚪
 							</button>
 						</div>
 					</div>

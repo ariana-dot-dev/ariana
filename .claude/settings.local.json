@@ -20,7 +20,20 @@
       "Bash(npm run:*)",
       "Bash(npx typescript:*)",
       "Bash(rg:*)",
-      "Bash(cp:*)"
+      "Bash(cp:*)",
+      "Bash(./connect.sh)",
+      "Bash(sed:*)",
+      "Bash(timeout:*)",
+      "Bash(ssh:*)",
+      "Bash(curl:*)",
+      "Bash(npm install:*)",
+      "Bash(scp:*)",
+      "Bash(cat:*)",
+      "Bash(dos2unix:*)",
+      "Bash(git checkout:*)",
+      "Bash(pkill:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": []
   }

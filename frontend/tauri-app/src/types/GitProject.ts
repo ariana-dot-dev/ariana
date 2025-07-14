@@ -46,6 +46,7 @@ export class GitProject {
 	public backgroundAgents: BackgroundAgent[];
 	public createdAt: number;
 	public lastModified: number;
+	public gitOriginUrl: string | null = null; // Git origin URL for backlog filtering
 	
 	// Track original root branch to prevent root corruption
 	private originalRootBranch: string | null = null;
@@ -64,12 +65,16 @@ export class GitProject {
 		this.createdAt = Date.now();
 		this.lastModified = Date.now();
 		this.mergedCanvases = [];
+		this.gitOriginUrl = null; // Will be set by initializeGitOriginUrl
 		
 		// Store root directory path for validation
 		this.rootDirectoryPath = osSessionGetWorkingDirectory(root) || '';
 		
 		// Initialize original root branch detection
 		this.initializeOriginalRootBranch();
+		
+		// Initialize git origin URL detection
+		this.initializeGitOriginUrl();
 
 		console.log(this.canvases)
 	}
@@ -86,6 +91,21 @@ export class GitProject {
 		} catch (error) {
 			console.warn(`GitProject: Failed to detect original root branch, using 'main' as fallback:`, error);
 			this.originalRootBranch = 'main';
+		}
+	}
+
+	// Initialize git origin URL detection
+	private async initializeGitOriginUrl(): Promise<void> {
+		try {
+			const originUrl = await invoke<string>('git_get_origin_url', {
+				directory: this.rootDirectoryPath,
+				osSession: this.root
+			});
+			this.gitOriginUrl = originUrl;
+			console.log(`GitProject: Git origin URL detected: ${this.gitOriginUrl}`);
+		} catch (error) {
+			console.warn(`GitProject: Failed to detect git origin URL:`, error);
+			this.gitOriginUrl = null;
 		}
 	}
 
@@ -557,6 +577,7 @@ export class GitProject {
 			id: this.id,
 			name: this.name,
 			root: this.root,
+			gitOriginUrl: this.gitOriginUrl,
 			canvases: this.canvases.map(canvas => ({
 				...canvas,
 				taskManager: canvas.taskManager.toJSON(),
@@ -594,6 +615,7 @@ export class GitProject {
 	static fromJSON(data: any): GitProject {
 		const project = new GitProject(data.root, data.name);
 		project.id = data.id;
+		project.gitOriginUrl = data.gitOriginUrl || null;
 		project.canvases = data.canvases || [];
 		// Handle migration for canvases that don't have proper structure yet
 		project.canvases = project.canvases.map(canvas => ({

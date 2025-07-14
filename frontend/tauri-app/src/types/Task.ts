@@ -7,6 +7,7 @@ export interface TaskBase {
 	prompt: string;
 	createdAt: number;
 	status: TaskStatus;
+	linkedAgents?: string[]; // Array of canvas IDs this task is linked to
 }
 
 export interface PromptingTask extends TaskBase {
@@ -559,6 +560,135 @@ export class TaskManager {
 		// Auto-create empty task after commit completion (Q5, Q15)
 		this.autoEnsureEmptyTask();
 		return true;
+	}
+
+	// Link task to agents
+	linkTaskToAgent(taskId: string, canvasId: string): boolean {
+		const taskIndex = this.tasks.findIndex(t => t.id === taskId);
+		if (taskIndex === -1) return false;
+		
+		const task = this.tasks[taskIndex];
+		const linkedAgents = task.linkedAgents || [];
+		
+		if (!linkedAgents.includes(canvasId)) {
+			this.tasks[taskIndex] = { 
+				...task, 
+				linkedAgents: [...linkedAgents, canvasId] 
+			};
+		}
+		return true;
+	}
+
+	// Link task to multiple agents
+	linkTaskToAgents(taskId: string, canvasIds: string[]): boolean {
+		const taskIndex = this.tasks.findIndex(t => t.id === taskId);
+		if (taskIndex === -1) return false;
+		
+		const task = this.tasks[taskIndex];
+		const linkedAgents = task.linkedAgents || [];
+		const newLinkedAgents = [...new Set([...linkedAgents, ...canvasIds])];
+		
+		this.tasks[taskIndex] = { 
+			...task, 
+			linkedAgents: newLinkedAgents 
+		};
+		return true;
+	}
+
+	// Remove link between task and agent
+	unlinkTaskFromAgent(taskId: string, canvasId: string): boolean {
+		const taskIndex = this.tasks.findIndex(t => t.id === taskId);
+		if (taskIndex === -1) return false;
+		
+		const task = this.tasks[taskIndex];
+		if (!task.linkedAgents) return false;
+		
+		this.tasks[taskIndex] = { 
+			...task, 
+			linkedAgents: task.linkedAgents.filter(id => id !== canvasId) 
+		};
+		return true;
+	}
+
+	// Delete a prompting task (for when prompts are removed)
+	deleteTask(taskId: string): boolean {
+		const taskIndex = this.tasks.findIndex(t => t.id === taskId);
+		if (taskIndex === -1) return false;
+		
+		// Only allow deletion of prompting tasks to prevent data loss
+		const task = this.tasks[taskIndex];
+		if (task.status !== 'prompting') {
+			console.warn(`Cannot delete task ${taskId} with status ${task.status}. Only prompting tasks can be deleted.`);
+			return false;
+		}
+		
+		this.tasks.splice(taskIndex, 1);
+		return true;
+	}
+
+	// Move a task to a specific index (for reordering)
+	moveTask(taskId: string, newIndex: number): boolean {
+		const currentIndex = this.tasks.findIndex(t => t.id === taskId);
+		if (currentIndex === -1) return false;
+		
+		// Clamp newIndex to valid range
+		const clampedIndex = Math.max(0, Math.min(newIndex, this.tasks.length - 1));
+		
+		// Remove task from current position and insert at new position
+		const [task] = this.tasks.splice(currentIndex, 1);
+		this.tasks.splice(clampedIndex, 0, task);
+		
+		console.log(`Moved task ${taskId} from index ${currentIndex} to ${clampedIndex}`);
+		return true;
+	}
+
+	// Reorder tasks based on an array of task IDs
+	reorderTasks(taskIds: string[]): boolean {
+		// Validate that all IDs exist in current tasks
+		const currentTaskIds = this.tasks.map(t => t.id);
+		const validIds = taskIds.filter(id => currentTaskIds.includes(id));
+		
+		if (validIds.length !== currentTaskIds.length) {
+			console.warn('Task reorder failed: ID mismatch');
+			return false;
+		}
+		
+		// Create new task array in the specified order
+		const reorderedTasks: Task[] = [];
+		validIds.forEach(id => {
+			const task = this.tasks.find(t => t.id === id);
+			if (task) reorderedTasks.push(task);
+		});
+		
+		this.tasks = reorderedTasks;
+		console.log(`Reordered ${this.tasks.length} tasks`);
+		return true;
+	}
+
+	// Get the index of a specific task
+	getTaskIndex(taskId: string): number {
+		return this.tasks.findIndex(t => t.id === taskId);
+	}
+
+	// Swap positions of two tasks
+	swapTasks(taskId1: string, taskId2: string): boolean {
+		const index1 = this.getTaskIndex(taskId1);
+		const index2 = this.getTaskIndex(taskId2);
+		
+		if (index1 === -1 || index2 === -1) return false;
+		
+		// Swap tasks
+		[this.tasks[index1], this.tasks[index2]] = [this.tasks[index2], this.tasks[index1]];
+		
+		console.log(`Swapped tasks ${taskId1} and ${taskId2}`);
+		return true;
+	}
+
+	// Get tasks linked to a specific agent
+	getTasksLinkedToAgent(canvasId: string): Task[] {
+		return this.tasks.filter(task => 
+			task.linkedAgents && task.linkedAgents.includes(canvasId)
+		);
 	}
 
 	// Serialization for persistence

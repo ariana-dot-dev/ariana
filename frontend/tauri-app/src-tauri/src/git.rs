@@ -194,4 +194,13 @@ impl GitManager {
             os_session
         ).map(|output| output.trim().to_string())
     }
+
+    pub fn get_origin_url(directory: &str, os_session: &OsSession) -> Result<String, String> {
+        CommandExecutor::execute_with_os_session(
+            "git", 
+            &["config", "--get", "remote.origin.url"], 
+            Some(directory), 
+            os_session
+        ).map(|output| output.trim().to_string())
+    }
 }

@@ -28,7 +28,11 @@
 	"mainBinaryName": "ariana IDE",
 	"version": "0.1.0",
 	"identifier": "com.ariana.ide",
-	"plugins": {},
+	"plugins": {
+		"shell": {
+			"open": true
+		}
+	},
 	"app": {
 		"withGlobalTauri": true,
 		"windows": [
@@ -44,7 +48,8 @@
 				"transparent": true,
 				"center": true,
 				"shadow": false,
-				"useHttpsScheme": true
+				"useHttpsScheme": true,
+				"dragDropEnabled": false
 			}
 		],
 		"security": {

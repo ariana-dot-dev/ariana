@@ -58,6 +58,7 @@ pub fn run() {
 		.plugin(tauri_plugin_store::Builder::new().build())
 		.plugin(tauri_plugin_fs::init())
 		.plugin(tauri_plugin_dialog::init())
+		.plugin(tauri_plugin_shell::init())
 		.manage(terminals_manager)
 		.manage(custom_terminals_manager)
 		.manage(git_search_manager)
@@ -109,6 +110,7 @@ pub fn run() {
 			git_get_conflict_files,
 			git_merge_branch,
 			git_get_current_branch,
+			git_get_origin_url,
 		])
 		.run(tauri::generate_context!())
 		.expect("error while running tauri application");
@@ -295,6 +297,11 @@ async fn create_git_branch(directory: String, branch_name: String, os_session: O
 #[tauri::command]
 async fn git_get_current_branch(directory: String, os_session: OsSession) -> Result<String, String> {
 	git::GitManager::get_current_branch(&directory, &os_session)
+}
+
+#[tauri::command]
+async fn git_get_origin_url(directory: String, os_session: OsSession) -> Result<String, String> {
+	git::GitManager::get_origin_url(&directory, &os_session)
 }
 
 #[tauri::command]
