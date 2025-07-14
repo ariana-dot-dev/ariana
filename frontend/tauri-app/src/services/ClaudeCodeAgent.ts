@@ -403,9 +403,9 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		await this.sendInputLines(this.terminalId, ["pwd"]);
 		await this.delay(500);
 
-		// Test if terminal is responding by sending a simple echo command
-		await this.sendInputLines(this.terminalId, ["echo 'TERMINAL_TEST_SUCCESS'"]);
-		await this.delay(1000);
+		// // Test if terminal is responding by sending a simple echo command
+		// await this.sendInputLines(this.terminalId, ["echo 'TERMINAL_TEST_SUCCESS'"]);
+		// await this.delay(1000);
 
 		// Start Claude Code without prompt initially
 		const claudeCommand = "claude";
