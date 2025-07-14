@@ -178,6 +178,8 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 	const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 	const isResizingRef = useRef<boolean>(false);
 	const userScrolledUpRef = useRef<boolean>(false);
+	
+	// Debug initial state (after refs are declared)
 
 
 	// Persist state whenever it changes
@@ -345,17 +347,15 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 			return e.type == "cursorMove" || e.type == "screenUpdate";
 		});
 
-		let shouldTriggerScroll = false;
-
 		if (screenUpdates.length > 0) {
 			setScreen((oldScreen) => {
 				const newScreen = screenUpdates.reduce((acc, event) => {
 					if (event.type == "screenUpdate") {
-						shouldTriggerScroll = true; // Always scroll on full screen updates
-						return event.screen!;
+						const lines = event.screen!;
+						return lines;
 					} else if (event.type == "newLines") {
-						shouldTriggerScroll = true; // Always scroll on new lines
-						return [...acc, ...event.lines!];
+						const lines = event.lines!;
+						return [...acc, ...lines];
 					} else if (event.type == "patch") {
 						while (event.line! >= acc.length) {
 							acc.push(
@@ -369,7 +369,6 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 					}
 					return acc;
 				}, oldScreen);
-
 				return newScreen;
 			});
 		}
@@ -389,9 +388,17 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 			});
 		}
 
-		// Apply auto-scroll logic - only scroll on new lines/screen updates
-		if (shouldTriggerScroll && shouldAutoScroll()) {
-			scrollDown();
+		// Simple auto-scroll logic: if not at bottom and user hasn't scrolled up, scroll down
+		if (screenUpdates.length > 0) {
+			// Always check if we should scroll after any screen update
+			setTimeout(() => {
+				const autoScrollAllowed = shouldAutoScroll();
+				const currentlyAtBottom = isAtBottom();
+				
+				if (autoScrollAllowed && !currentlyAtBottom) {
+					scrollDown();
+				}
+			}, 0);
 		}
 	}, [shouldAutoScroll, scrollDown, windowDimensions]);
 
@@ -638,6 +645,9 @@ export const CustomTerminalRenderer: React.FC<CustomTerminalRendererProps> = ({
 		};
 	}, [handleResize, isConnected]);
 
+	// Performance tracking refs
+
+
 	// Track wheel events to detect user scroll and manage auto-scroll
 	useEffect(() => {
 		const scrollableDiv = scrollableRef.current;
@@ -800,7 +810,7 @@ const Chunk = React.memo(
 	}) => {
 		const ref = useRef<HTMLDivElement>(null);
 		const isInView = useInView(ref);
-		const renderStart = performance.now();
+		
 
 		const result = (
 			<div ref={ref} className={cn("flex flex-col w-full")}>
@@ -823,15 +833,9 @@ const Chunk = React.memo(
 			</div>
 		);
 
-		const renderTime = performance.now() - renderStart;
-		if (renderTime > 5) { // Log slow chunk renders
-			console.warn(`[PerfTrack] Slow chunk render: ${renderTime.toFixed(2)}ms for ${lines.length} lines at start ${start}, inView: ${isInView}`);
-		}
-
 		return result;
 	},
 	(prevProps, nextProps) => {
-		const compareStart = performance.now();
 		
 		// deep compare
 		if (prevProps.start !== nextProps.start) return false;
@@ -873,10 +877,6 @@ const Chunk = React.memo(
 			}
 		}
 		
-		const compareTime = performance.now() - compareStart;
-		if (compareTime > 10) { // Log slow memo comparisons
-			console.warn(`[PerfTrack] Slow chunk memo comparison: ${compareTime.toFixed(2)}ms for ${prevProps.lines.length} lines at start ${prevProps.start}`);
-		}
 		
 		return true;
 	},
@@ -977,7 +977,6 @@ const Row = React.memo(
 		);
 	},
 	(prevProps, nextProps) => {
-		const compareStart = performance.now();
 		
 		// deep compare
 		if (prevProps.row !== nextProps.row) return false;
@@ -1012,10 +1011,6 @@ const Row = React.memo(
 			}
 		}
 		
-		const compareTime = performance.now() - compareStart;
-		if (compareTime > 5) { // Log slow row memo comparisons
-			console.warn(`[PerfTrack] Slow row memo comparison: ${compareTime.toFixed(2)}ms for row ${prevProps.row} with ${prevProps.line.length} items`);
-		}
 		
 		return true;
 	},
