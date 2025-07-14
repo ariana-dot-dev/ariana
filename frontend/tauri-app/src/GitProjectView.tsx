@@ -103,7 +103,12 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 		
 		console.log("Creating new canvas copy...");
 		
-		const result = selectedGitProject.addCanvasCopy();
+		const result = selectedGitProject.addCanvasCopy(
+			undefined, // onProgress
+			undefined, // canvas
+			undefined, // initialPrompt
+			() => updateGitProject(selectedGitProject.id) // onCanvasReady - trigger state persistence
+		);
 		
 		if (result.success && result.canvasId) {
 			selectedGitProject.setCurrentCanvasIndex(selectedGitProject.canvases.length - 1);
@@ -385,7 +390,12 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 	useEffect(() => {
 		if (selectedGitProject && selectedGitProject.canvases.length === 0) {
 			console.log("No canvases found, creating first version...");
-			const result = selectedGitProject.addCanvasCopy();
+			const result = selectedGitProject.addCanvasCopy(
+			undefined, // onProgress
+			undefined, // canvas
+			undefined, // initialPrompt
+			() => updateGitProject(selectedGitProject.id) // onCanvasReady - trigger state persistence
+		);
 			if (result.success) {
 				console.log("First canvas created with ID:", result.canvasId);
 				updateGitProject(selectedGitProject.id);

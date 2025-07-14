@@ -376,7 +376,12 @@ function App() {
 									try {
 										// Create a new canvas copy (agent workspace) with initial prompt
 										const initialPrompt = prompt && prompt.trim() !== 'general assistance' ? prompt.trim() : '';
-										const result = selectedProject.addCanvasCopy(() => {}, undefined, initialPrompt);
+										const result = selectedProject.addCanvasCopy(
+											() => {}, // onProgress
+											undefined, // canvas
+											initialPrompt, // initialPrompt
+											() => store.updateGitProject(selectedProject.id) // onCanvasReady - trigger state persistence
+										);
 										
 										if (result.success && result.canvasId) {
 											// Rename the canvas to the agent name

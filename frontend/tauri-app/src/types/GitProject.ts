@@ -245,7 +245,7 @@ export class GitProject {
 	/**
 	 * Creates a new canvas immediately in loading state, then populates it asynchronously
 	 */
-	addCanvasCopy(onProgress?: (progress: CopyProgress) => void, canvas?: Partial<GitProjectCanvas>, initialPrompt?: string): { success: boolean; canvasId?: string; error?: string } {
+	addCanvasCopy(onProgress?: (progress: CopyProgress) => void, canvas?: Partial<GitProjectCanvas>, initialPrompt?: string, onCanvasReady?: () => void): { success: boolean; canvasId?: string; error?: string } {
 		try {
 			// Get the root working directory
 			const rootDirectory = osSessionGetWorkingDirectory(this.root);
@@ -272,7 +272,7 @@ export class GitProject {
 			});
 
 			// Start the copy process asynchronously
-			this.populateCanvasAsync(canvasId, rootDirectory, onProgress);
+			this.populateCanvasAsync(canvasId, rootDirectory, onProgress, onCanvasReady);
 
 			return { success: true, canvasId };
 		} catch (error) {
@@ -286,7 +286,7 @@ export class GitProject {
 	/**
 	 * Populates a loading canvas with actual copy data asynchronously
 	 */
-	private async populateCanvasAsync(canvasId: string, rootDirectory: string, onProgress?: (progress: CopyProgress) => void): Promise<void> {
+	private async populateCanvasAsync(canvasId: string, rootDirectory: string, onProgress?: (progress: CopyProgress) => void, onCanvasReady?: () => void): Promise<void> {
 		try {
 			const canvas = this.canvases.find(c => c.id === canvasId);
 			if (!canvas) {
@@ -324,6 +324,11 @@ export class GitProject {
 			canvas.copyProgress = undefined;
 			this.lastModified = Date.now();
 			this.notifyListeners('canvases');
+
+			// Trigger state persistence callback
+			if (onCanvasReady) {
+				onCanvasReady();
+			}
 
 			console.log(`Canvas ${canvasId} populated successfully`);
 		} catch (error) {
@@ -629,6 +634,14 @@ export class GitProject {
 			lockedAt: canvas.lockedAt,
 			inProgressPrompts: canvas.inProgressPrompts ? new Map(canvas.inProgressPrompts) : new Map(),
 		}));
+		
+		// Fix canvases that are stuck in loading state but have osSession (indicates they finished loading)
+		project.canvases.forEach(canvas => {
+			if (canvas.lockState === 'loading' && canvas.osSession) {
+				console.log(`[GitProject] Fixing canvas ${canvas.id} stuck in loading state - setting to normal`);
+				canvas.lockState = 'normal';
+			}
+		});
 		project.currentCanvasIndex = data.currentCanvasIndex >= 0 ? data.currentCanvasIndex : (project.canvases.length > 0 ? 0 : -1);
 		
 		// Restore background agents

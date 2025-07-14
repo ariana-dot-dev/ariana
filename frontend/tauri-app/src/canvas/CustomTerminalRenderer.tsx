@@ -40,12 +40,6 @@ function groupConsecutiveSpans(items: LineItem[]): LineItem[] {
 	// Filter out empty groups that have no content
 	const filtered = grouped.filter(group => group.lexeme.length > 0 || group.width > 0);
 	
-	// DEBUG: Log the grouping result
-	console.log('DEBUG: Grouped spans:');
-	filtered.forEach((group, i) => {
-		console.log(`  Group ${i}: width=${group.width}, text="${group.lexeme}", length=${group.lexeme.length}`);
-	});
-	
 	return filtered;
 }
 
@@ -1078,8 +1072,6 @@ const Row = React.memo(
 						}
 						
 						const text = lexemeMap[item.lexeme] ? lexemeMap[item.lexeme] : item.lexeme;
-						console.log(`DEBUG: span ${index}, width=${item.width}, text="${text}", length=${text.length}`);
-						
 						return (
 							<span
 								key={index}
