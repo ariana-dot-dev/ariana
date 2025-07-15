@@ -144,6 +144,8 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 					ProcessManager.setTerminalConnection(elementId, newTerminalId);
 					addProcess(processState);
 					startTask(taskId, processId);
+					// Set current running task ID for completion tracking
+					agent.setCurrentRunningTaskId(taskId);
 				},
 			);
 
@@ -184,6 +186,8 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 					ProcessManager.setTerminalConnection(elementId, newTerminalId);
 					addProcess(processState);
 					startTask(taskId, processId);
+					// Set current running task ID for completion tracking
+					agent.setCurrentRunningTaskId(taskId);
 				},
 			);
 
@@ -241,9 +245,23 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 		if (!claudeAgent) return;
 
 		const handleTaskComplete = async (result: any) => {
-			// In the new system, task completion is handled manually via commit button
-			// This event is no longer used for auto-completion
-			console.log(`[TextAreaOnCanvas] Received taskCompleted event (ignored in manual mode):`, result);
+			// Handle automatic task completion when agent becomes available
+			console.log(`[TextAreaOnCanvas] Received taskCompleted event:`, result);
+			
+			if (result.taskId && taskManager) {
+				// Complete the task with the provided information
+				const success = taskManager.completeTask(result.taskId, result.commitHash || 'AGENT_COMPLETED');
+				
+				if (success) {
+					console.log(`[TextAreaOnCanvas] ✅ Task ${result.taskId} automatically completed - elapsed: ${result.elapsed}ms`);
+					// Trigger UI update to reflect the completion
+					setTaskManagerUpdateTrigger(prev => prev + 1);
+				} else {
+					console.log(`[TextAreaOnCanvas] ❌ Failed to complete task ${result.taskId}`);
+				}
+			} else {
+				console.log(`[TextAreaOnCanvas] ⚠️ Invalid taskCompleted event - missing taskId or taskManager`);
+			}
 		};
 
 		const handleTaskError = (error: string) => {
@@ -411,6 +429,8 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 				console.log(`[TextAreaOnCanvas] R5,R12,R14: Existing agent found - queuing prompt in Claude Code for task ${taskId}`);
 				await claudeAgent.queuePrompt(task.prompt);
 				taskManager?.startTask(taskId);
+				// Set current running task ID for completion tracking
+				claudeAgent.setCurrentRunningTaskId(taskId);
 				console.log(`[TextAreaOnCanvas] R5,R12,R14: Task ${taskId} queued successfully - will be processed after current task`);
 			}
 		} catch (error) {

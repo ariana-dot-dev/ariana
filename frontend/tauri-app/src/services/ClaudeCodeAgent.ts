@@ -65,6 +65,8 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	// Agent availability state tracking
 	private lastAgentAvailableState: boolean = false;
 	private agentAvailabilityCheckCount: number = 0;
+	// Current running task tracking for completion
+	private currentRunningTaskId: string | null = null;
 
 	constructor() {
 		super();
@@ -673,6 +675,19 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 				`${stateIcon} AGENT-AVAILABILITY: ${this.lastAgentAvailableState} → ${currentAvailability}`,
 				`(check #${this.agentAvailabilityCheckCount}, timeSinceActivity: ${timeSinceLastActivity}ms)`
 			);
+			
+			// When agent becomes available after being unavailable, emit task completion
+			if (currentAvailability && !this.lastAgentAvailableState && this.currentRunningTaskId) {
+				console.log(this.logPrefix, `🎉 TASK-COMPLETION: Emitting taskCompleted event for task ${this.currentRunningTaskId}`);
+				this.emit('taskCompleted', {
+					taskId: this.currentRunningTaskId,
+					elapsed: Date.now() - this.startTime,
+					commitHash: 'AGENT_COMPLETED', // Placeholder until we get actual commit
+					tokens: 0 // Placeholder
+				});
+				this.currentRunningTaskId = null; // Clear the task ID after completion
+			}
+			
 			this.lastAgentAvailableState = currentAvailability;
 		}
 		
@@ -724,6 +739,33 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	}
 
 	/**
+	 * Set the current running task ID for completion tracking
+	 * This should be called when a task starts running
+	 */
+	setCurrentRunningTaskId(taskId: string): void {
+		this.currentRunningTaskId = taskId;
+		console.log(this.logPrefix, `🎯 TASK-TRACKING: Set current running task ID to ${taskId}`);
+	}
+
+	/**
+	 * Clear the current running task ID
+	 */
+	clearCurrentRunningTaskId(): void {
+		const previousTaskId = this.currentRunningTaskId;
+		this.currentRunningTaskId = null;
+		if (previousTaskId) {
+			console.log(this.logPrefix, `🧹 TASK-TRACKING: Cleared current running task ID (was ${previousTaskId})`);
+		}
+	}
+
+	/**
+	 * Get the current running task ID
+	 */
+	getCurrentRunningTaskId(): string | null {
+		return this.currentRunningTaskId;
+	}
+
+	/**
 	 * Reset task state after manual commit
 	 * Called when tasks are committed manually via the commit button
 	 */
@@ -732,6 +774,7 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		this.hasSeenTryPrompt = false;
 		this.currentTask = null;
 		this.currentPrompt = null;
+		this.currentRunningTaskId = null; // Clear task tracking
 		this.isManuallyControlled = true; // Keep terminal alive but mark as manually controlled
 	}
 }
