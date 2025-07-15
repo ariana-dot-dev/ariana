@@ -62,12 +62,18 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	private isManuallyControlled: boolean = false;
 	// Visual rendering support
 	private visualEventHandler: ((events: TerminalEvent[]) => void) | null = null;
+	// Agent availability state tracking
+	private lastAgentAvailableState: boolean = false;
+	private agentAvailabilityCheckCount: number = 0;
 
 	constructor() {
 		super();
 		this.eventEmitter = new EventEmitter();
 		this.logPrefix = `[ClaudeCodeAgent-${Date.now().toString(36)}]`;
+		this.lastActivityTime = Date.now(); // Initialize to current time
+		this.lastAgentAvailableState = true; // Initially available
 		console.log(this.logPrefix, "Created new ClaudeCodeAgent instance");
+		console.log(this.logPrefix, "🟢 AGENT-AVAILABILITY: Initial state = true (newly created)");
 		console.log(
 			this.logPrefix,
 			"resizeTerminal method:",
@@ -117,6 +123,7 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 			throw new Error(error);
 		}
 
+		console.log(this.logPrefix, "🔴 AGENT-AVAILABILITY: Starting new task, agent becoming unavailable");
 		this.isRunning = true;
 		this.currentTask = prompt;
 		this.currentPrompt = prompt;
@@ -124,6 +131,7 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		this.startTime = Date.now();
 		this.screenLines = [];
 		this.hasSeenTryPrompt = false;
+		this.lastAgentAvailableState = false; // Reset to start checking again
 
 		try {
 			await this.connectTerminal(osSession);
@@ -237,6 +245,8 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	 * Clean up resources
 	 */
 	async cleanup(preserveTerminal: boolean = false): Promise<void> {
+		console.log(this.logPrefix, "🧹 AGENT-AVAILABILITY: Cleaning up agent, resetting state");
+		
 		// Only kill terminal if not preserving
 		if (this.terminalId && !preserveTerminal) {
 			try {
@@ -263,6 +273,8 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		this.isCompletingTask = false;
 		this.isPaused = false;
 		this.isManuallyControlled = false;
+		this.lastAgentAvailableState = false;
+		this.agentAvailabilityCheckCount = 0;
 		
 		this.removeAllListeners();
 	}
@@ -313,7 +325,18 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		
 		// Silently update internal state without processing
 		this.handleTerminalEvents(events);
+		const previousActivityTime = this.lastActivityTime;
 		this.lastActivityTime = Date.now();
+		
+		// Log when activity is detected (only if there was a significant gap)
+		if (Date.now() - previousActivityTime > 1000) {
+			console.log(this.logPrefix, "⚡ AGENT-ACTIVITY: New terminal events detected, updating lastActivityTime");
+			// If agent was available but now has activity, reset state to start checking again
+			if (this.lastAgentAvailableState) {
+				this.lastAgentAvailableState = false;
+				console.log(this.logPrefix, "🔄 AGENT-AVAILABILITY: Agent had activity, will start checking availability again");
+			}
+		}
 	}
 	
 	private checkCurrentState(): void {
@@ -332,6 +355,12 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 			this.processTuiInteraction(tuiLines).catch(error => {
 				console.error(this.logPrefix, "Error in TUI interaction processing:", error);
 			});
+		}
+		
+		// Only check agent availability if it's currently false (unavailable)
+		// Once it becomes true, we don't need to check again until it becomes false
+		if (!this.lastAgentAvailableState) {
+			this.isAgentAvailable();
 		}
 	}
 
@@ -503,6 +532,11 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 			throw new Error('No terminal available for queuing prompt');
 		}
 
+		console.log(this.logPrefix, "🔴 AGENT-AVAILABILITY: Queuing new prompt, resetting activity time");
+		// Reset activity time to indicate agent is now working
+		this.lastActivityTime = Date.now();
+		this.lastAgentAvailableState = false; // Reset to start checking again
+
 		// Send prompt to Claude Code (will be queued if busy)
 		for (const char of prompt) {
 			if (char === "\n") {
@@ -627,7 +661,66 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	 * Used to determine if we should queue prompts or create new agent
 	 */
 	isAgentAvailable(): boolean {
-		return !!this.terminalId && !this.isCompletingTask;
+		this.agentAvailabilityCheckCount++;
+		const currentAvailability = this.calculateAgentAvailability();
+		
+		// Log state changes
+		if (currentAvailability !== this.lastAgentAvailableState) {
+			const stateIcon = currentAvailability ? "🟢" : "🔴";
+			const timeSinceLastActivity = Date.now() - this.lastActivityTime;
+			console.log(
+				this.logPrefix,
+				`${stateIcon} AGENT-AVAILABILITY: ${this.lastAgentAvailableState} → ${currentAvailability}`,
+				`(check #${this.agentAvailabilityCheckCount}, timeSinceActivity: ${timeSinceLastActivity}ms)`
+			);
+			this.lastAgentAvailableState = currentAvailability;
+		}
+		
+		return currentAvailability;
+	}
+
+	/**
+	 * Internal method to calculate agent availability without logging
+	 */
+	private calculateAgentAvailability(): boolean {
+		if (!this.terminalId || this.isCompletingTask) {
+			return false;
+		}
+
+		const now = Date.now();
+		const timeSinceLastActivity = now - this.lastActivityTime;
+		
+		// If we haven't seen any activity for 5 seconds, check for completion
+		if (timeSinceLastActivity >= 5000) {
+			// Get current terminal lines
+			const currentLines = this.getCurrentTuiLines();
+			
+			// Check if "esc to interrupt" is present
+			const hasEscToInterrupt = currentLines.some(line =>
+				line.content.includes("esc to interrupt")
+			);
+			
+			// Log the detailed check only when we're actually evaluating for availability
+			console.log(this.logPrefix, `🔍 AVAILABILITY-CHECK: ${timeSinceLastActivity}ms since last activity, "esc to interrupt": ${hasEscToInterrupt}`);
+			
+			if (!hasEscToInterrupt) {
+				// Record the time we started checking
+				const checkStartTime = Date.now();
+				
+				// Check if any new events arrived during our check
+				const newTimeSinceLastActivity = Date.now() - this.lastActivityTime;
+				
+				// If still no new events since we started checking, agent is available
+				if (newTimeSinceLastActivity >= timeSinceLastActivity) {
+					console.log(this.logPrefix, "🔍 AVAILABILITY-CHECK: ✅ Agent should be available (no esc to interrupt, no new events)");
+					return true;
+				} else {
+					console.log(this.logPrefix, "🔍 AVAILABILITY-CHECK: ❌ New events arrived during check");
+				}
+			}
+		}
+		
+		return false;
 	}
 
 	/**
