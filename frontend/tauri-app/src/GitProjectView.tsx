@@ -346,7 +346,51 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 		}
 	};
 
-	// Delete workspace
+	// Delete workspace without confirmation (for batch operations)
+	const deleteWorkspaceNoConfirm = async (canvasId: string) => {
+		if (!selectedGitProject) return;
+		
+		try {
+			const canvas = selectedGitProject.canvases.find(c => c.id === canvasId);
+			
+			if (!canvas) return;
+			
+			// Check if we can delete even without osSession (for canvases that failed to initialize)
+			if (!canvas.osSession && canvas.lockState !== 'loading') {
+				// Canvas doesn't have a workspace yet, so we can just remove it from the project
+				selectedGitProject.removeCanvas(canvasId);
+				updateGitProject(selectedGitProject.id);
+				return;
+			}
+
+			// Handle case where osSession exists
+			if (canvas.osSession) {
+				let deletePath = "";
+				if ('Local' in canvas.osSession) {
+					deletePath = canvas.osSession.Local;
+				} else if ('Wsl' in canvas.osSession) {
+					deletePath = canvas.osSession.Wsl.working_directory;
+				}
+
+				if (!deletePath) return;
+
+				// For batch operations, directly delete from filesystem
+				await invoke("delete_path_with_os_session", { 
+					path: deletePath, 
+					osSession: canvas.osSession 
+				});
+				
+				// Remove from project
+				selectedGitProject.removeCanvas(canvasId);
+				updateGitProject(selectedGitProject.id);
+			}
+		} catch (error) {
+			console.error("Failed to delete workspace:", error);
+			alert(`Failed to delete workspace: ${error}`);
+		}
+	};
+
+	// Delete workspace with confirmation (for individual operations)
 	const deleteWorkspace = async (canvasId: string) => {
 		if (!selectedGitProject) return;
 		
@@ -492,6 +536,7 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 								selectedItemId={selectedItemId}
 								onSelectItem={handleItemSelect}
 								onRemoveCanvas={deleteWorkspace}
+								onRemoveCanvasNoConfirm={deleteWorkspaceNoConfirm}
 								onCancelAgent={cancelBackgroundAgent}
 								onForceRemoveAgent={forceRemoveBackgroundAgent}
 								onMergeCanvas={handleMergeCanvas}

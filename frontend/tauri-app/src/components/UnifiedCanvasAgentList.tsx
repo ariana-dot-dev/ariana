@@ -46,6 +46,7 @@ interface UnifiedCanvasAgentListProps {
 	selectedItemId?: string | null;
 	onSelectItem?: (id: string | null) => void;
 	onRemoveCanvas?: (canvasId: string) => void;
+	onRemoveCanvasNoConfirm?: (canvasId: string) => void;
 	onCancelAgent?: (agentId: string) => void;
 	onForceRemoveAgent?: (agentId: string) => Promise<void>;
 	onMergeCanvas?: (canvasId: string) => void;
@@ -141,6 +142,7 @@ export const UnifiedCanvasAgentList: React.FC<UnifiedCanvasAgentListProps> = ({
 	selectedItemId,
 	onSelectItem,
 	onRemoveCanvas,
+	onRemoveCanvasNoConfirm,
 	onCancelAgent,
 	onForceRemoveAgent,
 	onMergeCanvas,
@@ -150,6 +152,40 @@ export const UnifiedCanvasAgentList: React.FC<UnifiedCanvasAgentListProps> = ({
 	const [contextMenu, setContextMenu] = useState<{x: number, y: number, item: UnifiedListItem} | null>(null);
 	const contextMenuRef = useRef<HTMLDivElement>(null);
 	const [hoveredCanvasId, setHoveredCanvasId] = useState<string | null>(null);
+	const [selectedCanvases, setSelectedCanvases] = useState<Set<string>>(new Set());
+	const [lastClickedCanvas, setLastClickedCanvas] = useState<string | null>(null);
+
+	// Handle canvas selection
+	const handleCanvasClick = (canvasId: string, event: React.MouseEvent) => {
+		event.stopPropagation();
+		
+		if (event.shiftKey && lastClickedCanvas) {
+			// Shift-click: range selection
+			const currentIndex = canvases.findIndex(c => c.id === canvasId);
+			const lastIndex = canvases.findIndex(c => c.id === lastClickedCanvas);
+			
+			if (currentIndex !== -1 && lastIndex !== -1) {
+				const startIndex = Math.min(currentIndex, lastIndex);
+				const endIndex = Math.max(currentIndex, lastIndex);
+				
+				const rangeCanvases = canvases.slice(startIndex, endIndex + 1);
+				
+				setSelectedCanvases(prev => {
+					const newSet = new Set(prev);
+					rangeCanvases.forEach(canvas => newSet.add(canvas.id));
+					return newSet;
+				});
+				// Update last clicked canvas and navigate to the clicked canvas
+				setLastClickedCanvas(canvasId);
+				onSelectItem?.(canvasId);
+			}
+		} else {
+			// Regular click: select only this canvas and navigate
+			setSelectedCanvases(new Set([canvasId]));
+			setLastClickedCanvas(canvasId);
+			onSelectItem?.(canvasId);
+		}
+	};
 
 	// Create separate lists
 	const canvasItems: UnifiedListItem[] = canvases.map(createCanvasItem);
@@ -198,6 +234,18 @@ export const UnifiedCanvasAgentList: React.FC<UnifiedCanvasAgentListProps> = ({
 		setContextMenu(null);
 	};
 
+	const handleRemoveMultipleCanvases = () => {
+		setContextMenu(null);
+		
+		if (onRemoveCanvasNoConfirm && selectedCanvases.size > 0) {
+			const canvasIds = Array.from(selectedCanvases);
+			canvasIds.forEach(canvasId => {
+				onRemoveCanvasNoConfirm(canvasId);
+			});
+			setSelectedCanvases(new Set());
+		}
+	};
+
 	const handleMergeCanvas = (canvasId: string) => {
 		if (onMergeCanvas) {
 			onMergeCanvas(canvasId);
@@ -231,66 +279,82 @@ export const UnifiedCanvasAgentList: React.FC<UnifiedCanvasAgentListProps> = ({
 					{/* Canvas List Container with max height */}
 					<div 
 						className="overflow-y-auto"
-						style={{ maxHeight: 'calc(97vh - 16rem)' }}
+						style={{ maxHeight: 'calc(100vh - 16rem)' }}
 					>
-						<SingleChoiceList
-							className="!w-full"
-							buttonProps={{
-								className: '!w-full !max-w-full'
-							}}
-							items={canvasItems.reverse()}
-							selectedItemId={selectedItemId}
-							onSelectItem={onSelectItem}
-							getItemId={(item) => item.id}
-							onContextMenu={handleContextMenu}
-							renderItem={(item, isSelected) => {
+						<div className="flex flex-col w-full max-w-full">
+							{canvasItems.reverse().map((item, index) => {
 								if (isCanvasItem(item)) {
 									const canvas = item.data;
 									const canvasIndex = canvases.indexOf(canvas);
 									const canvasName = generateCanvasName(canvas, canvasIndex);
+									const isSelected = selectedItemId === item.id;
+									const isMultiSelected = selectedCanvases.has(item.id) && !isSelected;
 
 									const taskInfo = getCanvasTaskInfo(canvas);
 									const isHovered = hoveredCanvasId === item.id;
 									const shouldShowMarquee = !!(taskInfo.prompt && (taskInfo.isLoading || taskInfo.isPrompting || isHovered));
 									
 									return (
-										<div 
-											className="flex items-center gap-2 w-full"
-											onMouseEnter={() => setHoveredCanvasId(item.id)}
-											onMouseLeave={() => setHoveredCanvasId(null)}
+										<button
+											key={item.id}
+											onClick={() => {
+												const event = window.event as MouseEvent;
+												if (event) {
+													const syntheticEvent = {
+														stopPropagation: () => {},
+														preventDefault: () => {},
+														shiftKey: event.shiftKey
+													} as React.MouseEvent;
+													handleCanvasClick(item.id, syntheticEvent);
+												}
+											}}
+											onContextMenu={(e) => handleContextMenu(e, item.id)}
+											className={`w-full max-w-full group relative flex flex-col text-left px-4 py-3 text-sm first:rounded-t-xl last:rounded-b-xl transition-colors border-(length:--border) not-last:border-b-transparent not-first:border-t-transparent ${
+												isSelected
+													? "bg-[var(--acc-200-30)] opacity-100 border-[var(--acc-300)]"
+													: isMultiSelected
+													? "bg-[var(--acc-200-30)] opacity-80 border-[var(--acc-300)]"
+													: "even:bg-[var(--base-100-40)] odd:bg-[var(--base-100-80)] cursor-pointer border-dashed opacity-50 hover:opacity-100 hover:border-[var(--acc-300)] hover:not-last:border-b-transparent hover:not-first:border-t-transparent hover:bg-[var(--acc-200-40)] border-[var(--base-300)]"
+											}`}
 										>
-											<div className="flex-1 min-w-0">
-												{taskInfo.prompt ? (
-													<Marquee 
-														text={taskInfo.prompt}
-														isActive={shouldShowMarquee}
-														className="text-xs text-[var(--base-600)]"
-													/>
-												) : (
-													<div className="text-xs text-[var(--base-600)]">
-														{canvasName}
-													</div>
-												)}
+											<div 
+												className="flex items-center gap-2 w-full cursor-pointer"
+												onMouseEnter={() => setHoveredCanvasId(item.id)}
+												onMouseLeave={() => setHoveredCanvasId(null)}
+											>
+												<div className="flex-1 min-w-0">
+													{taskInfo.prompt ? (
+														<Marquee 
+															text={taskInfo.prompt}
+															isActive={shouldShowMarquee}
+															className="text-xs text-[var(--base-600)]"
+														/>
+													) : (
+														<div className="text-xs text-[var(--base-600)]">
+															{canvasName}
+														</div>
+													)}
+												</div>
+												
+												{/* Status indicator */}
+												<div className="flex-shrink-0">
+													{canvas.lockState !== 'normal' ? (
+														<LockStateIndicator lockState={canvas.lockState} />
+													) : taskInfo.isLoading ? (
+														<div className="animate-spin h-3 w-3 border-2 border-[var(--acc-600)] border-t-transparent rounded-full" />
+													) : taskInfo.isPrompting ? (
+														<span className="text-[var(--acc-600)] text-xs">Prompting...</span>
+													) : taskInfo.isCompleted ? (
+														<span className="text-[var(--positive-600)] text-xs">✓</span>
+													) : null}
+												</div>
 											</div>
-											
-											{/* Status indicator */}
-											<div className="flex-shrink-0">
-												{canvas.lockState !== 'normal' ? (
-													<LockStateIndicator lockState={canvas.lockState} />
-												) : taskInfo.isLoading ? (
-													<div className="animate-spin h-3 w-3 border-2 border-[var(--acc-600)] border-t-transparent rounded-full" />
-												) : taskInfo.isPrompting ? (
-													<span className="text-[var(--acc-600)] text-xs">Prompting...</span>
-												) : taskInfo.isCompleted ? (
-													<span className="text-[var(--positive-600)] text-xs">✓</span>
-												) : null}
-											</div>
-										</div>
+										</button>
 									);
 								}
 								return null;
-							}}
-						/>
+							})}
+						</div>
 					</div>
 					
 					{/* New Edit Button */}
@@ -346,6 +410,14 @@ export const UnifiedCanvasAgentList: React.FC<UnifiedCanvasAgentListProps> = ({
 									className="w-fit min-w-full cursor-pointer px-3 py-2 text-left text-sm hover:bg-[var(--acc-200)] transition-colors"
 								>
 									🔄 Merge to Root
+								</button>
+							)}
+							{selectedCanvases.size > 1 && (
+								<button
+									onClick={handleRemoveMultipleCanvases}
+									className="w-fit min-w-full cursor-pointer px-3 py-2 text-left text-sm hover:bg-[var(--negative-200)] text-[var(--negative-600)] hover:text-[var(--negative-700)] transition-colors"
+								>
+									🗑️ Remove Selected ({selectedCanvases.size})
 								</button>
 							)}
 							{canvases.length > 1 && (
