@@ -163,7 +163,7 @@ export const TaskComponent: React.FC<TaskComponentProps> = ({
                                  task.commitHash.length > 0 &&
                                  canEdit;
 
-  const showDeleteButton = task.status === 'prompting' && canEdit && onDelete;
+  const showDeleteButton = task.status === 'prompting' && canEdit && onDelete && task.prompt.trim() !== '';
 
   const isEditable = task.status === 'prompting' && canEdit;
 

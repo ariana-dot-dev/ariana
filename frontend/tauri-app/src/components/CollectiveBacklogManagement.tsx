@@ -31,8 +31,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 	const [filters, setFilters] = useState({
 		status: '',
 		priority: '',
-		owner: '',
-		overdue: false
+		owner: ''
 	});
 	const [sortConfig, setSortConfig] = useState<{
 		key: keyof BacklogItem;
@@ -703,11 +702,6 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 				item.owner_email.toLowerCase().includes(filters.owner.toLowerCase())
 			);
 		}
-		if (filters.overdue) {
-			filtered = filtered.filter(item => 
-				new Date(item.due_date) < new Date() && item.status !== 'finished'
-			);
-		}
 		
 		// Apply sorting
 		filtered.sort((a, b) => {
@@ -994,9 +988,6 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 					<div className="flex items-center justify-between">
 						<div>
 							<h1 className="text-xl font-semibold text-[var(--base-800)]">Collective Backlog Management</h1>
-							<p className="text-sm text-[var(--base-600)] mt-1">
-								Manage all backlog items across repositories
-							</p>
 						</div>
 						{onClose && (
 							<button
@@ -1042,9 +1033,6 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 					<div className="flex items-center justify-between">
 						<div>
 							<h1 className="text-xl font-semibold text-[var(--base-800)]">Collective Backlog Management</h1>
-							<p className="text-sm text-[var(--base-600)] mt-1">
-								Manage all backlog items across repositories
-							</p>
 						</div>
 						{onClose && (
 							<button
@@ -1075,9 +1063,6 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 				<div className="flex items-center justify-between">
 					<div>
 						<h1 className="text-xl font-semibold text-[var(--base-800)]">Collective Backlog Management</h1>
-						<p className="text-sm text-[var(--base-600)] mt-1">
-							Manage all backlog items across repositories
-						</p>
 					</div>
 					{onClose && (
 						<button
@@ -1094,7 +1079,6 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 				{/* Filters and Controls */}
 				<div className="bg-[var(--base-100)] rounded-lg p-4 border border-[var(--base-300)]">
 					<div className="flex flex-wrap gap-4 items-center">
-						<h3 className="text-sm font-medium text-[var(--base-700)]">Filters:</h3>
 						
 						{/* Status Filter */}
 						<select
@@ -1132,16 +1116,6 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 							))}
 						</select>
 
-						{/* Overdue Filter */}
-						<label className="flex items-center gap-2 text-sm text-[var(--base-700)]">
-							<input
-								type="checkbox"
-								checked={filters.overdue}
-								onChange={(e) => setFilters(prev => ({ ...prev, overdue: e.target.checked }))}
-								className="rounded"
-							/>
-							Overdue Only
-						</label>
 
 						{/* Refresh Button */}
 						<button
@@ -1265,7 +1239,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 											Owner {sortConfig.key === 'owner_name' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
 										</th>
 										<th 
-											className="px-4 py-3 text-left font-medium text-[var(--base-700)] cursor-pointer hover:bg-[var(--base-300)] transition-colors"
+											className="px-4 py-3 text-left font-medium text-[var(--base-700)] cursor-pointer hover:bg-[var(--base-300)] transition-colors hidden"
 											onClick={() => handleSort('created_at')}
 											style={{ width: '8%' }}
 										>
@@ -1385,15 +1359,12 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 																{item.owner_name}
 																{currentUser && item.owner === currentUser.id && <span className="ml-1 text-xs text-[var(--acc-600)]">(You)</span>}
 															</div>
-															<div className="text-xs text-[var(--base-500)] break-words line-clamp-1">
-																{item.owner_email}
-															</div>
 														</div>
 													)}
 												</td>
 
 												{/* Created Date */}
-												<td className="px-4 py-3 text-[var(--base-600)]">
+												<td className="px-4 py-3 text-[var(--base-600)] hidden">
 													{formatDate(item.created_at)}
 												</td>
 
@@ -1440,11 +1411,6 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 															onClick={() => startCellEdit(item, 'due_date')}
 														>
 															{formatDate(item.due_date)}
-															{isOverdue(item.due_date, item.status) && (
-																<span className="ml-1 text-xs bg-[var(--negative-100)] text-[var(--negative-700)] px-1 rounded">
-																	OVERDUE
-																</span>
-															)}
 														</div>
 													)}
 												</td>
@@ -1580,12 +1546,6 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 									{sortedAndFilteredItems.length}
 								</div>
 								<div className="text-sm text-[var(--base-600)]">Total Items</div>
-							</div>
-							<div>
-								<div className="text-2xl font-semibold text-[var(--negative-600)]">
-									{sortedAndFilteredItems.filter(item => isOverdue(item.due_date, item.status)).length}
-								</div>
-								<div className="text-sm text-[var(--base-600)]">Overdue</div>
 							</div>
 							<div>
 								<div className="text-2xl font-semibold text-[var(--acc-600)]">

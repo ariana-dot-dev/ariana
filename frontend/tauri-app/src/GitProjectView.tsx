@@ -371,7 +371,7 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 	};
 
 	// Delete workspace
-	const deleteWorkspace = async (canvasId: string) => {
+	const deleteWorkspace = async (canvasId: string, showConfirmation: boolean = true, forceDelete: boolean = false) => {
 		if (!selectedGitProject) return;
 		
 		try {
@@ -382,11 +382,12 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 			// Check if we can delete even without osSession (for canvases that failed to initialize)
 			if (!canvas.osSession && canvas.lockState !== 'loading') {
 				// Canvas doesn't have a workspace yet, so we can just remove it from the project
-				const confirmed = window.confirm(`Are you sure you want to remove this agent? It doesn't appear to have a workspace created yet.`);
-				if (confirmed) {
-					selectedGitProject.removeCanvas(canvasId);
-					updateGitProject(selectedGitProject.id);
+				if (showConfirmation) {
+					const confirmed = window.confirm(`Are you sure you want to remove this agent? It doesn't appear to have a workspace created yet.`);
+					if (!confirmed) return;
 				}
+				selectedGitProject.removeCanvas(canvasId);
+				updateGitProject(selectedGitProject.id);
 				return;
 			}
 
@@ -401,8 +402,18 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 
 				if (!deletePath) return;
 
-				const confirmed = window.confirm(`Are you sure you want to permanently delete this workspace and all its files? This action cannot be undone.\n\nPath: ${deletePath}`);
-				if (confirmed) {
+				if (showConfirmation) {
+					const confirmed = window.confirm(`Are you sure you want to permanently delete this workspace and all its files? This action cannot be undone.\n\nPath: ${deletePath}`);
+					if (!confirmed) return;
+				}
+
+				if (forceDelete) {
+					// Force delete from filesystem
+					await invoke("delete_path_with_os_session", { 
+						path: deletePath, 
+						osSession: canvas.osSession 
+					});
+				} else {
 					// Try to return to pool first (for reuse if possible)
 					try {
 						await selectedGitProject.returnCanvasCopy(canvasId);
@@ -413,11 +424,11 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 							osSession: canvas.osSession 
 						});
 					}
-					
-					// Remove from project
-					selectedGitProject.removeCanvas(canvasId);
-					updateGitProject(selectedGitProject.id);
 				}
+				
+				// Remove from project
+				selectedGitProject.removeCanvas(canvasId);
+				updateGitProject(selectedGitProject.id);
 			}
 		} catch (error) {
 			console.error("Failed to delete workspace:", error);
@@ -493,14 +504,6 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 						</div>
 						
 						<div className="flex flex-col gap-2 flex-1 h-0 w-full overflow-y-auto">
-							<div className="flex gap-2">
-								<button
-									onClick={handleCreateCanvas}
-									className="flex-1 px-3 py-2 text-sm border-[var(--base-300)] border-dashed hover:border-solid border-(length:--border) cursor-pointer hover:bg-[var(--acc-100-70)] text-[var(--acc-800-70)] rounded-lg transition-colors flex items-center justify-center gap-2"
-								>
-									<span>+ new edit</span>
-								</button>
-							</div>
 
 							{/* Agent Overview Item */}
 							<div className="flex flex-col gap-1">
@@ -524,11 +527,13 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 								selectedItemId={selectedItemId}
 								onSelectItem={handleItemSelect}
 								onRemoveCanvas={deleteWorkspace}
+								onRemoveCanvasNoConfirm={(canvasId) => deleteWorkspace(canvasId, false, true)}
 								onCancelAgent={cancelBackgroundAgent}
 								onForceRemoveAgent={forceRemoveBackgroundAgent}
 								onMergeCanvas={handleMergeCanvas}
 								onShowInExplorer={handleShowInExplorer}
 								onOpenTerminal={handleOpenTerminal}
+								onCreateCanvas={handleCreateCanvas}
 							/>
 						</div>
 					</>
