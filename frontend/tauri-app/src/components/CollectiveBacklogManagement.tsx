@@ -766,12 +766,6 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 		return new Date(dueDate) < new Date() && status !== 'finished';
 	};
 
-	// For collective backlog management, all authenticated users should be able to edit items
-	// This represents project-level permissions rather than owner-level permissions
-	const canEditItem = (item: BacklogItem) => {
-		return isAuthenticated; // All authenticated users can edit in collective management
-	};
-
 	// Format date
 	const formatDate = (dateString: string) => {
 		return new Date(dateString).toLocaleDateString('en-US', {
@@ -917,10 +911,10 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 				// Check each task's prompts
 				Object.keys(updated).forEach(taskIdStr => {
 					const taskId = parseInt(taskIdStr);
-					const prompts = updated[taskId];
+					const prompts = updated[taskId]!;
 					
 					Object.keys(prompts).forEach(promptId => {
-						const prompt = prompts[promptId];
+						const prompt = prompts[promptId]!;
 						const canvas = canvases.find(c => c.id === prompt.agentId);
 						
 						console.log(`🔄 [CANVAS-MONITOR] Checking prompt ${promptId} for agent ${prompt.agentId}:`, {
