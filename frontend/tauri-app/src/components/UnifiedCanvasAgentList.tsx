@@ -5,6 +5,7 @@ import { GitProjectCanvas, CanvasLockState } from '../types/GitProject';
 import { BackgroundAgent, BackgroundAgentStatus } from '../types/BackgroundAgent';
 import { BackgroundAgentsList } from './BackgroundAgentsList';
 import { Task } from '../types/Task';
+import { cn } from '../utils';
 
 // Marquee component for scrolling text
 const Marquee: React.FC<{ text: string; isActive: boolean; className?: string }> = ({ text, isActive, className = '' }) => {
@@ -50,6 +51,7 @@ interface UnifiedCanvasAgentListProps {
 	onForceRemoveAgent?: (agentId: string) => Promise<void>;
 	onMergeCanvas?: (canvasId: string) => void;
 	onShowInExplorer?: (itemId: string) => void;
+	onOpenTerminal?: (canvasId: string) => void;
 }
 
 const StatusIndicator: React.FC<{ status: BackgroundAgentStatus }> = ({ status }) => {
@@ -143,7 +145,8 @@ export const UnifiedCanvasAgentList: React.FC<UnifiedCanvasAgentListProps> = ({
 	onCancelAgent,
 	onForceRemoveAgent,
 	onMergeCanvas,
-	onShowInExplorer
+	onShowInExplorer,
+	onOpenTerminal
 }) => {
 	const [contextMenu, setContextMenu] = useState<{x: number, y: number, item: UnifiedListItem} | null>(null);
 	const contextMenuRef = useRef<HTMLDivElement>(null);
@@ -266,8 +269,32 @@ export const UnifiedCanvasAgentList: React.FC<UnifiedCanvasAgentListProps> = ({
 											)}
 										</div>
 										
-										{/* Status indicator */}
-										<div className="flex-shrink-0">
+										{/* Terminal button (always takes space, visible on hover) */}
+										<div className="flex-shrink-0 flex items-center gap-2">
+											{/* Terminal button */}
+											<button
+												onClick={(e) => {
+													e.stopPropagation();
+													if (onOpenTerminal && canvas.osSession) {
+														onOpenTerminal(item.id);
+													}
+												}}
+												className={cn(
+													"p-1 rounded transition-all duration-200",
+													"hover:bg-[var(--acc-200)]",
+													isHovered && canvas.osSession ? "opacity-100" : "opacity-0",
+													!canvas.osSession && "cursor-not-allowed"
+												)}
+												disabled={!canvas.osSession}
+												title={canvas.osSession ? "Open Terminal" : "Canvas still loading..."}
+											>
+												<svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+													<path d="M2 4L6 8L2 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+													<path d="M8 12H14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+												</svg>
+											</button>
+											
+											{/* Status indicator */}
 											{canvas.lockState !== 'normal' ? (
 												<LockStateIndicator lockState={canvas.lockState} />
 											) : taskInfo.isLoading ? (

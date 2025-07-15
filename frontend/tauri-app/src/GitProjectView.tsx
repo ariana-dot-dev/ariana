@@ -7,6 +7,7 @@ import { useStore } from "./state";
 import { UnifiedCanvasAgentList } from "./components/UnifiedCanvasAgentList";
 import { AgentOverview } from "./components/AgentOverview";
 import { osSessionGetWorkingDirectory } from "./bindings/os";
+import { CustomTerminal } from "./canvas/CustomTerminal";
 
 interface GitProjectViewProps {
 	onGoHome?: () => void;
@@ -71,6 +72,29 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 				}
 			}
 			return;
+		}
+	};
+
+	const handleOpenTerminal = (canvasId: string) => {
+		if (!selectedGitProject) return;
+		
+		const canvas = selectedGitProject.canvases.find(c => c.id === canvasId);
+		if (!canvas?.osSession) return;
+		
+		// Add a custom terminal element to the canvas
+		const terminalElement = CustomTerminal.canvasElement(canvas.osSession, 1);
+		
+		// Update canvas elements
+		const newElements = [...canvas.elements, terminalElement];
+		selectedGitProject.updateCanvasElements(canvasId, newElements);
+		
+		// Switch to this canvas
+		const canvasIndex = selectedGitProject.canvases.findIndex(c => c.id === canvasId);
+		if (canvasIndex !== -1) {
+			selectedGitProject.setCurrentCanvasIndex(canvasIndex);
+			updateGitProject(selectedGitProject.id);
+			setSelectedItemId(canvasId);
+			setViewMode('canvas');
 		}
 	};
 
@@ -504,6 +528,7 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 								onForceRemoveAgent={forceRemoveBackgroundAgent}
 								onMergeCanvas={handleMergeCanvas}
 								onShowInExplorer={handleShowInExplorer}
+								onOpenTerminal={handleOpenTerminal}
 							/>
 						</div>
 					</>

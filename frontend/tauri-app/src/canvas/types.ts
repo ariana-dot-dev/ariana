@@ -70,6 +70,8 @@ export class CanvasElement {
 			return this.kind.fileTree.targets();
 		} else if ("textArea" in this.kind) {
 			return this.kind.textArea.targets();
+		} else if ("customTerminal" in this.kind) {
+			return this.kind.customTerminal.targets();
 		}
 		throw new Error("Invalid kind");
 	}

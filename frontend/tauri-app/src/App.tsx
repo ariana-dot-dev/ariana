@@ -25,6 +25,7 @@ import { useAuth } from "./hooks/useAuth";
 import { CustomTerminal } from "./canvas/CustomTerminal";
 
 const appWindow = getCurrentWebviewWindow();
+// const appWindow = undefined;
 
 export const InterpreterContext = React.createContext<Interpreter | null>(null);
 
@@ -80,19 +81,19 @@ function App() {
 
 	useEffect(() => {
 		// Check if window is maximized
-		appWindow.isMaximized().then(setIsMaximized);
+		appWindow?.isMaximized().then(setIsMaximized);
 	}, []);
 
-	const handleMinimize = () => appWindow.minimize();
+	const handleMinimize = () => appWindow?.minimize();
 	const handleMaximize = () => {
 		if (isMaximized) {
-			appWindow.unmaximize();
+			appWindow?.unmaximize();
 		} else {
-			appWindow.maximize();
+			appWindow?.maximize();
 		}
 		setIsMaximized(!isMaximized);
 	};
-	const handleClose = () => appWindow.close();
+	const handleClose = () => appWindow?.close();
 
 	const openFileTree = async () => {
 		if (selectedGitProjectId !== null) {

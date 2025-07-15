@@ -20,6 +20,7 @@ interface CustomTerminalOnCanvasProps {
 	isDragging: boolean;
 	onTerminalReady?: (terminalId: string) => void;
 	onTerminalError?: (error: string) => void;
+	onCustomTerminalUpdate?: () => void;
 }
 
 const CustomTerminalOnCanvas: React.FC<CustomTerminalOnCanvasProps> = ({
@@ -27,10 +28,12 @@ const CustomTerminalOnCanvas: React.FC<CustomTerminalOnCanvasProps> = ({
 	onDragStart: propOnDragStart,
 	onDragEnd: propOnDragEnd,
 	onDrag: propOnDrag,
+	onRemoveElement,
 	isDragTarget,
 	isDragging,
 	onTerminalReady,
 	onTerminalError,
+	onCustomTerminalUpdate,
 }) => {
 	const { cell, element } = layout;
 	const [isHovered, setIsHovered] = useState(false);
@@ -113,11 +116,48 @@ const CustomTerminalOnCanvas: React.FC<CustomTerminalOnCanvasProps> = ({
 		>
 			<div
 				className={cn(
-					"w-full h-full rounded-md bg-gradient-to-b from-bg-[var(--acc-900)]/30 to-bg-[var(--base-400)]/30 backdrop-blur-md relative overflow-hidden",
+					"w-full h-full rounded-md bg-gradient-to-b from-bg-[var(--acc-900)]/30 to-bg-[var(--base-400)]/30 backdrop-blur-md relative overflow-hidden group",
 				)}
 			>
-				{/* Connection status indicator */}
-				<div className="absolute top-2 right-2 z-10">
+				{/* Control buttons */}
+				<div className="absolute top-2 right-2 z-10 flex items-center gap-2">
+					{/* Layout toggle button */}
+					<button
+						onClick={(e) => {
+							e.stopPropagation();
+							if ("customTerminal" in element.kind) {
+								const terminal = element.kind.customTerminal;
+								// Toggle layout orientation
+								terminal.isHorizontal = !terminal.isHorizontal;
+								// Trigger canvas re-layout
+								if (onCustomTerminalUpdate) {
+									onCustomTerminalUpdate();
+								}
+							}
+						}}
+						className={cn(
+							"p-1 rounded transition-all duration-200",
+							"hover:bg-[var(--acc-200)] bg-[var(--base-100)]/80",
+							"opacity-0 group-hover:opacity-100"
+						)}
+						title={element.kind && "customTerminal" in element.kind && element.kind.customTerminal.isHorizontal ? "Switch to Vertical" : "Switch to Horizontal"}
+					>
+						{element.kind && "customTerminal" in element.kind && element.kind.customTerminal.isHorizontal ? (
+							// Horizontal layout icon
+							<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+								<rect x="2" y="2" width="12" height="5" stroke="currentColor" strokeWidth="1.5" rx="1"/>
+								<rect x="2" y="9" width="12" height="5" stroke="currentColor" strokeWidth="1.5" rx="1"/>
+							</svg>
+						) : (
+							// Vertical layout icon
+							<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+								<rect x="2" y="2" width="5" height="12" stroke="currentColor" strokeWidth="1.5" rx="1"/>
+								<rect x="9" y="2" width="5" height="12" stroke="currentColor" strokeWidth="1.5" rx="1"/>
+							</svg>
+						)}
+					</button>
+					
+					{/* Connection status indicator */}
 					<div
 						className={cn(
 							"w-2 h-2 rounded-full",
@@ -126,6 +166,24 @@ const CustomTerminalOnCanvas: React.FC<CustomTerminalOnCanvasProps> = ({
 								: "bg-[var(--negative-400)]",
 						)}
 					/>
+					
+					{/* Close button */}
+					<button
+						onClick={(e) => {
+							e.stopPropagation();
+							onRemoveElement(element.id);
+						}}
+						className={cn(
+							"p-1 rounded transition-all duration-200",
+							"hover:bg-[var(--negative-200)] bg-[var(--base-100)]/80",
+							"opacity-0 group-hover:opacity-100"
+						)}
+						title="Close Terminal"
+					>
+						<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+							<path d="M4 4L12 12M12 4L4 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+						</svg>
+					</button>
 				</div>
 
 				{/* Custom Terminal Renderer */}

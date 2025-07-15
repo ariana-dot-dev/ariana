@@ -4,9 +4,11 @@ import { CanvasElement, type ElementTargets } from "./types";
 
 export class CustomTerminal {
 	private _osSession: OsSession
+	public isHorizontal: boolean = false
 
-	constructor(osSession: OsSession) {
+	constructor(osSession: OsSession, isHorizontal: boolean = false) {
 		this._osSession = osSession;
+		this.isHorizontal = isHorizontal;
 	}
 
 	get osSession() {
@@ -14,9 +16,11 @@ export class CustomTerminal {
 	}
 
 	targets(): ElementTargets {
+		// Change aspect ratio based on orientation
+		const aspectRatio = this.isHorizontal ? 21 / 9 : 16 / 9;
 		return {
 			size: "large",
-			aspectRatio: 16 / 9, // Terminal aspect ratio
+			aspectRatio: aspectRatio,
 			area: "center",
 		};
 	}

@@ -283,6 +283,16 @@ const Canvas: React.FC<CanvasProps> = ({
 		[elements, onElementsChange],
 	);
 
+	const handleCustomTerminalUpdate = useCallback(
+		() => {
+			// Force re-optimization by calling optimizeElements directly
+			// This bypasses the React dependency system to ensure immediate re-calculation
+			console.log("CustomTerminal layout changed, forcing grid re-optimization");
+			optimizeElements();
+		},
+		[elements, canvasSize, stabilityWeight],
+	);
+
 	const handleRemoveElement = useCallback(
 		(elementId: string) => {
 			const newElements = elements.filter((el) => el.id !== elementId);
@@ -331,6 +341,7 @@ const Canvas: React.FC<CanvasProps> = ({
 							onDragEnd={handleDragEnd}
 							onDrag={layout.element === draggedElement ? handleDrag : () => {}}
 							onRemoveElement={handleRemoveElement}
+							onCustomTerminalUpdate={handleCustomTerminalUpdate}
 							isDragTarget={layout.element === dragTarget}
 							isDragging={layout.element === draggedElement}
 						/>
