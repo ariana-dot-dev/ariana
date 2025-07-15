@@ -1,10 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { SingleChoiceList } from './ChoiceList';
 import { UnifiedListItem, isCanvasItem, isBackgroundAgentItem, createCanvasItem, createBackgroundAgentItem } from '../types/UnifiedListTypes';
 import { GitProjectCanvas, CanvasLockState } from '../types/GitProject';
-import { BackgroundAgent, BackgroundAgentStatus } from '../types/BackgroundAgent';
+import { BackgroundAgent } from '../types/BackgroundAgent';
 import { BackgroundAgentsList } from './BackgroundAgentsList';
-import { Task } from '../types/Task';
 import { cn } from '../utils';
 
 // Marquee component for scrolling text
@@ -55,30 +53,13 @@ interface UnifiedCanvasAgentListProps {
 	onCreateCanvas?: () => string | undefined;
 }
 
-const StatusIndicator: React.FC<{ status: BackgroundAgentStatus }> = ({ status }) => {
-	const getStatusDisplay = () => {
-		switch (status) {
-			case 'queued': return { text: 'Queued', color: 'text-[var(--base-600)]' };
-			case 'preparation': return { text: 'Preparing...', color: 'text-[var(--acc-600)]' };
-			case 'running': return { text: 'Running...', color: 'text-[var(--positive-600)]' };
-			case 'completed': return { text: 'Completed', color: 'text-[var(--positive-600)]' };
-			case 'failed': return { text: 'Failed', color: 'text-[var(--negative-600)]' };
-			case 'cancelled': return { text: 'Cancelled', color: 'text-[var(--base-500)]' };
-			default: return { text: 'Unknown', color: 'text-[var(--base-500)]' };
-		}
-	};
-
-	const { text, color } = getStatusDisplay();
-	return <span className={`text-xs ${color}`}>{text}</span>;
-};
-
 const hasCompletedTasks = (canvas: GitProjectCanvas): boolean => {
 	const tasks = canvas.taskManager.getTasks();
 	return tasks.some(task => task.status === 'completed');
 };
 
-const generateCanvasName = (canvas: GitProjectCanvas, canvasIndex: number): string => {
-	return `Canvas ${canvasIndex + 1}`;
+const generateCanvasName = (_canvas: GitProjectCanvas, canvasIndex: number): string => {
+	return `Agent ${canvasIndex + 1}`;
 };
 
 const getCanvasTaskInfo = (canvas: GitProjectCanvas): { prompt: string; isLoading: boolean; isCompleted: boolean; isPrompting: boolean } => {
@@ -110,7 +91,7 @@ const getCanvasTaskInfo = (canvas: GitProjectCanvas): { prompt: string; isLoadin
 		// Get the last completed task
 		const completedTasks = tasks.filter(task => task.status === 'completed');
 		if (completedTasks.length > 0) {
-			const lastTask = completedTasks[completedTasks.length - 1];
+			const lastTask = completedTasks[completedTasks.length - 1]!;
 			let prompt = lastTask.prompt.trim();
 			prompt = prompt.replace(/\([^)]*\)/g, '').trim();
 			return { prompt, isLoading: false, isCompleted: true, isPrompting: false };
@@ -203,10 +184,11 @@ export const UnifiedCanvasAgentList: React.FC<UnifiedCanvasAgentListProps> = ({
 
 		if (contextMenu) {
 			document.addEventListener('mousedown', handleClickOutside);
-			return () => {
-				document.removeEventListener('mousedown', handleClickOutside);
-			};
 		}
+
+		return () => {
+			document.removeEventListener('mousedown', handleClickOutside);
+		};
 	}, [contextMenu]);
 
 	const handleContextMenu = (e: React.MouseEvent, itemId: string) => {
@@ -284,7 +266,7 @@ export const UnifiedCanvasAgentList: React.FC<UnifiedCanvasAgentListProps> = ({
 						style={{ maxHeight: 'calc(100vh - 16rem)' }}
 					>
 						<div className="flex flex-col w-full max-w-full">
-							{canvasItems.reverse().map((item, index) => {
+							{canvasItems.reverse().map((item) => {
 								if (isCanvasItem(item)) {
 									const canvas = item.data;
 									const canvasIndex = canvases.indexOf(canvas);
@@ -297,7 +279,7 @@ export const UnifiedCanvasAgentList: React.FC<UnifiedCanvasAgentListProps> = ({
 									const shouldShowMarquee = !!(taskInfo.prompt && (taskInfo.isLoading || taskInfo.isPrompting || isHovered));
 
 									return (
-										<button
+										<div
 											key={item.id}
 											onClick={() => {
 												const event = window.event as MouseEvent;
@@ -373,7 +355,7 @@ export const UnifiedCanvasAgentList: React.FC<UnifiedCanvasAgentListProps> = ({
 													) : null}
 												</div>
 											</div>
-										</button>
+										</div>
 									);
 								}
 								return null;
@@ -397,7 +379,7 @@ export const UnifiedCanvasAgentList: React.FC<UnifiedCanvasAgentListProps> = ({
 									<circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none" />
 									<path d="M12 8v8m-4-4h8" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
 								</svg>
-								<span>new edit</span>
+								<span>Create New Agent</span>
 							</button>
 						</div>
 					)}

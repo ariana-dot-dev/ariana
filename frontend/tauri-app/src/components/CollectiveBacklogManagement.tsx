@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import BacklogService, { BacklogItem, BacklogFilters } from '../services/BacklogService';
+import BacklogService, { BacklogItem } from '../services/BacklogService';
 import AuthService from '../services/AuthService';
 import { GitProject } from '../types/GitProject';
 import { BacklogTaskStatus, PromptMappingStatus } from '../types/StatusTypes';
 
 interface CollectiveBacklogManagementProps {
-	project?: GitProject;
+	project: GitProject | undefined;
 	onClose?: () => void;
 	onCreateAgent?: () => string | undefined;
 	onAddPrompt?: (canvasId: string, prompt: string) => void;
@@ -766,12 +766,6 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 		return new Date(dueDate) < new Date() && status !== 'finished';
 	};
 
-	// For collective backlog management, all authenticated users should be able to edit items
-	// This represents project-level permissions rather than owner-level permissions
-	const canEditItem = (item: BacklogItem) => {
-		return isAuthenticated; // All authenticated users can edit in collective management
-	};
-
 	// Format date
 	const formatDate = (dateString: string) => {
 		return new Date(dateString).toLocaleDateString('en-US', {
@@ -917,10 +911,10 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 				// Check each task's prompts
 				Object.keys(updated).forEach(taskIdStr => {
 					const taskId = parseInt(taskIdStr);
-					const prompts = updated[taskId];
+					const prompts = updated[taskId]!;
 					
 					Object.keys(prompts).forEach(promptId => {
-						const prompt = prompts[promptId];
+						const prompt = prompts[promptId]!;
 						const canvas = canvases.find(c => c.id === prompt.agentId);
 						
 						console.log(`🔄 [CANVAS-MONITOR] Checking prompt ${promptId} for agent ${prompt.agentId}:`, {
@@ -983,11 +977,11 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 	// Show authentication required message if not logged in
 	if (!isAuthenticated) {
 		return (
-			<div className="w-full h-full bg-[var(--base-50)] overflow-y-auto">
+			<div className="w-full h-full overflow-y-auto">
 				<div className="sticky top-0 bg-[var(--base-100)] border-b border-[var(--base-300)] p-4">
 					<div className="flex items-center justify-between">
 						<div>
-							<h1 className="text-xl font-semibold text-[var(--base-800)]">Collective Backlog Management</h1>
+							<h1 className="text-xl font-semibold text-[var(--base-800)]">Backlog</h1>
 						</div>
 						{onClose && (
 							<button
@@ -1032,7 +1026,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 				<div className="sticky top-0 bg-[var(--base-100)] border-b border-[var(--base-300)] p-4">
 					<div className="flex items-center justify-between">
 						<div>
-							<h1 className="text-xl font-semibold text-[var(--base-800)]">Collective Backlog Management</h1>
+							<h1 className="text-xl font-semibold text-[var(--base-800)]">Backlog</h1>
 						</div>
 						{onClose && (
 							<button
@@ -1057,12 +1051,12 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 	}
 
 	return (
-		<div className="w-full h-full bg-[var(--base-50)] overflow-y-auto">
+		<div className="w-full h-full overflow-y-auto">
 			{/* Header */}
-			<div className="sticky top-0 bg-[var(--base-100)] border-b border-[var(--base-300)] p-4">
+			<div className="sticky top-0 p-3">
 				<div className="flex items-center justify-between">
 					<div>
-						<h1 className="text-xl font-semibold text-[var(--base-800)]">Collective Backlog Management</h1>
+						<h1 className="text-xl font-semibold text-[var(--base-800)]">Backlog</h1>
 					</div>
 					{onClose && (
 						<button

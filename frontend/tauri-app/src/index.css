@@ -180,6 +180,10 @@ body {
 	background: transparent;
 }
 
+button {
+	cursor: pointer;
+}
+
 /* I know, terrible practice, yada yada. That's my IDE, I decide */
 *:focus {
 	outline: none;

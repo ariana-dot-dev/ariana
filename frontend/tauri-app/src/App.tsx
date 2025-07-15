@@ -2,15 +2,11 @@ import initSwc from "@swc/wasm-web";
 import { invoke } from "@tauri-apps/api/core";
 import { type Event, listen } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import React, { useEffect, useRef, useState } from "react";
-import CanvasView from "./CanvasView";
+import React, { useEffect, useState } from "react";
 import { FileTreeCanvas } from "./canvas/FileTreeCanvas";
-import { Terminal } from "./canvas/Terminal";
-import type { CanvasElement } from "./canvas/types";
 import { ProjectSelector } from "./components/ProjectSelector";
 import DiffManagement from "./components/DiffManagement";
 import { useUserConfig } from "./hooks/useUserConfig";
-import Onboarding from "./Onboarding";
 import Repl from "./Repl";
 import { Interpreter } from "./scripting/interpreter";
 import { useStore } from "./state";
@@ -18,7 +14,6 @@ import { cn } from "./utils";
 import Logo from "./components/Logo";
 import { GitProjectProvider } from "./contexts/GitProjectContext";
 import GitProjectView from "./GitProjectView";
-import { osSessionGetWorkingDirectory } from "./bindings/os";
 import { CommunicationPalette } from "./components/CommunicationPalette";
 import AuthPage from "./components/AuthPage";
 import { useAuth } from "./hooks/useAuth";
@@ -33,7 +28,7 @@ const THEMES = ["light", "light-sand", "semi-sky", "dark", "ghi", "ghost"];
 
 function App() {
 	const store = useStore();
-	const { userEmail, loading, error: _error, setUserEmail } = useUserConfig();
+	const { loading, error: _error, setUserEmail } = useUserConfig();
 	const { isAuthenticated, user, isValidating, login, logout } = useAuth();
 	const [isMaximized, setIsMaximized] = useState(false);
 	const [interpreter, setInterpreter] = useState<Interpreter | null>(null);
@@ -42,7 +37,6 @@ function App() {
 	const [diffManagementState, setDiffManagementState] = useState<any>(null);
 	const [showCommunicationPalette, setShowCommunicationPalette] = useState(false);
 	const [authError, setAuthError] = useState<string | null>(null);
-	const { isLightTheme } = store;
 
 	useEffect(() => {
 		const unlistenUserEmail = listen<string>(

@@ -1,7 +1,6 @@
-import React, { useState, useMemo } from 'react';
-import { GitProjectCanvas, CanvasLockState, GitProject } from '../types/GitProject';
-import { BackgroundAgent, BackgroundAgentStatus } from '../types/BackgroundAgent';
-import { Task, TaskStatus, TaskManager } from '../types/Task';
+import React, { useState } from 'react';
+import { GitProjectCanvas, GitProject } from '../types/GitProject';
+import { BackgroundAgent } from '../types/BackgroundAgent';
 import { CollectiveBacklogManagement } from './CollectiveBacklogManagement';
 
 interface AgentOverviewProps {
@@ -13,9 +12,7 @@ interface AgentOverviewProps {
 	onPauseCanvas?: (canvasId: string) => void;
 	onDeleteCanvas?: (canvasId: string) => void;
 	onMergeCanvas?: (canvasId: string) => void;
-	onRunTest?: (canvasId: string) => void;
 	onCreateAgent?: () => string | undefined; // Returns the new agent ID
-	taskManager?: TaskManager; // Add task manager for task linking
 	onProjectUpdate?: () => void; // Callback to save project state
 	onPromptDeleted?: (promptId: string, agentId: string) => void; // Callback for prompt deletion
 	onUpdatePrompt?: (taskId: string, prompt: string, canvasId: string) => void; // Callback for prompt editing
@@ -30,9 +27,7 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 	onPauseCanvas,
 	onDeleteCanvas,
 	onMergeCanvas,
-	onRunTest,
 	onCreateAgent,
-	taskManager,
 	onProjectUpdate,
 	onPromptDeleted,
 	onUpdatePrompt
@@ -77,11 +72,6 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 		setEditingPrompt('');
 	};
 
-	const handleCancelEdit = () => {
-		setEditingTaskId(null);
-		setEditingPrompt('');
-	};
-
 	// Selection helper functions
 	const toggleCanvasSelection = (canvasId: string) => {
 		setSelectedCanvases(prev => {
@@ -113,14 +103,6 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 			}
 			return newSet;
 		});
-	};
-
-	const toggleAllBackgroundAgents = () => {
-		if (selectedBackgroundAgents.size === backgroundAgents.length) {
-			setSelectedBackgroundAgents(new Set());
-		} else {
-			setSelectedBackgroundAgents(new Set(backgroundAgents.map(a => a.id)));
-		}
 	};
 
 	const clearSelection = () => {
@@ -262,7 +244,7 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 		}
 	};
 
-	const handleDragLeave = (e: React.DragEvent) => {
+	const handleDragLeave = (_: React.DragEvent) => {
 		setDragState(prev => ({
 			...prev,
 			dragOverIndex: null,
@@ -311,7 +293,7 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 					if (deleteSuccess) {
 						const newTaskId = targetCanvas.taskManager.createPromptingTask(task.prompt);
 						const newIndex = Math.min(targetIndex, targetCanvas.taskManager.getTasks().length - 1);
-						const moveSuccess = targetCanvas.taskManager.moveTask(newTaskId, newIndex);
+						targetCanvas.taskManager.moveTask(newTaskId, newIndex);
 						
 						if (onProjectUpdate) {
 							onProjectUpdate();
@@ -369,7 +351,7 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 			}
 
 			// Get the last task's prompt
-			const lastTask = tasks[tasks.length - 1];
+			const lastTask = tasks[tasks.length - 1]!;
 			let prompt = lastTask.prompt.trim();
 
 			// Remove content in parentheses
@@ -388,13 +370,6 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 
 	return (
 		<div className="w-full h-full bg-[var(--base-50)] overflow-y-auto">
-			{/* Header */}
-			<div className="sticky top-0 bg-[var(--base-100)] border-b border-[var(--base-300)] p-4">
-				<div>
-					<h1 className="text-xl font-semibold text-[var(--base-800)]">Agent Overview</h1>
-				</div>
-			</div>
-
 			<div className="p-4 space-y-6">
 				{/* Agents Table */}
 				<div className="bg-[var(--base-100)] rounded-lg p-4 border border-[var(--base-300)]">
@@ -872,22 +847,16 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 						Create New Agent
 					</button>
 				</div>
-				
-
-				
-				{/* Collective Backlog Management - Hidden during drag to prevent re-renders */}
-				{!dragState.isDragging && (
-					<div className="mt-6">
-						<CollectiveBacklogManagement 
-							project={project}
-							onCreateAgent={onCreateAgent}
-							onAddPrompt={onAddPrompt}
-							selectedAgents={selectedAgentIds}
-							canvases={canvases.map(c => ({ id: c.id, lockState: c.lockState }))}
-							onPromptDeleted={onPromptDeleted}
-						/>
-					</div>
-				)}
+			</div>
+			<div className="mt-6">
+				<CollectiveBacklogManagement 
+					project={project}
+					onCreateAgent={onCreateAgent ?? (() => undefined)}
+					onAddPrompt={onAddPrompt ?? (() => undefined)}
+					selectedAgents={selectedAgentIds}
+					canvases={canvases.map(c => ({ id: c.id, lockState: c.lockState }))} 
+					onPromptDeleted={onPromptDeleted ?? (() => undefined)}
+				/>
 			</div>
 		</div>
 	);
