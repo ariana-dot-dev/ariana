@@ -5,7 +5,7 @@ import { GitProject } from '../types/GitProject';
 import { BacklogTaskStatus, PromptMappingStatus } from '../types/StatusTypes';
 
 interface CollectiveBacklogManagementProps {
-	project?: GitProject;
+	project: GitProject | undefined;
 	onClose?: () => void;
 	onCreateAgent?: () => string | undefined;
 	onAddPrompt?: (canvasId: string, prompt: string) => void;

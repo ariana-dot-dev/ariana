@@ -1,7 +1,6 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { GitProject, GitProjectCanvas, ProcessState, CanvasLockState } from '../types/GitProject';
 import { CanvasElement } from '../canvas/types';
-import { ProcessManager } from '../services/ProcessManager';
 import { useStore } from '../state';
 import { TaskManager } from '../types/Task';
 import { BackgroundAgent, MergeResult } from '../types/BackgroundAgent';

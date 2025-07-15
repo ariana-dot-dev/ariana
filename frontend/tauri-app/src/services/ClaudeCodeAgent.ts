@@ -1,5 +1,4 @@
 import {
-	TerminalSpec,
 	TerminalEvent,
 	LineItem,
 	CustomTerminalAPI,
@@ -46,20 +45,14 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	private currentPrompt: string | null = null;
 	private screenLines: LineItem[][] = [];
 	private terminalLines: number = 24; // Track current terminal height
-	private terminalCols: number = 80; // Track current terminal width
 	private startTime: number = 0;
 	private logPrefix: string;
 	private hasSeenTryPrompt = false;
 	private hasSeenTrustPrompt = false;
-	private isProcessingEvents = false;
-	private lastActivityTime: number = 0;
-	private osSession: OsSession | null = null;
 	private isCompletingTask: boolean = false;
 	private stateCheckInterval: number | null = null;
-	private lastStateCheck: number = 0;
 	// Manual control state
 	private isPaused: boolean = false;
-	private isManuallyControlled: boolean = false;
 	// Visual rendering support
 	private visualEventHandler: ((events: TerminalEvent[]) => void) | null = null;
 
@@ -95,10 +88,9 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	/**
 	 * Override resizeTerminal to track dimensions and pass through to parent
 	 */
-	async resizeTerminal(id: string, lines: number, cols: number): Promise<void> {
+	override async resizeTerminal(id: string, lines: number, cols: number): Promise<void> {
 		// Track terminal dimensions
 		this.terminalLines = lines;
-		this.terminalCols = cols;
 		
 		await super.resizeTerminal(id, lines, cols);
 	}
@@ -120,7 +112,6 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		this.isRunning = true;
 		this.currentTask = prompt;
 		this.currentPrompt = prompt;
-		this.osSession = osSession;
 		this.startTime = Date.now();
 		this.screenLines = [];
 		this.hasSeenTryPrompt = false;
@@ -236,7 +227,7 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 	/**
 	 * Clean up resources
 	 */
-	async cleanup(preserveTerminal: boolean = false): Promise<void> {
+	override async cleanup(preserveTerminal: boolean = false): Promise<void> {
 		// Only kill terminal if not preserving
 		if (this.terminalId && !preserveTerminal) {
 			try {
@@ -257,12 +248,8 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		this.screenLines = [];
 		this.hasSeenTryPrompt = false;
 		this.hasSeenTrustPrompt = false;
-		this.isProcessingEvents = false;
-		this.lastActivityTime = 0;
-		this.lastStateCheck = 0;
 		this.isCompletingTask = false;
 		this.isPaused = false;
-		this.isManuallyControlled = false;
 		
 		this.removeAllListeners();
 	}
@@ -313,13 +300,9 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		
 		// Silently update internal state without processing
 		this.handleTerminalEvents(events);
-		this.lastActivityTime = Date.now();
 	}
 	
 	private checkCurrentState(): void {
-		const now = Date.now();
-		this.lastStateCheck = now;
-		
 		// Get current TUI lines for CLI agents library
 		const tuiLines = this.getCurrentTuiLines();
 		
@@ -639,6 +622,5 @@ export class ClaudeCodeAgent extends CustomTerminalAPI {
 		this.hasSeenTryPrompt = false;
 		this.currentTask = null;
 		this.currentPrompt = null;
-		this.isManuallyControlled = true; // Keep terminal alive but mark as manually controlled
 	}
 }

@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import CanvasView from "./CanvasView";
 import { useGitProject } from "./contexts/GitProjectContext";
@@ -20,21 +20,15 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 		updateCanvasElements, 
 		mergeCanvasToRoot,
 		getBackgroundAgents,
-		removeBackgroundAgent,
 		cancelBackgroundAgent,
 		forceRemoveBackgroundAgent,
-		getCanvasLockState,
-		canEditCanvas,
-		getCurrentTaskManager,
 		updateTaskPrompt
 	} = useGitProject();
-	const { updateGitProject, removeGitProject } = useStore();
-	const [showCanvases, setShowCanvases] = useState(true);
-	const [mergingCanvases, setMergingCanvases] = useState<Set<string>>(new Set());
+	const { updateGitProject } = useStore();
+	const [showCanvases, _setShowCanvases] = useState(true);
+	const [_mergingCanvases, setMergingCanvases] = useState<Set<string>>(new Set());
 	const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
 	const [viewMode, setViewMode] = useState<'canvas' | 'overview'>('canvas');
-
-	const canvasesHoveredRef = useRef(false);
 
 	// Handle canvas merge to root
 	const handleShowInExplorer = async (itemId: string) => {
@@ -248,27 +242,6 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 		});
 	};
 
-	const handleRunTest = (canvasId: string) => {
-		if (!selectedGitProject) return;
-		
-		const canvas = selectedGitProject.canvases.find(c => c.id === canvasId);
-		if (!canvas?.osSession) return;
-		
-		// This would typically run tests in the canvas workspace
-		// For now, we'll just log and potentially switch to the canvas
-		console.log(`Run test requested for canvas ${canvasId}`);
-		
-		// Switch to this canvas so user can see the test results
-		const canvasIndex = selectedGitProject.canvases.findIndex(c => c.id === canvasId);
-		if (canvasIndex !== -1) {
-			selectedGitProject.setCurrentCanvasIndex(canvasIndex);
-			updateGitProject(selectedGitProject.id);
-			setSelectedItemId(canvasId);
-			// Switch to canvas view
-			setViewMode('canvas');
-		}
-	};
-
 	// Handle unified item selection (canvas, background agent, or overview)
 	const handleItemSelect = (itemId: string | null) => {
 		if (!itemId || !selectedGitProject) {
@@ -324,54 +297,7 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 		return "";
 	};
 
-	// Compute task progress for each canvas using TaskManager (persistent data)
-	const getCanvasTaskCounts = (canvasId: string) => {
-		if (!selectedGitProject) return { running: 0, finished: 0, error: 0, total: 0 };
-		
-		const canvas = selectedGitProject.canvases.find(c => c.id === canvasId);
-		if (!canvas?.taskManager) return { running: 0, finished: 0, error: 0, total: 0 };
-		
-		const taskManager = canvas.taskManager;
-		const allTasks = taskManager.getTasks();
-		const running = taskManager.getInProgressTasks().length;
-		const finished = taskManager.getCompletedTasks().length;
-		const total = allTasks.length;
-		
-		// For error count, we could check processes since tasks don't have error state yet
-		const processes = canvas.runningProcesses || [];
-		const error = processes.filter(p => p.status === 'error').length;
-		
-		return { running, finished, error, total };
-	};
-
-	// Show workspace in explorer
-	const showWorkspaceInExplorer = async (canvasId: string) => {
-		if (!selectedGitProject) return;
-		
-		try {
-			const canvas = selectedGitProject.canvases.find(c => c.id === canvasId);
-			if (!canvas?.osSession) {
-				console.warn("Canvas osSession is not ready yet. Cannot open in explorer.");
-				return;
-			}
-
-			// Get the working directory path for this canvas
-			const workingDir = 'Local' in canvas.osSession 
-				? canvas.osSession.Local 
-				: canvas.osSession.Wsl.working_directory;
-
-			// Use the new function that properly handles osSession
-			await invoke("open_path_in_explorer_with_os_session", { 
-				path: workingDir,
-				osSession: canvas.osSession 
-			});
-		} catch (error) {
-			console.error("Failed to open workspace in explorer:", error);
-		}
-	};
-
-	// Delete workspace
-	const deleteWorkspace = async (canvasId: string, showConfirmation: boolean = true, forceDelete: boolean = false) => {
+	const deleteCanvas = async (canvasId: string, showConfirmation: boolean = true, forceDelete: boolean = false) => {
 		if (!selectedGitProject) return;
 		
 		try {
@@ -526,8 +452,8 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 								backgroundAgents={getBackgroundAgents()}
 								selectedItemId={selectedItemId}
 								onSelectItem={handleItemSelect}
-								onRemoveCanvas={deleteWorkspace}
-								onRemoveCanvasNoConfirm={(canvasId) => deleteWorkspace(canvasId, false, true)}
+								onRemoveCanvas={deleteCanvas}
+								onRemoveCanvasNoConfirm={(canvasId) => deleteCanvas(canvasId, false, true)}
 								onCancelAgent={cancelBackgroundAgent}
 								onForceRemoveAgent={forceRemoveBackgroundAgent}
 								onMergeCanvas={handleMergeCanvas}
@@ -548,11 +474,9 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 						onAddPrompt={handleAddPrompt}
 						onPlayCanvas={handlePlayCanvas}
 						onPauseCanvas={handlePauseCanvas}
-						onDeleteCanvas={deleteWorkspace}
+						onDeleteCanvas={deleteCanvas}
 						onMergeCanvas={handleMergeCanvas}
-						onRunTest={handleRunTest}
 						onCreateAgent={handleCreateCanvas}
-						taskManager={getCurrentTaskManager() || undefined}
 						onProjectUpdate={() => updateGitProject(selectedGitProject.id)}
 						onPromptDeleted={handlePromptDeletion}
 						onUpdatePrompt={handleUpdatePrompt}
