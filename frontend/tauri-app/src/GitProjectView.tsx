@@ -512,11 +512,11 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 									className={`w-full px-3 py-2 text-sm rounded-lg transition-colors text-left flex items-center gap-2 ${
 										selectedItemId === 'agent-overview'
 											? 'bg-[var(--acc-500)] text-white'
-											: 'hover:bg-[var(--acc-100-70)] text-[var(--base-700)]'
+											: 'hover:bg-[var(--acc-100-70)] bg-[var(--acc-100-50)] text-[var(--base-700)]'
 									}`}
 								>
 									<span>📊</span>
-									<span>Agent Overview</span>
+									<span>Agents Overview</span>
 								</button>
 							</div>
 

@@ -388,13 +388,6 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 
 	return (
 		<div className="w-full h-full bg-[var(--base-50)] overflow-y-auto">
-			{/* Header */}
-			<div className="sticky top-0 bg-[var(--base-100)] border-b border-[var(--base-300)] p-4">
-				<div>
-					<h1 className="text-xl font-semibold text-[var(--base-800)]">Agent Overview</h1>
-				</div>
-			</div>
-
 			<div className="p-4 space-y-6">
 				{/* Agents Table */}
 				<div className="bg-[var(--base-100)] rounded-lg p-4 border border-[var(--base-300)]">
@@ -866,22 +859,16 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 						Create New Agent
 					</button>
 				</div>
-				
-
-				
-				{/* Collective Backlog Management - Hidden during drag to prevent re-renders */}
-				{!dragState.isDragging && (
-					<div className="mt-6">
-						<CollectiveBacklogManagement 
-							project={project}
-							onCreateAgent={onCreateAgent}
-							onAddPrompt={onAddPrompt}
-							selectedAgents={selectedAgentIds}
-							canvases={canvases.map(c => ({ id: c.id, lockState: c.lockState }))}
-							onPromptDeleted={onPromptDeleted}
-						/>
-					</div>
-				)}
+			</div>
+			<div className="mt-6">
+				<CollectiveBacklogManagement 
+					project={project}
+					onCreateAgent={onCreateAgent}
+					onAddPrompt={onAddPrompt}
+					selectedAgents={selectedAgentIds}
+					canvases={canvases.map(c => ({ id: c.id, lockState: c.lockState }))}
+					onPromptDeleted={onPromptDeleted}
+				/>
 			</div>
 		</div>
 	);
