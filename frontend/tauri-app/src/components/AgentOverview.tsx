@@ -18,6 +18,7 @@ interface AgentOverviewProps {
 	taskManager?: TaskManager; // Add task manager for task linking
 	onProjectUpdate?: () => void; // Callback to save project state
 	onPromptDeleted?: (promptId: string, agentId: string) => void; // Callback for prompt deletion
+	onUpdatePrompt?: (taskId: string, prompt: string, canvasId: string) => void; // Callback for prompt editing
 }
 
 export const AgentOverview: React.FC<AgentOverviewProps> = ({
@@ -33,9 +34,12 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 	onCreateAgent,
 	taskManager,
 	onProjectUpdate,
-	onPromptDeleted
+	onPromptDeleted,
+	onUpdatePrompt
 }) => {
 	const [promptInputs, setPromptInputs] = useState<{[key: string]: string}>({});
+	const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+	const [editingPrompt, setEditingPrompt] = useState<string>('');
 	const [showPromptInput, setShowPromptInput] = useState<{[key: string]: boolean}>({});
 	const [dragState, setDragState] = useState<{
 		draggedTaskId: string | null;
@@ -58,6 +62,25 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 	}, [dragState]);
 	const [selectedCanvases, setSelectedCanvases] = useState<Set<string>>(new Set());
 	const [selectedBackgroundAgents, setSelectedBackgroundAgents] = useState<Set<string>>(new Set());
+
+	// Prompt editing functions
+	const handleStartEdit = (taskId: string, currentPrompt: string) => {
+		setEditingTaskId(taskId);
+		setEditingPrompt(currentPrompt);
+	};
+
+	const handleSaveEdit = (taskId: string, canvasId: string) => {
+		if (editingPrompt.trim() && onUpdatePrompt) {
+			onUpdatePrompt(taskId, editingPrompt.trim(), canvasId);
+		}
+		setEditingTaskId(null);
+		setEditingPrompt('');
+	};
+
+	const handleCancelEdit = () => {
+		setEditingTaskId(null);
+		setEditingPrompt('');
+	};
 
 	// Selection helper functions
 	const toggleCanvasSelection = (canvasId: string) => {
@@ -552,7 +575,57 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 																			task.status === 'completed' ? 'bg-[var(--positive-500)]' :
 																			'bg-[var(--base-400)]'
 																		}`}></span>
-																		<span className="break-words flex-1">{task.prompt}</span>
+																		{editingTaskId === task.id ? (
+																			<div className="flex-1 flex items-center gap-1">
+																				<input
+																					type="text"
+																					value={editingPrompt}
+																					onChange={(e) => setEditingPrompt(e.target.value)}
+																					onKeyDown={(e) => {
+																						if (e.key === 'Enter') {
+																							handleSaveEdit(task.id, canvas.id);
+																						} else if (e.key === 'Escape') {
+																							handleCancelEdit();
+																						}
+																					}}
+																					className="flex-1 bg-[var(--base-100)] text-[var(--blackest)] text-xs px-1 py-0.5 rounded border border-[var(--acc-500)] focus:outline-none focus:border-[var(--acc-600)]"
+																					autoFocus
+																					onClick={(e) => e.stopPropagation()}
+																				/>
+																				<button
+																					onClick={(e) => {
+																						e.stopPropagation();
+																						handleSaveEdit(task.id, canvas.id);
+																					}}
+																					className="text-[var(--positive-500)] hover:text-[var(--positive-600)] text-xs px-1"
+																					title="Save"
+																				>
+																					✓
+																				</button>
+																				<button
+																					onClick={(e) => {
+																						e.stopPropagation();
+																						handleCancelEdit();
+																					}}
+																					className="text-[var(--negative-500)] hover:text-[var(--negative-600)] text-xs px-1"
+																					title="Cancel"
+																				>
+																					✗
+																				</button>
+																			</div>
+																		) : (
+																			<span 
+																				className={`break-words flex-1 ${task.status === 'prompting' ? 'cursor-pointer hover:text-[var(--acc-600)]' : ''}`}
+																				onClick={() => {
+																					if (task.status === 'prompting') {
+																						handleStartEdit(task.id, task.prompt);
+																					}
+																				}}
+																				title={task.status === 'prompting' ? 'Click to edit' : undefined}
+																			>
+																				{task.prompt}
+																			</span>
+																		)}
 																		{/* Delete button for prompting tasks */}
 																		{task.status === 'prompting' && onPromptDeleted && (
 																			<button

@@ -24,7 +24,8 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 		forceRemoveBackgroundAgent,
 		getCanvasLockState,
 		canEditCanvas,
-		getCurrentTaskManager
+		getCurrentTaskManager,
+		updateTaskPrompt
 	} = useGitProject();
 	const { updateGitProject, removeGitProject } = useStore();
 	const [showCanvases, setShowCanvases] = useState(true);
@@ -169,6 +170,20 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 		}
 		
 		console.log(`Prompt deletion handled for prompt ${promptId} in agent ${agentId}`);
+	};
+
+	// Handle prompt update
+	const handleUpdatePrompt = (taskId: string, prompt: string, canvasId: string) => {
+		if (!selectedGitProject) return;
+		
+		const canvas = selectedGitProject.canvases.find(c => c.id === canvasId);
+		if (!canvas) return;
+		
+		const success = updateTaskPrompt(taskId, prompt);
+		if (success) {
+			updateGitProject(selectedGitProject.id);
+			console.log('💾 [PROMPT] Updated prompt for task:', taskId);
+		}
 	};
 
 	const handlePlayCanvas = (canvasId: string) => {
@@ -510,6 +525,7 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 						taskManager={getCurrentTaskManager() || undefined}
 						onProjectUpdate={() => updateGitProject(selectedGitProject.id)}
 						onPromptDeleted={handlePromptDeletion}
+						onUpdatePrompt={handleUpdatePrompt}
 					/>
 				</div>
 			) : currentCanvas ? (
