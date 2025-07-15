@@ -148,7 +148,8 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 		if (!canvas?.taskManager) return [];
 		
 		return canvas.taskManager.getTasks().filter(task => 
-			task.status === 'prompting' || task.status === 'running' || task.status === 'completed'
+			(task.status === 'prompting' || task.status === 'running' || task.status === 'completed') &&
+			task.prompt.trim() !== ''
 		);
 	};
 
@@ -391,9 +392,6 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 			<div className="sticky top-0 bg-[var(--base-100)] border-b border-[var(--base-300)] p-4">
 				<div>
 					<h1 className="text-xl font-semibold text-[var(--base-800)]">Agent Overview</h1>
-					<p className="text-sm text-[var(--base-600)] mt-1">
-						Manage your agents and their tasks
-					</p>
 				</div>
 			</div>
 
@@ -451,10 +449,6 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 									</div>
 								</div>
 							)}
-							<span className="text-sm text-[var(--base-600)]">
-								{canvases.length} agent{canvases.length !== 1 ? 's' : ''}
-								{backgroundAgents.length > 0 && ` • ${backgroundAgents.length} background`}
-							</span>
 						</div>
 					</div>
 					<div className="overflow-x-auto">
@@ -473,7 +467,6 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 									<th className="pb-2 font-medium text-[var(--base-700)] w-auto">Prompts</th>
 									<th className="pb-2 font-medium text-[var(--base-700)] w-24">Status</th>
 									<th className="pb-2 font-medium text-[var(--base-700)] w-32">Actions</th>
-									<th className="pb-2 font-medium text-[var(--base-700)] w-20">Test</th>
 								</tr>
 							</thead>
 							<tbody className="divide-y divide-[var(--base-200)]">
@@ -506,7 +499,6 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 													{/* Active Tasks */}
 													{activeTasks.length > 0 && (
 														<div className="space-y-1 mb-2">
-															<div className="text-xs font-medium text-[var(--base-700)]">Active:</div>
 															{activeTasks.slice(0, 10).map((task, i) => (
 																<React.Fragment key={i}>
 																	{/* Drop zone above each task */}
@@ -584,34 +576,13 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 																					onKeyDown={(e) => {
 																						if (e.key === 'Enter') {
 																							handleSaveEdit(task.id, canvas.id);
-																						} else if (e.key === 'Escape') {
-																							handleCancelEdit();
 																						}
 																					}}
+																					onBlur={() => handleSaveEdit(task.id, canvas.id)}
 																					className="flex-1 bg-[var(--base-100)] text-[var(--blackest)] text-xs px-1 py-0.5 rounded border border-[var(--acc-500)] focus:outline-none focus:border-[var(--acc-600)]"
 																					autoFocus
 																					onClick={(e) => e.stopPropagation()}
 																				/>
-																				<button
-																					onClick={(e) => {
-																						e.stopPropagation();
-																						handleSaveEdit(task.id, canvas.id);
-																					}}
-																					className="text-[var(--positive-500)] hover:text-[var(--positive-600)] text-xs px-1"
-																					title="Save"
-																				>
-																					✓
-																				</button>
-																				<button
-																					onClick={(e) => {
-																						e.stopPropagation();
-																						handleCancelEdit();
-																					}}
-																					className="text-[var(--negative-500)] hover:text-[var(--negative-600)] text-xs px-1"
-																					title="Cancel"
-																				>
-																					✗
-																				</button>
 																			</div>
 																		) : (
 																			<span 
@@ -712,7 +683,7 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 																onClick={() => handleAddPrompt(canvas.id, promptInputs[canvas.id] || '')}
 																className="px-2 py-1 text-xs bg-[var(--acc-500)] text-white rounded hover:bg-[var(--acc-600)] transition-colors"
 															>
-																Execute
+																Add
 															</button>
 															<button
 																onClick={() => setShowPromptInput(prev => ({...prev, [canvas.id]: false}))}
@@ -793,15 +764,6 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 														</div>
 													</div>
 												</div>
-											</td>
-											<td className="py-3">
-												<button
-													onClick={() => onRunTest && onRunTest(canvas.id)}
-													className="px-2 py-1 text-xs bg-[var(--base-500)] text-white rounded hover:bg-[var(--base-600)] transition-colors"
-													title="Test branch"
-												>
-													Test
-												</button>
 											</td>
 										</tr>
 									);
