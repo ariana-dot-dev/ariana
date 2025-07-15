@@ -50,6 +50,7 @@ interface UnifiedCanvasAgentListProps {
 	onForceRemoveAgent?: (agentId: string) => Promise<void>;
 	onMergeCanvas?: (canvasId: string) => void;
 	onShowInExplorer?: (itemId: string) => void;
+	onCreateCanvas?: () => string | undefined;
 }
 
 const StatusIndicator: React.FC<{ status: BackgroundAgentStatus }> = ({ status }) => {
@@ -143,7 +144,8 @@ export const UnifiedCanvasAgentList: React.FC<UnifiedCanvasAgentListProps> = ({
 	onCancelAgent,
 	onForceRemoveAgent,
 	onMergeCanvas,
-	onShowInExplorer
+	onShowInExplorer,
+	onCreateCanvas
 }) => {
 	const [contextMenu, setContextMenu] = useState<{x: number, y: number, item: UnifiedListItem} | null>(null);
 	const contextMenuRef = useRef<HTMLDivElement>(null);
@@ -226,64 +228,91 @@ export const UnifiedCanvasAgentList: React.FC<UnifiedCanvasAgentListProps> = ({
 			{/* Canvases List */}
 			{canvasItems.length > 0 && (
 				<div className="flex flex-col gap-2">
-					<SingleChoiceList
-						className="!w-full"
-						buttonProps={{
-							className: '!w-full !max-w-full'
-						}}
-						items={canvasItems.reverse()}
-						selectedItemId={selectedItemId}
-						onSelectItem={onSelectItem}
-						getItemId={(item) => item.id}
-						onContextMenu={handleContextMenu}
-						renderItem={(item, isSelected) => {
-							if (isCanvasItem(item)) {
-								const canvas = item.data;
-								const canvasIndex = canvases.indexOf(canvas);
-								const canvasName = generateCanvasName(canvas, canvasIndex);
+					{/* Canvas List Container with max height */}
+					<div 
+						className="overflow-y-auto"
+						style={{ maxHeight: 'calc(97vh - 16rem)' }}
+					>
+						<SingleChoiceList
+							className="!w-full"
+							buttonProps={{
+								className: '!w-full !max-w-full'
+							}}
+							items={canvasItems.reverse()}
+							selectedItemId={selectedItemId}
+							onSelectItem={onSelectItem}
+							getItemId={(item) => item.id}
+							onContextMenu={handleContextMenu}
+							renderItem={(item, isSelected) => {
+								if (isCanvasItem(item)) {
+									const canvas = item.data;
+									const canvasIndex = canvases.indexOf(canvas);
+									const canvasName = generateCanvasName(canvas, canvasIndex);
 
-								const taskInfo = getCanvasTaskInfo(canvas);
-								const isHovered = hoveredCanvasId === item.id;
-								const shouldShowMarquee = !!(taskInfo.prompt && (taskInfo.isLoading || taskInfo.isPrompting || isHovered));
-								
-								return (
-									<div 
-										className="flex items-center gap-2 w-full"
-										onMouseEnter={() => setHoveredCanvasId(item.id)}
-										onMouseLeave={() => setHoveredCanvasId(null)}
-									>
-										<div className="flex-1 min-w-0">
-											{taskInfo.prompt ? (
-												<Marquee 
-													text={taskInfo.prompt}
-													isActive={shouldShowMarquee}
-													className="text-xs text-[var(--base-600)]"
-												/>
-											) : (
-												<div className="text-xs text-[var(--base-600)]">
-													{canvasName}
-												</div>
-											)}
+									const taskInfo = getCanvasTaskInfo(canvas);
+									const isHovered = hoveredCanvasId === item.id;
+									const shouldShowMarquee = !!(taskInfo.prompt && (taskInfo.isLoading || taskInfo.isPrompting || isHovered));
+									
+									return (
+										<div 
+											className="flex items-center gap-2 w-full"
+											onMouseEnter={() => setHoveredCanvasId(item.id)}
+											onMouseLeave={() => setHoveredCanvasId(null)}
+										>
+											<div className="flex-1 min-w-0">
+												{taskInfo.prompt ? (
+													<Marquee 
+														text={taskInfo.prompt}
+														isActive={shouldShowMarquee}
+														className="text-xs text-[var(--base-600)]"
+													/>
+												) : (
+													<div className="text-xs text-[var(--base-600)]">
+														{canvasName}
+													</div>
+												)}
+											</div>
+											
+											{/* Status indicator */}
+											<div className="flex-shrink-0">
+												{canvas.lockState !== 'normal' ? (
+													<LockStateIndicator lockState={canvas.lockState} />
+												) : taskInfo.isLoading ? (
+													<div className="animate-spin h-3 w-3 border-2 border-[var(--acc-600)] border-t-transparent rounded-full" />
+												) : taskInfo.isPrompting ? (
+													<span className="text-[var(--acc-600)] text-xs">Prompting...</span>
+												) : taskInfo.isCompleted ? (
+													<span className="text-[var(--positive-600)] text-xs">✓</span>
+												) : null}
+											</div>
 										</div>
-										
-										{/* Status indicator */}
-										<div className="flex-shrink-0">
-											{canvas.lockState !== 'normal' ? (
-												<LockStateIndicator lockState={canvas.lockState} />
-											) : taskInfo.isLoading ? (
-												<div className="animate-spin h-3 w-3 border-2 border-[var(--acc-600)] border-t-transparent rounded-full" />
-											) : taskInfo.isPrompting ? (
-												<span className="text-[var(--acc-600)] text-xs">Prompting...</span>
-											) : taskInfo.isCompleted ? (
-												<span className="text-[var(--positive-600)] text-xs">✓</span>
-											) : null}
-										</div>
-									</div>
-								);
-							}
-							return null;
-						}}
-					/>
+									);
+								}
+								return null;
+							}}
+						/>
+					</div>
+					
+					{/* New Edit Button */}
+					{onCreateCanvas && (
+						<div className="flex gap-2 mt-2">
+							<button
+								onClick={onCreateCanvas}
+								className="flex-1 px-3 py-2 text-sm bg-[var(--positive-500)] hover:bg-[var(--positive-600)] text-white cursor-pointer rounded-lg transition-colors flex items-center justify-center gap-2 opacity-85 hover:opacity-95"
+							>
+								<svg 
+									className="w-4 h-4" 
+									fill="none" 
+									stroke="currentColor" 
+									viewBox="0 0 24 24"
+								>
+									<circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none"/>
+									<path d="M12 8v8m-4-4h8" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"/>
+								</svg>
+								<span>new edit</span>
+							</button>
+						</div>
+					)}
 				</div>
 			)}
 

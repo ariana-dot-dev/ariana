@@ -469,14 +469,6 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 						</div>
 						
 						<div className="flex flex-col gap-2 flex-1 h-0 w-full overflow-y-auto">
-							<div className="flex gap-2">
-								<button
-									onClick={handleCreateCanvas}
-									className="flex-1 px-3 py-2 text-sm border-[var(--base-300)] border-dashed hover:border-solid border-(length:--border) cursor-pointer hover:bg-[var(--acc-100-70)] text-[var(--acc-800-70)] rounded-lg transition-colors flex items-center justify-center gap-2"
-								>
-									<span>+ new edit</span>
-								</button>
-							</div>
 
 							{/* Agent Overview Item */}
 							<div className="flex flex-col gap-1">
@@ -504,6 +496,7 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 								onForceRemoveAgent={forceRemoveBackgroundAgent}
 								onMergeCanvas={handleMergeCanvas}
 								onShowInExplorer={handleShowInExplorer}
+								onCreateCanvas={handleCreateCanvas}
 							/>
 						</div>
 					</>
