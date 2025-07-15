@@ -78,7 +78,7 @@ const hasCompletedTasks = (canvas: GitProjectCanvas): boolean => {
 };
 
 const generateCanvasName = (canvas: GitProjectCanvas, canvasIndex: number): string => {
-	return `Canvas ${canvasIndex + 1}`;
+	return `Agent ${canvasIndex + 1}`;
 };
 
 const getCanvasTaskInfo = (canvas: GitProjectCanvas): { prompt: string; isLoading: boolean; isCompleted: boolean; isPrompting: boolean } => {
