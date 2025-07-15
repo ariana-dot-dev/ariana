@@ -15,6 +15,7 @@ interface CustomTerminalOnCanvasProps {
 		event: MouseEvent | TouchEvent | PointerEvent,
 		info: PanInfo,
 	) => void;
+	onRemoveElement: (elementId: string) => void;
 	isDragTarget: boolean;
 	isDragging: boolean;
 	onTerminalReady?: (terminalId: string) => void;

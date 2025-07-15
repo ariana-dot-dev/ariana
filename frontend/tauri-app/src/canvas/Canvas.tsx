@@ -326,6 +326,7 @@ const Canvas: React.FC<CanvasProps> = ({
 						<CustomTerminalOnCanvas
 							key={`${layout.element.id}`}
 							layout={layout}
+							osSession={layout.element.kind.customTerminal.osSession}
 							onDragStart={handleDragStart}
 							onDragEnd={handleDragEnd}
 							onDrag={layout.element === draggedElement ? handleDrag : () => {}}

@@ -125,7 +125,7 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 		if (!canvas?.taskManager) return [];
 		
 		return canvas.taskManager.getTasks().filter(task => 
-			task.status === 'prompting' || task.status === 'in_progress' || task.status === 'completed'
+			task.status === 'prompting' || task.status === 'running' || task.status === 'completed'
 		);
 	};
 
@@ -548,7 +548,7 @@ export const AgentOverview: React.FC<AgentOverviewProps> = ({
 																			</span>
 																		)}
 																		<span className={`w-1.5 h-1.5 rounded-full mt-0.5 flex-shrink-0 ${
-																			task.status === 'in_progress' ? 'bg-[var(--acc-500)]' :
+																			task.status === 'running' ? 'bg-[var(--acc-500)]' :
 																			task.status === 'completed' ? 'bg-[var(--positive-500)]' :
 																			'bg-[var(--base-400)]'
 																		}`}></span>

@@ -343,10 +343,7 @@ const TextAreaOnCanvas: React.FC<TextAreaOnCanvasProps> = ({
 			if (currentCanvas) {
 				setInProgressPrompt(currentCanvas.id, elementId, '');
 			}
-			// Trigger deletion callback to CollectiveBacklogManagement if available
-			if (onPromptDeleted) {
-				onPromptDeleted(taskId, currentCanvas?.id || '');
-			}
+			// Task deletion is complete
 		} else {
 			console.warn(`[TextAreaOnCanvas] Failed to delete task: ${taskId}`);
 			alert('Failed to delete task. Only prompting tasks can be deleted.');

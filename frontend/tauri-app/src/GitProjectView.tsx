@@ -507,7 +507,7 @@ const GitProjectView: React.FC<GitProjectViewProps> = ({ onGoHome }) => {
 						onMergeCanvas={handleMergeCanvas}
 						onRunTest={handleRunTest}
 						onCreateAgent={handleCreateCanvas}
-						taskManager={getCurrentTaskManager()}
+						taskManager={getCurrentTaskManager() || undefined}
 						onProjectUpdate={() => updateGitProject(selectedGitProject.id)}
 						onPromptDeleted={handlePromptDeletion}
 					/>
