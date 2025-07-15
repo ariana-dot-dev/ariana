@@ -397,7 +397,7 @@ export const UnifiedCanvasAgentList: React.FC<UnifiedCanvasAgentListProps> = ({
 									<circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none" />
 									<path d="M12 8v8m-4-4h8" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
 								</svg>
-								<span>new edit</span>
+								<span>Create New Agent</span>
 							</button>
 						</div>
 					)}
