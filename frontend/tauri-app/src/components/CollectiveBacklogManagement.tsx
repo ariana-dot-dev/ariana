@@ -79,9 +79,6 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 			// Silently handle localStorage errors
 		}
 	}, [taskPromptMappings, project?.gitOriginUrl]);
-	
-	// Keep track of previous canvas state to detect prompt deletions
-	const [previousCanvasData, setPreviousCanvasData] = useState<{ id: string, lockState?: string, promptCount?: number }[]>([]);
 
 	// Calculate task status based on prompt mappings
 	const calculateTaskStatus = (taskId: number, mappings?: Record<number, Record<string, { agentId: string, status: PromptMappingStatus }>>): BacklogTaskStatus => {
@@ -787,52 +784,6 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 		}
 	}, [filters, isAuthenticated, project?.gitOriginUrl, project?.repositoryId]);
 
-	// Handle prompt deletion - removes task-prompt mapping and recalculates task status
-	const handlePromptDeletion = (promptId: string, agentId: string) => {
-		console.log(`🗑️ [PROMPT-DELETE] Handling deletion of prompt ${promptId} from agent ${agentId}`);
-			
-		setTaskPromptMappings(prev => {
-			const updated = { ...prev };
-			let hasChanges = false;
-			const tasksToUpdate = new Set<number>();
-			
-			// Find and remove the prompt mapping
-			Object.keys(updated).forEach(taskIdStr => {
-				const taskId = parseInt(taskIdStr);
-				const prompts = updated[taskId];
-				
-				if (prompts && prompts[promptId]) {
-					console.log(`🗑️ [PROMPT-DELETE] Found prompt ${promptId} in task ${taskId}, removing it`);
-					delete prompts[promptId];
-					hasChanges = true;
-					tasksToUpdate.add(taskId);
-					
-					// Check if this task now has no prompts left
-					const remainingPrompts = Object.keys(prompts).length;
-					console.log(`🗑️ [PROMPT-DELETE] Task ${taskId} now has ${remainingPrompts} prompts remaining`);
-					
-					if (remainingPrompts === 0) {
-						console.log(`🗑️ [PROMPT-DELETE] Task ${taskId} has no prompts left - should revert to 'open' status`);
-						// Don't delete the task entry, keep it as empty object so status calculation works
-						// The empty object will make calculateTaskStatus return 'open'
-					}
-				}
-			});
-			
-			// Update task statuses for all affected tasks
-			if (hasChanges) {
-				setTimeout(() => {
-					tasksToUpdate.forEach(taskId => {
-						console.log(`🔄 [PROMPT-DELETE] Updating status for task ${taskId} after prompt deletion`);
-						updateTaskStatus(taskId);
-					});
-				}, 100);
-			}
-			
-			return hasChanges ? updated : prev;
-		});
-	};
-
 	// Manual status sync function for debugging
 	const syncAllTaskStatuses = () => {
 		console.log('🔄 [MANUAL-SYNC] Manually syncing all task statuses...');
@@ -957,12 +908,6 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 		// First clean up orphaned prompts, then update statuses
 		cleanupOrphanedPrompts();
 		updatePromptStatuses();
-		
-		// Update previous canvas data for next comparison
-		setPreviousCanvasData(canvases.map(c => ({ 
-			id: c.id, 
-			lockState: c.lockState 
-		})));
 	}, [canvases]);
 
 
