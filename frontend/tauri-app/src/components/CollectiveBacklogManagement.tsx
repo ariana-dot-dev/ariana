@@ -86,29 +86,29 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 		const allMappings = mappings || taskPromptMappings;
 		const prompts = allMappings[taskId];
 		
-		console.log(`📊 [STATUS-CALC] Calculating status for task ${taskId}:`, {
+		console.log(`[STATUS-CALC] Calculating status for task ${taskId}:`, {
 			hasPrompts: !!prompts,
 			promptCount: prompts ? Object.keys(prompts).length : 0,
 			prompts: prompts
 		});
 		
 		if (!prompts || Object.keys(prompts).length === 0) {
-			console.log(`📊 [STATUS-CALC] Task ${taskId} -> 'open' (no prompts)`);
+			console.log(`[STATUS-CALC] Task ${taskId} -> 'open' (no prompts)`);
 			return 'open'; // No prompts linked
 		}
 		
 		const promptStatuses = Object.values(prompts).map(p => p.status);
 		const allMerged = promptStatuses.every(status => status === 'merged');
 		
-		console.log(`📊 [STATUS-CALC] Task ${taskId} prompt statuses:`, promptStatuses);
-		console.log(`📊 [STATUS-CALC] Task ${taskId} all merged:`, allMerged);
+		console.log(`[STATUS-CALC] Task ${taskId} prompt statuses:`, promptStatuses);
+		console.log(`[STATUS-CALC] Task ${taskId} all merged:`, allMerged);
 		
 		if (allMerged) {
-			console.log(`📊 [STATUS-CALC] Task ${taskId} -> 'finished' (all prompts merged)`);
+			console.log(`[STATUS-CALC] Task ${taskId} -> 'finished' (all prompts merged)`);
 			return 'finished'; // All prompts are merged
 		}
 		
-		console.log(`📊 [STATUS-CALC] Task ${taskId} -> 'in_progress' (some prompts exist but not all merged)`);
+		console.log(`[STATUS-CALC] Task ${taskId} -> 'in_progress' (some prompts exist but not all merged)`);
 		return 'in_progress'; // Some prompts exist but not all are merged
 	};
 
@@ -133,27 +133,27 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 			
 		if (currentItem && currentItem.status !== calculatedStatus) {
 				try {
-				console.log(`🔄 [STATUS-UPDATE] Updating task ${taskId} status from "${currentItem.status}" to "${calculatedStatus}"`);
+				console.log(`[STATUS-UPDATE] Updating task ${taskId} status from "${currentItem.status}" to "${calculatedStatus}"`);
 				
 				// Update in backend
 				await backlogService.updateBacklogItem(taskId, { status: calculatedStatus });
-				console.log(`✅ [STATUS-UPDATE] Successfully updated task ${taskId} status to "${calculatedStatus}" in backend`);
+				console.log(`[STATUS-UPDATE] Successfully updated task ${taskId} status to "${calculatedStatus}" in backend`);
 				
 				// Update local state
 				setBacklogItems(prev => prev.map(item => 
 					item.id === taskId ? { ...item, status: calculatedStatus } : item
 				));
-				console.log(`✅ [STATUS-UPDATE] Successfully updated task ${taskId} status to "${calculatedStatus}" in local state`);
+				console.log(`[STATUS-UPDATE] Successfully updated task ${taskId} status to "${calculatedStatus}" in local state`);
 				
 			} catch (error) {
-				console.error(`❌ [STATUS-UPDATE] Failed to update task ${taskId} status to "${calculatedStatus}":`, error);
+				console.error(`[STATUS-UPDATE] Failed to update task ${taskId} status to "${calculatedStatus}":`, error);
 				
 				// Check if it's an authentication error
 				if (error && typeof error === 'object' && 'status' in error) {
 					if (error.status === 401) {
-						console.error(`🔐 [STATUS-UPDATE] Authentication failed for task ${taskId} - token may be expired`);
+						console.error(`[STATUS-UPDATE] Authentication failed for task ${taskId} - token may be expired`);
 					} else if (error.status === 403) {
-						console.error(`🚫 [STATUS-UPDATE] Permission denied for task ${taskId} - may need admin permissions`);
+						console.error(`[STATUS-UPDATE] Permission denied for task ${taskId} - may need admin permissions`);
 					}
 				}
 			}
@@ -188,7 +188,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 		
 		if (authState.isAuthenticated && project && project.gitOriginUrl && !project.repositoryId) {
 			project.retryRepositoryIdDetection().catch(error => {
-				console.error('❌ [CollectiveBacklog] Failed to retry repository ID detection:', error);
+				console.error('[CollectiveBacklog] Failed to retry repository ID detection:', error);
 			});
 		}
 
@@ -200,7 +200,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 			// SECURITY: Trigger repository ID detection when authentication becomes available
 			if (state.isAuthenticated && project && project.gitOriginUrl && !project.repositoryId) {
 				project.retryRepositoryIdDetection().catch(error => {
-					console.error('❌ [CollectiveBacklog] Failed to retry repository ID detection on auth change:', error);
+					console.error('[CollectiveBacklog] Failed to retry repository ID detection on auth change:', error);
 				});
 			}
 		});
@@ -279,12 +279,12 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 			
 			// IMPORTANT: After fetching backlog items, ensure all tasks have correct status
 			// Check if any tasks should be 'open' but aren't marked as such
-			console.log('🔄 [BACKLOG-SYNC] Checking all fetched tasks for correct status...');
+			console.log('[BACKLOG-SYNC] Checking all fetched tasks for correct status...');
 			setTimeout(() => {
 				items.forEach(item => {
 					const calculatedStatus = calculateTaskStatus(item.id);
 					if (item.status !== calculatedStatus) {
-						console.log(`🔄 [BACKLOG-SYNC] Task ${item.id} status mismatch: DB="${item.status}" vs Calculated="${calculatedStatus}" - updating...`);
+						console.log(`[BACKLOG-SYNC] Task ${item.id} status mismatch: DB="${item.status}" vs Calculated="${calculatedStatus}" - updating...`);
 						updateTaskStatus(item.id);
 					}
 				});
@@ -467,22 +467,22 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 	const handleAddToNewAgent = (item: BacklogItem) => {
 			
 		if (!onCreateAgent || !onAddPrompt) {
-			console.error('❌ [LINK] Missing onCreateAgent or onAddPrompt functions');
+			console.error('[LINK] Missing onCreateAgent or onAddPrompt functions');
 			return;
 		}
 		
 		// Create new agent
 		const newAgentId = onCreateAgent();
-		console.log(`🔗 [TASK-LINK] Created new agent: ${newAgentId} for task ${item.id}`);
+		console.log(`[TASK-LINK] Created new agent: ${newAgentId} for task ${item.id}`);
 			
 		if (newAgentId) {
 			// Add the task as a prompt to the new agent
 			onAddPrompt(newAgentId, item.task);
-			console.log(`📝 [TASK-LINK] Added prompt to agent ${newAgentId}: "${item.task}"`);
+			console.log(`[TASK-LINK] Added prompt to agent ${newAgentId}: "${item.task}"`);
 			
 			// Create prompt mapping with initial status 'active'
 			const promptId = `${newAgentId}-${Date.now()}`; // Generate unique prompt ID
-			console.log(`🔗 [TASK-LINK] Creating mapping - Task ${item.id} -> Prompt ${promptId} -> Agent ${newAgentId}`);
+			console.log(`[TASK-LINK] Creating mapping - Task ${item.id} -> Prompt ${promptId} -> Agent ${newAgentId}`);
 				
 			const newMapping = {
 				...taskPromptMappings,
@@ -494,15 +494,15 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 					}
 				}
 			};
-			console.log(`📊 [TASK-LINK] New mapping created:`, newMapping[item.id]);
+			console.log(`[TASK-LINK] New mapping created:`, newMapping[item.id]);
 			
 				
 			// Update state
 			setTaskPromptMappings(newMapping);
-			console.log(`📊 [TASK-LINK] Updated task prompt mappings state:`, newMapping);
+			console.log(`[TASK-LINK] Updated task prompt mappings state:`, newMapping);
 			
 			// Update task status immediately with the new mappings
-			console.log(`🔄 [TASK-LINK] Triggering status update for task ${item.id}`);
+			console.log(`[TASK-LINK] Triggering status update for task ${item.id}`);
 			updateTaskStatus(item.id, newMapping);
 			
 			// Also schedule a delayed update as backup in case of re-initialization
@@ -511,7 +511,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 			}, 1000);
 			
 			} else {
-			console.error('❌ [LINK] Failed to create new agent');
+			console.error('[LINK] Failed to create new agent');
 		}
 	};
 
@@ -786,12 +786,12 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 
 	// Manual status sync function for debugging
 	const syncAllTaskStatuses = () => {
-		console.log('🔄 [MANUAL-SYNC] Manually syncing all task statuses...');
+		console.log('[MANUAL-SYNC] Manually syncing all task statuses...');
 		backlogItems.forEach(item => {
 			const calculatedStatus = calculateTaskStatus(item.id);
-			console.log(`🔄 [MANUAL-SYNC] Task ${item.id}: Current="${item.status}" Calculated="${calculatedStatus}"`);
+			console.log(`[MANUAL-SYNC] Task ${item.id}: Current="${item.status}" Calculated="${calculatedStatus}"`);
 			if (item.status !== calculatedStatus) {
-				console.log(`🔄 [MANUAL-SYNC] Updating task ${item.id} from "${item.status}" to "${calculatedStatus}"`);
+				console.log(`[MANUAL-SYNC] Updating task ${item.id} from "${item.status}" to "${calculatedStatus}"`);
 				updateTaskStatus(item.id);
 			}
 		});
@@ -811,10 +811,10 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 				// Check each task's prompts for orphaned entries
 				Object.keys(updated).forEach(taskIdStr => {
 					const taskId = parseInt(taskIdStr);
-					const prompts = updated[taskId];
+					const prompts = updated[taskId]!;
 					
 					Object.keys(prompts).forEach(promptId => {
-						const prompt = prompts[promptId];
+						const prompt = prompts[promptId]!;
 						const canvas = canvases.find(c => c.id === prompt.agentId);
 						
 						if (!canvas) {
@@ -822,7 +822,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 							delete prompts[promptId];
 							hasChanges = true;
 							tasksToUpdate.add(taskId);
-								}
+						}
 					});
 					
 					// If this task has no more prompts, keep the empty object
@@ -850,14 +850,14 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 		
 		// Update prompt statuses based on canvas lock states
 		const updatePromptStatuses = () => {
-			console.log('🔄 [CANVAS-MONITOR] Updating prompt statuses based on canvas lock states');
-			console.log('🔄 [CANVAS-MONITOR] Current canvases:', canvases?.map(c => ({ id: c.id, lockState: c.lockState })));
+			console.log('[CANVAS-MONITOR] Updating prompt statuses based on canvas lock states');
+			console.log('[CANVAS-MONITOR] Current canvases:', canvases?.map(c => ({ id: c.id, lockState: c.lockState })));
 			
 			setTaskPromptMappings(prev => {
 				const updated = { ...prev };
 				let hasChanges = false;
 				
-				console.log('🔄 [CANVAS-MONITOR] Current task mappings:', updated);
+				console.log('[CANVAS-MONITOR] Current task mappings:', updated);
 				
 				// Check each task's prompts
 				Object.keys(updated).forEach(taskIdStr => {
@@ -868,7 +868,7 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 						const prompt = prompts[promptId]!;
 						const canvas = canvases.find(c => c.id === prompt.agentId);
 						
-						console.log(`🔄 [CANVAS-MONITOR] Checking prompt ${promptId} for agent ${prompt.agentId}:`, {
+						console.log(`[CANVAS-MONITOR] Checking prompt ${promptId} for agent ${prompt.agentId}:`, {
 							promptCurrentStatus: prompt.status,
 							canvasFound: !!canvas,
 							canvasLockState: canvas?.lockState
@@ -876,29 +876,29 @@ export const CollectiveBacklogManagement: React.FC<CollectiveBacklogManagementPr
 						
 						if (canvas) {
 							const newStatus = canvas.lockState === 'merged' ? 'merged' : 'active';
-							console.log(`🔄 [CANVAS-MONITOR] Prompt ${promptId}: ${prompt.status} → ${newStatus}`);
+							console.log(`[CANVAS-MONITOR] Prompt ${promptId}: ${prompt.status} → ${newStatus}`);
 							
 							if (prompt.status !== newStatus) {
 								prompts[promptId] = { ...prompt, status: newStatus };
 								hasChanges = true;
-								console.log(`✅ [CANVAS-MONITOR] Updated prompt ${promptId} status to ${newStatus}`);
+								console.log(`[CANVAS-MONITOR] Updated prompt ${promptId} status to ${newStatus}`);
 							}
 						} else {
-							console.warn(`⚠️ [CANVAS-MONITOR] Canvas not found for agent ${prompt.agentId}`);
+							console.warn(`[CANVAS-MONITOR] Canvas not found for agent ${prompt.agentId}`);
 						}
 					});
 					
 					// Update task status if prompts changed
 					if (hasChanges) {
-						console.log(`🔄 [CANVAS-MONITOR] Scheduling status update for task ${taskId}`);
+						console.log(`[CANVAS-MONITOR] Scheduling status update for task ${taskId}`);
 						setTimeout(() => updateTaskStatus(taskId), 100);
 					}
 				});
 				
 				if (hasChanges) {
-					console.log('✅ [CANVAS-MONITOR] Prompt statuses updated, returning new mappings');
+					console.log('[CANVAS-MONITOR] Prompt statuses updated, returning new mappings');
 				} else {
-					console.log('ℹ️ [CANVAS-MONITOR] No prompt status changes detected');
+					console.log('[CANVAS-MONITOR] No prompt status changes detected');
 				}
 				
 				return hasChanges ? updated : prev;
