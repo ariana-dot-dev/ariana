@@ -1,5 +1,5 @@
 <p align="center">
-  <h1 align="center">Ariana IDE</h1>
+  <h1 align="center">yolo</h1>
   <img src="assets/screenshot.jpg" width="1024" alt="Ariana IDE screenshot" />
   <br />
   <p align="center"><i>The IDE of the future.</i></p>
