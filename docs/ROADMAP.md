@@ -47,4 +47,4 @@ The backend provides the following endpoints:
 - `/api/inference` - LLM text completion
 - `/api/inference/stream` - LLM streaming completion
 
-See `backend/API_DOCUMENTATION.md` for complete LLM API documentation.
+See [API Documentation](./API.md) for complete API reference.

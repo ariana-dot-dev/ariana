@@ -9,17 +9,40 @@
   </div>
 </p>
 
+## Features
+
+- **Multi-language IDE** - Built on modern web technologies with Tauri
+- **AI-Powered Development** - Integrated LLM support for code assistance
+- **Configurable Builds** - Create custom branded versions with different configurations
+- **Cross-Platform** - Works on Windows, macOS, and Linux
+- **Extensible Architecture** - Plugin system and customizable UI
+
 ## Documentation
 
-For detailed information, see the documentation in the `docs/` folder:
+### 📚 Core Documentation
+- [**Architecture Overview**](docs/ARCHITECTURE.md) - System design and components
+- [**API Reference**](docs/API.md) - Complete API documentation
+- [**Development Guide**](docs/DEV_GUIDE.md) - Setting up your development environment
+- [**Build Guide**](docs/BUILD.md) - Building and packaging for distribution
 
-- [📋 **ROADMAP.md**](docs/ROADMAP.md) - Project roadmap and architecture
-- [⚙️ **DEV_GUIDE.md**](docs/DEV_GUIDE.md) - Development environment setup
-- [ **BUILD.md**](docs/BUILD.md) - Building and packaging guide
+### 🔧 Additional Resources
+- [**Roadmap**](docs/ROADMAP.md) - Project roadmap and future plans
+- [**Configuration Guide**](docs/CONFIGURATION.md) - Detailed configuration options
+- [**Troubleshooting**](docs/TROUBLESHOOTING.md) - Common issues and solutions
 
 ## Installation
 
-Ariana IDE is not ready for usage yet. Come back in a few days/weeks!
+> **Note**: Ariana IDE is currently in active development. Production builds coming soon!
+
+### For Developers
+See the [Quick Start](#quick-start) section below to run in development mode.
+
+### System Requirements
+- **OS**: Windows 10+, macOS 10.15+, or Linux (Ubuntu 20.04+)
+- **Memory**: 4GB RAM minimum (8GB recommended)
+- **Storage**: 500MB available space
+- **Node.js**: v24.2.0 or higher
+- **Rust**: Latest stable version
 
 ## Quick Start
 
@@ -64,6 +87,38 @@ just build example-configs/ariana-beta.json
 cd dist && npm install -g .
 ```
 
+## Project Structure
+
+```
+ariana/
+├── docs/                  # Documentation
+├── frontend/              # Main application
+│   ├── src/              # CLI source code
+│   ├── tauri-app/        # Desktop app (Tauri + React)
+│   └── package.json      # CLI package configuration
+├── db-server/            # Database server component
+├── ios-ide/              # iOS IDE components
+│   └── mock-backend/     # Development API server
+└── example-configs/      # Build configuration examples
+```
+
+## Contributing
+
+We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
+
+### Development Workflow
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## Community
+
+- **Discord**: [Join our community](https://discord.gg/Y3TFTmE89g)
+- **Twitter**: [Follow @anic_dev](https://twitter.com/anic_dev)
+- **Issues**: [Report bugs or request features](https://github.com/yourusername/ariana/issues)
+
 ## License
 
-GNU Affero General Public License v3.0
+GNU Affero General Public License v3.0 - see [LICENSE](LICENSE) for details.
