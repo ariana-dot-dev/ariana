@@ -1,69 +1,93 @@
-<p align="center">
-  <h1 align="center">Ariana IDE</h1>
-  <img src="assets/screenshot.jpg" width="1024" alt="Ariana IDE screenshot" />
-  <br />
-  <p align="center"><i>The IDE of the future.</i></p>
-  <div align="center">
-    <a href="https://discord.gg/Y3TFTmE89g"><img src="https://img.shields.io/discord/1312017605955162133?style=for-the-badge&color=7289da&label=Discord&logo=discord&logoColor=ffffff&size=10" alt="Join our Discord" /></a>
-    <a href="https://twitter.com/anic_dev"><img src="https://img.shields.io/badge/Follow-@anic_dev-black?style=for-the-badge&logo=x&logoColor=white&size=10" alt="Follow us on X" /></a>
-  </div>
-</p>
+<div align="center">
 
-## Documentation
+# 🚀 Ariana IDE
 
-For detailed information, see the documentation in the `docs/` folder:
+*The next-generation intelligent development environment*
 
-- [📋 **ROADMAP.md**](docs/ROADMAP.md) - Project roadmap and architecture
-- [⚙️ **DEV_GUIDE.md**](docs/DEV_GUIDE.md) - Development environment setup
-- [ **BUILD.md**](docs/BUILD.md) - Building and packaging guide
+<img src="assets/screenshot.jpg" width="900" alt="Ariana IDE in action" />
 
-## Installation
+[![Discord](https://img.shields.io/discord/1312017605955162133?style=for-the-badge&color=7289da&label=Discord&logo=discord&logoColor=ffffff)](https://discord.gg/Y3TFTmE89g)
+[![Follow on X](https://img.shields.io/badge/Follow-@anic_dev-black?style=for-the-badge&logo=x&logoColor=white)](https://twitter.com/anic_dev)
+[![License](https://img.shields.io/badge/License-AGPL%20v3-blue?style=for-the-badge)](LICENSE)
 
-Ariana IDE is not ready for usage yet. Come back in a few days/weeks!
+---
 
-## Quick Start
+**✨ An AI-powered IDE that understands your code, your workflow, and your goals**
 
-### Prerequisites
+</div>
 
-- Node.js (>= 24.2.0)
-- Rust (latest)
+## 🌟 Features
 
-**Note for nvm users:** If you use nvm to manage Node.js versions, you must set Node.js 24 as your default to ensure Ariana uses the correct version:
+- **🤖 AI-Powered Development** - Intelligent code completion and analysis
+- **🎨 Modern Canvas Interface** - Intuitive visual development environment  
+- **🔧 Multi-Platform Support** - Desktop, iOS, and web platforms
+- **🌐 Real-time Collaboration** - Work together seamlessly
+- **📊 Integrated Task Management** - Built-in project planning and tracking
+- **🚀 Live Development Server** - Instant feedback and hot reloading
+
+## 📚 Documentation
+
+| Guide | Description |
+|-------|-------------|
+| [🗺️ **ROADMAP**](docs/ROADMAP.md) | Project vision and architecture |
+| [⚙️ **DEV GUIDE**](docs/DEV_GUIDE.md) | Development environment setup |
+| [🔨 **BUILD**](docs/BUILD.md) | Building and packaging guide |
+
+## ⚡ Status
+
+> 🚧 **Early Development** - Ariana IDE is actively being built. Star and watch for updates!
+
+## 🚀 Quick Start
+
+### 📋 Prerequisites
 
 ```bash
-nvm alias default 24
+# Required versions
+Node.js >= 24.2.0
+Rust (latest stable)
 ```
 
-### Install Just
+> **💡 NVM Users**: Set Node.js 24 as default: `nvm alias default 24`
+
+### 🛠️ Development Setup
 
 ```bash
-# Install Just
-
+# 1. Install Just task runner
 npm install -g just
+
+# 2. Start the development environment
+just dev-backend    # Terminal 1: Backend server
+just dev-frontend   # Terminal 2: Frontend dev server  
+just dev-cli        # Terminal 3: CLI interface
 ```
 
-### Development
+### 📦 Building for Production
+
 ```bash
-# Start backend
-# Before first time: edit backend/.env
-just dev-backend
-
-# Start frontend (separate terminal)
-just dev-frontend
-
-# Start via CLI login (separate terminal)  
-just dev-cli
-```
-
-### Building
-```bash
-# Build with custom config
+# Build with configuration
 just build example-configs/ariana-beta.json
 
-# Install locally
+# Install globally
 cd dist && npm install -g .
 ```
 
-## License
+## 🏗️ Architecture
 
-GNU Affero General Public License v3.0
+```
+┌─────────────────┬─────────────────┬─────────────────┐
+│   Frontend      │   Backend       │   Mobile        │
+│   (Tauri/React) │   (Node.js)     │   (Swift/iOS)   │
+├─────────────────┼─────────────────┼─────────────────┤
+│ • Canvas UI     │ • Database      │ • Native UI     │
+│ • Terminal      │ • Git Service   │ • Voice Input   │
+│ • Agent Mgmt    │ • Task API      │ • Cloud Sync    │
+└─────────────────┴─────────────────┴─────────────────┘
+```
+
+## 🤝 Contributing
+
+We welcome contributions! Check out our [Development Guide](docs/DEV_GUIDE.md) to get started.
+
+## 📄 License
+
+This project is licensed under the **GNU Affero General Public License v3.0** - see [LICENSE](LICENSE) for details.
