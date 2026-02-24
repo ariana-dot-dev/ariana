@@ -8,7 +8,7 @@ Ariana was almost entirely built with Ariana.
 
 ## Try it
 
-A cloud version is hosted there: ariana.dev
+A cloud version is hosted there: [ariana.dev](ariana.dev)
 
 You can use it from Desktop, Web and Mobile Web
 
@@ -44,9 +44,9 @@ Here is a checklist of dependencies and setup steps you would roughly need:
 
 We can't say much now but we have a big V2 coming up soo....
 
-Join our discord: https://discord.com/invite/Y3TFTmE89g
+Join our discord: [click here](https://discord.com/invite/Y3TFTmE89g)
 
-Follow us on X: https://x.com/AniC_dev
+Follow us on X: [click here](https://x.com/AniC_dev)
 
 ## License
 
