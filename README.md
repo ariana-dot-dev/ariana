@@ -6,6 +6,12 @@ https://github.com/user-attachments/assets/8ac5ad1e-678c-4187-b183-b5f4b416a1b9
 
 Ariana was almost entirely built with Ariana.
 
+## Try it
+
+A cloud version is hosted there: ariana.dev
+
+You can use it from Desktop, Web and Mobile Web
+
 ## Overview
 
 You can run parallel coding agents that can edit code, manage github, setup a dev environment, run the code, test features in the desktop using computer use, all in the background from Hetzner VPSs, using the anthropic agent SDK.
@@ -14,6 +20,7 @@ You can run parallel coding agents that can edit code, manage github, setup a de
 
 Some nice features include: 
 
+- ship on the go with the mobile web version
 - mention github issues
 - auto branch creation, naming, auto-commit, and even auto-push (if a PR is open on the agent's branch), with self documentation
 - setup automations to run scripts when an agents starts, does a commit...
@@ -32,6 +39,14 @@ It's quite unpractical to setup Ariana for now as there are a lot of 3rd party s
 Here is a checklist of dependencies and setup steps you would roughly need:
 
 `WIP`
+
+## Roadmap
+
+We can't say much now but we have a big V2 coming up soo....
+
+Join our discord: https://discord.com/invite/Y3TFTmE89g
+
+Follow us on X: https://x.com/AniC_dev
 
 ## License
 
