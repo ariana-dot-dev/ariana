@@ -1,0 +1,81 @@
+{
+	"build": {
+		"beforeDevCommand": "npm run dev",
+		"beforeBuildCommand": "npm run build",
+		"frontendDist": "../dist",
+		"devUrl": "http://localhost:1420"
+	},
+	"bundle": {
+		"active": true,
+		"targets": "all",
+		"createUpdaterArtifacts": true,
+		"resources": [
+			"resources/*"
+		],
+		"icon": [
+			"icons/32x32.png",
+			"icons/128x128.png",
+			"icons/128x128@2x.png",
+			"icons/icon.icns",
+			"icons/icon.ico"
+		],
+		"macOS": {
+			"entitlements": "entitlements.plist",
+			"exceptionDomain": null,
+			"frameworks": [],
+			"providerShortName": null,
+			"signingIdentity": null
+		}
+	},
+	"productName": "Ariana",
+	"mainBinaryName": "ariana-ide",
+	"version": "0.12.4",
+	"identifier": "com.ariana.ide",
+	"plugins": {
+		"shell": {
+			"open": true
+		},
+		"deep-link": {
+			"mobile": [],
+			"desktop": {
+				"schemes": [
+					"ariana-ide"
+				]
+			}
+		},
+		"updater": {
+			"active": true,
+			"pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDkxNDg4RjE2MjhCRjZBN0IKUldSN2FyOG9GbzlJa1c4OFVUVDVvK2V5cmxkZHVxNC92WmV4MHdiM21ZemI4VHZuU2VlRmFWMisK",
+			"endpoints": [
+				"https://cdn.crabnebula.app/update/ariana/ariana-ide/{{target}}-{{arch}}/{{current_version}}"
+			],
+			"windows": {
+				"installMode": "passive"
+			}
+		}
+	},
+	"app": {
+		"withGlobalTauri": true,
+		"windows": [
+			{
+				"fullscreen": false,
+				"resizable": true,
+				"title": "Ariana",
+				"width": 1200,
+				"height": 800,
+				"minWidth": 300,
+				"minHeight": 600,
+				"decorations": false,
+				"transparent": true,
+				"center": true,
+				"shadow": false,
+				"useHttpsScheme": true,
+				"dragDropEnabled": false
+			}
+		],
+		"security": {
+			"csp": null
+		},
+		"macOSPrivateApi": true
+	}
+}

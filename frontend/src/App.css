@@ -1,0 +1,337 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@plugin "@tailwindcss/typography";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* border-radius: 12px; */
+  overflow: hidden;
+
+  --border-width: 1.5px;
+  /* border: solid var(--border-width) var(--background); */
+
+  --saturation: 20%;
+  --lightness: 22%;
+  --hue: 37;
+  --contrast: 1.07;
+
+  --background: hsl(var(--hue), var(--saturation), calc(var(--lightness) + calc(70% * var(--contrast))));
+  --foreground: hsl(var(--hue), var(--saturation), var(--lightness));
+  --background-darker: hsl(var(--hue), var(--saturation), calc(var(--lightness) + calc(66% * var(--contrast))));
+  --foreground-darker: hsl(var(--hue), var(--saturation), calc(var(--lightness) + calc(3% * var(--contrast))));
+  --secondary: hsl(var(--hue), var(--saturation), calc(var(--lightness) + calc(54% * var(--contrast))));
+
+  --lightest: hsl(var(--hue), var(--saturation), calc(var(--lightness) + calc(78% * var(--contrast))));
+  --darkest: hsl(var(--hue), var(--saturation), var(--lightness));
+  
+  --accent: hsl(210, 100%, 46%);
+  --accent-darker: hsl(215, 100%, 36%);
+  --accent-foreground: #ffffff;
+
+  --muted: hsl(var(--hue), var(--saturation), calc(var(--lightness) + calc(41% * var(--contrast))));
+  --muted-foreground: hsl(50, var(--saturation), calc(var(--lightness) + calc(3% * var(--contrast))));
+  --muted-half: hsla(50, var(--saturation), calc(var(--lightness) + calc(3% * var(--contrast))), 0.1);
+
+  --constructive: hsl(102, 61%, 70%);
+  --constructive-foreground: hsl(144, 80%, 27%);
+  --destructive: hsl(0, 61%, 70%);
+  --destructive-foreground: hsl(0, 80%, 27%);
+
+  --shadow-color: hsla(var(--hue), var(--saturation), 5%, 0.031);
+
+  --chart-1: hsl(36, 44%, 62%);
+  --chart-2: hsl(170, 44%, 52%);
+  --chart-3: hsl(266, 44%, 62%);
+  --chart-4: hsl(20, 44%, 62%);
+  --chart-5: hsl(214, 44%, 62%);
+
+  --font-sans: 'Work Sans', --apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+  --font-serif: 'Iowan Old Style', 'Apple Garamond', 'Baskerville', 'Times New Roman', 'Droid Serif', 'Times', 'Source Serif Pro', serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+  --font-mono: 'Work Sans Code', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
+  --radius: 0.3rem;
+  --shadow-2xs: 0px 2px 4px 0px var(--shadow-color);
+  --shadow-xs: 0px 2px 4px 0px var(--shadow-color);
+  --shadow-sm: 0px 2px 4px 0px var(--shadow-color), 0px 1px 1px -1px var(--shadow-color);
+  --shadow: 0px 2px 4px 0px var(--shadow-color), 0px 1px 1px -1px var(--shadow-color);
+  --shadow-md: 0px 2px 4px 0px var(--shadow-color), 0px 2px 2px -1px var(--shadow-color);
+  --shadow-lg: 0px 2px 4px 0px var(--shadow-color), 0px 4px 3px -1px var(--shadow-color);
+  --shadow-xl: 0px 2px 4px 0px var(--shadow-color), 0px 8px 5px -1px var(--shadow-color);
+  --shadow-2xl: 0px 2px 4px 0px var(--shadow-color);
+  --tracking-normal: 0rem;
+  --spacing: 0.25rem;
+}
+
+.dark {
+  --background: hsl(30, 0%, 15%);
+  --foreground: hsl(26, 0%, 91%);
+  --background-darker: hsl(30, 0%, 11.5%);
+  --foreground-darker: hsl(26, 0%, 91%);
+  --secondary: hsl(26, 0%, 43%);
+
+  --lightest: hsl(26, 0%, 93%);
+  --darkest: hsl(240, 0%, 9%);
+
+  --accent: hsl(232, 100%, 71%);
+  --accent-darker: hsl(235, 69%, 58%); 
+  --accent-foreground: hsl(247, 58%, 14%);
+
+  --muted: hsl(30, 0%, 30%);
+  --muted-foreground: hsl(30, 0%, 74%);
+  --muted-half: hsla(30, 0%, 30%, 0.1);
+
+  --constructive: hsl(122, 31%, 38%);
+  --constructive-foreground: hsl(92, 73%, 78%);
+  --destructive: hsl(355, 31%, 38%);
+  --destructive-foreground: hsl(24, 64%, 84%);
+
+  --shadow-color: hsla(240, 2%, 11%, 0.15);
+
+  --chart-1: hsl(36, 44%, 52%);
+  --chart-2: hsl(170, 44%, 42%);
+  --chart-3: hsl(266, 44%, 52%);
+  --chart-4: hsl(20, 44%, 52%);
+  --chart-5: hsl(214, 44%, 52%);
+
+  --font-sans: 'Work Sans', --apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+  --font-serif: 'Iowan Old Style', 'Apple Garamond', 'Baskerville', 'Times New Roman', 'Droid Serif', 'Times', 'Source Serif Pro', serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+  --font-mono: 'Work Sans Code', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
+  
+  --shadow-2xs: 0px 2px 4px 2px var(--shadow-color);
+  --shadow-xs: 0px 2px 4px 2px var(--shadow-color);
+  --shadow-sm: 0px 2px 4px 2px var(--shadow-color), 0px 1px 1px -1px var(--shadow-color);
+  --shadow: 0px 2px 4px 2px var(--shadow-color), 0px 1px 1px -1px var(--shadow-color);
+  --shadow-md: 0px 2px 4px 2px var(--shadow-color), 0px 2px 2px -1px var(--shadow-color);
+  --shadow-lg: 0px 2px 4px 2px var(--shadow-color), 0px 4px 3px -1px var(--shadow-color);
+  --shadow-xl: 0px 2px 4px 2px var(--shadow-color), 0px 8px 5px -1px var(--shadow-color);
+  --shadow-2xl: 0px 2px 4px 2px var(--shadow-color);
+}
+
+button {
+  cursor: pointer !important;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground:  var(--foreground);
+  --color-background-darker: var(--background-darker);
+  --color-foreground-darker: var(--foreground-darker);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-darker: var(--accent-darker);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-secondary: var(--secondary);
+  --color-constructive: var(--constructive);
+  --color-constructive-foreground: var(--constructive-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--background);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --color-lightest: var(--lightest);
+  --color-darkest: var(--darkest);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --font-serif: var(--font-serif);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --shadow-2xs: var(--shadow-2xs);
+  --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
+  --shadow: var(--shadow);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-xl: var(--shadow-xl);
+  --shadow-2xl: var(--shadow-2xl);
+
+  --tracking-tighter: calc(var(--tracking-normal) - 0.05em);
+  --tracking-tight: calc(var(--tracking-normal) - 0.025em);
+  --tracking-normal: var(--tracking-normal);
+  --tracking-wide: calc(var(--tracking-normal) + 0.025em);
+  --tracking-wider: calc(var(--tracking-normal) + 0.05em);
+  --tracking-widest: calc(var(--tracking-normal) + 0.1em);
+}
+
+.xterm-viewport {
+  background-color: transparent !important;
+}
+
+.noise-bg {
+  background:
+    linear-gradient(to right, var(--background-darker), var(--accent)),
+    url(/noise.svg);
+}
+
+body {
+  /* border-radius: 10.2px; */
+  /* height: calc(100vh - calc(var(--border-width) * 2)); */
+  overflow: hidden;
+  letter-spacing: var(--tracking-normal);
+  background-color: transparent;
+}
+
+@layer base {
+  * {
+    @apply border-background outline-muted/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@plugin 'tailwind-scrollbar';
+
+/* Webkit scrollbar styles for macOS compatibility */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--muted-half);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--muted);
+}
+
+/* Thin scrollbar variant */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: var(--muted-half);
+  border-radius: 4px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background-color: var(--muted);
+}
+
+.prose-pink {
+  --tw-prose-body:  inherit;
+  --tw-prose-headings:  inherit;
+  --tw-prose-lead:  inherit;
+  --tw-prose-links:  inherit;
+  --tw-prose-bold:  inherit;
+  --tw-prose-counters:  inherit;
+  --tw-prose-bullets:  inherit;
+  --tw-prose-hr:  inherit;
+  --tw-prose-quotes:  inherit;
+  --tw-prose-quote-borders:  inherit;
+  --tw-prose-captions:  inherit;
+  --tw-prose-code:  inherit;
+  --tw-prose-pre-code:  inherit;
+  --tw-prose-pre-bg:  inherit;
+  --tw-prose-th-borders:  inherit;
+  --tw-prose-td-borders:  inherit;
+  --tw-prose-invert-body:  inherit;
+  --tw-prose-invert-headings:  inherit;
+  --tw-prose-invert-lead:  inherit;
+  --tw-prose-invert-links:  inherit;
+  --tw-prose-invert-bold:  inherit;
+  --tw-prose-invert-counters:  inherit;
+  --tw-prose-invert-bullets:  inherit;
+  --tw-prose-invert-hr:  inherit;
+  --tw-prose-invert-quotes:  inherit;
+  --tw-prose-invert-quote-borders:  inherit;
+  --tw-prose-invert-captions:  inherit;
+  --tw-prose-invert-code:  inherit;
+  --tw-prose-invert-pre-code:  inherit;
+  --tw-prose-invert-pre-bg:  inherit;
+  --tw-prose-invert-th-borders:  inherit;
+  --tw-prose-invert-td-borders:  inherit;
+}
+
+.mention__input {
+  @apply min-h-[40px] overflow-y-auto
+}
+
+input:focus {
+    outline: none;
+}
+
+textarea:focus {
+    outline: none;
+}
+
+.mention__control {
+  @apply h-fit pb-2
+}
+
+.mentions__mention {
+  @apply relative z-[20] bg-accent-foreground rounded text-accent overflow-y-auto
+}
+
+pre:has(code) {
+  @apply min-h-[40px] bg-muted/20 !text-sm whitespace-pre-wrap overflow-auto
+}
+
+code::before,
+code::after {
+  content: none;
+}
+
+hr {
+  @apply border-background border-t-(length:--border-width) border-dashed
+}
+
+article.prose h1:first-of-type,h2:first-of-type,h3:first-of-type {
+  @apply mt-4
+}
+
+/**
+ * Remove focus styles for non-keyboard focus.
+ */
+:focus:not(:focus-visible) {
+  outline: 0;
+  box-shadow: none;
+}
+
+/**
+ * Cross-browser styles for explicit focus via 
+ * keyboard-based (eg Tab) navigation or the
+ * .focus-visible utility class.
+ */
+:focus,
+.focus-visible:focus:not(:focus-visible) {
+  outline: 0;
+  box-shadow: none;
+}
+
+/* Force transparent backgrounds in syntax highlighting to preserve diff colors */
+.token {
+  background-color: transparent !important;
+}
+
+.prose :where(pre):not(:where([class~="not-prose"],[class~="not-prose"] *)) {
+  margin: 0;
+}
+
+span[style*="background"] {
+  background-color: transparent !important;
+}
+
+.fade-out-a { animation: fadeOutA 2000ms forwards; }
+.fade-out-b { animation: fadeOutB 2000ms forwards; }
+
+@keyframes fadeOutA { to { opacity: 0; } }
+@keyframes fadeOutB { to { opacity: 0; } }
+

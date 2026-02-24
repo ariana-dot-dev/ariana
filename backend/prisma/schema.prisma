@@ -1,0 +1,710 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgres"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  id             String                  @id
+  name           String
+  repositoryId   String?
+  cloneUrl       String?
+  createdAt      DateTime?
+  updatedAt      DateTime?
+  agents         Agent[]
+  members        ProjectMember[]
+  repository     Repository?             @relation(fields: [repositoryId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  environments   PersonalEnvironment[]
+  automations    Automation[]
+}
+
+model User {
+  id                          String                  @id
+  githubProfileId             String?                 @unique
+  creationMachinePublicSshKey String?
+  agentProviderConfig         Json?                   // AgentProviderConfig - single source of truth for all provider settings and credentials
+  createdAt                   DateTime?
+  updatedAt                   DateTime?
+  // Anonymous user identification
+  anonymousIdentifier         String?                 @unique
+  isAnonymous                 Boolean                 @default(false)
+  userLimitsTierId            String                  @default("anonymous")
+  subscriptionPlanId          String?
+  // Stripe customer information
+  stripeCustomerId            String?                 @unique
+  stripeSubscriptionId        String?                 @unique
+  subscriptionCancelAt        DateTime?
+  projectMemberships          ProjectMember[]
+  agents                      Agent[]
+  agentAccesses               UserAgentAccess[]
+  environments                PersonalEnvironment[]
+  automations                 Automation[]
+  githubProfile               GitHubProfile?          @relation(fields: [githubProfileId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  limitsTier                  UserLimits                    @relation(fields: [userLimitsTierId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subscriptionPlan            SubscriptionPlan?             @relation(fields: [subscriptionPlanId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usage                       UserUsage?
+  pendingMachineRegistrations PendingMachineRegistration[]
+  customMachines              CustomMachine[]
+}
+
+model GitHubProfile {
+  id           String        @id
+  name         String
+  email        String        @unique
+  image        String?
+  createdAt    DateTime?
+  updatedAt    DateTime?
+  githubTokens GitHubToken[]
+  user         User?
+}
+
+model ProjectMember {
+  id        String    @id
+  projectId String
+  userId    String
+  role      String
+  createdAt DateTime?
+  updatedAt DateTime?
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([projectId, userId])
+}
+
+model Agent {
+  id                            String               @id
+  projectId                     String
+  userId                        String
+  name                          String
+  machineId                     String?
+  machineIpv4                   String?
+  machineUrl                    String?              // HTTPS URL via cert-gateway (e.g., https://abc123.a.ariana.dev)
+  desktopUrl                    String?              // HTTPS URL for moonlight desktop streaming (e.g., https://abc123-desktop.on.ariana.dev)
+  streamingToken                String?              // Moonlight-web session token for iframe auth
+  streamingHostId               String?              // Moonlight-web host ID
+  streamingAppId                String?              // Moonlight-web app ID (desktop app)
+  servicePreviewToken           String?              // Secret token for service preview URLs (enables iframe embedding of localhost services)
+  machineSharedKey              String?
+  machineType                   String?              // 'hetzner' or 'custom'
+  lastMachineId                 String?              // Preserved during archival for snapshot lookup
+  state                         String               @default("init")
+  isRunning                     Boolean              @default(false)
+  isReady                       Boolean              @default(false)
+  createdAt                     DateTime?
+  updatedAt                     DateTime?
+  currentTaskId                 String?
+  branchName                    String               @default("")
+  baseBranch                    String?
+  gitHistoryLastPushedCommitSha String?
+  startCommitSha                String?
+  errorMessage                  String?
+  lastCommitSha                 String?
+  lastCommitUrl                 String?
+  lastCommitAt                  DateTime?
+  lastCommitPushed              Boolean              @default(false)
+  lastCommitName                String?
+  lastPromptText                String?
+  lastPromptAt                  DateTime?
+  taskSummary                   String?              // AI-generated summary of current task based on prompts
+  lastToolName                  String?
+  lastToolTarget                String?
+  lastToolAt                    DateTime?
+  lifetimeUnits                 Int                  @default(1)
+  provisionedAt                 DateTime?
+  lastAutoRestoredAt            DateTime?            // When agent was last auto-restored from ERROR state on server restart
+  prNumber                      Int?                 // PR number extracted from GitHub
+  prState                       String?              // "open" | "closed" | "merged" | null
+  prUrl                         String?
+  prBaseBranch                  String?              // Target branch of the PR
+  prLastSyncedAt                DateTime?            // When we last synced PR state from GitHub
+  isTrashed                     Boolean              @default(false)
+  trashedAt                     DateTime?
+  environmentId                 String?
+  user                          User                 @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  project                       Project              @relation(fields: [projectId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  environment                   PersonalEnvironment? @relation(fields: [environmentId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  currentTask                   AgentPrompt?         @relation(name: "AgentCurrentTask", fields: [currentTaskId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  tasks                         AgentPrompt[]        @relation(name: "AgentTasks")
+  inSlopModeUntil               DateTime?
+  slopModeLastPromptAt          DateTime?
+  slopModeCustomPrompt          String?
+  inRalphMode                   Boolean?
+  ralphModeTaskDescription      String?
+  ralphModeLastPromptAt         DateTime?
+  blockedByAutomationId         String?              // DEPRECATED: use blockedByAutomationIds instead
+  blockedByAutomationIds        String[]             @default([]) // Array of automation IDs currently blocking the agent
+  pendingCommitTriggered        Boolean              @default(false) // True if on_before_commit automations were triggered
+  pendingPushPrTriggered        Boolean              @default(false) // True if on_before_push_pr automations were triggered
+  isTemplate                    Boolean              @default(false) // True if agent is a template for the project
+  templateVisibility            String?              // 'personal' or 'shared' - null if not a template
+  templateMarkedAt              DateTime?            // When agent was marked as template (for sorting)
+  eventsVersion                 Int                  @default(0) // Bumped on every write that affects /events data, enables cheap "unchanged" polling
+  luxActiveTask                 String?              // LUX task description when session is active, null when inactive
+  luxActiveSessionId            String?              // Active LUX session ID (for querying step history)
+  accesses                      UserAgentAccess[]
+  attachments                   AgentAttachments?
+  customMachine                 CustomMachine?
+
+  @@index([currentTaskId])
+  @@index([userId])
+  @@index([state])
+  @@index([projectId])
+  @@index([isRunning])
+  @@index([provisionedAt])
+  @@index([isTrashed])
+  @@index([trashedAt])
+  @@index([environmentId])
+  @@index([projectId, isTemplate, templateMarkedAt])
+  @@index([prState])
+}
+
+model AgentCommit {
+  id                   String       @id
+  agentId              String
+  projectId            String
+  commitSha            String
+  commitMessage        String
+  commitUrl            String?
+  branchName           String
+  title                String?
+  commitPatch          String?
+  filesChanged         Int?         @default(0)
+  additions            Int?         @default(0)
+  deletions            Int?         @default(0)
+  createdAt            DateTime?
+  taskId               String?
+  isDeleted            Boolean      @default(false)
+  deletedAt            DateTime?
+  isReverted           Boolean      @default(false)
+  revertedAt           DateTime?
+  revertedByCheckpoint String?
+  pushed               Boolean      @default(false)
+  pushedAt             DateTime?
+  task                 AgentPrompt? @relation(fields: [taskId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([agentId, commitSha])
+  @@index([taskId])
+  @@index([projectId])
+  @@index([createdAt])
+  @@index([agentId])
+  @@index([isDeleted])
+  @@index([isReverted])
+  @@index([pushed])
+}
+
+
+model AgentMessage {
+  id                   String       @id
+  agentId              String
+  role                 String
+  content              String
+  model                String?
+  timestamp            DateTime
+  tools                Json?
+  isReverted           Boolean      @default(false)
+  revertedAt           DateTime?
+  revertedByCheckpoint String?
+  taskId               String?
+  isStreaming           Boolean      @default(false)
+  sourceUuid           String?
+  agentPrompts         AgentPrompt? @relation(fields: [taskId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([taskId])
+  @@index([timestamp])
+  @@index([role])
+  @@index([revertedAt])
+  @@index([isReverted])
+  @@index([agentId])
+  @@index([agentId, sourceUuid])
+}
+
+model AgentPrompt {
+  id                     String            @id
+  agentId                String
+  prompt                 String
+  status                 String            @default("queued")
+  model                  String?
+  createdAt              DateTime?
+  agentCommits           AgentCommit[]
+  agentMessages          AgentMessage[]
+  agentResets            AgentReset[]
+  automationEvents       AutomationEvent[]
+  agent                  Agent             @relation(name: "AgentTasks", fields: [agentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  agentsWhereCurrentTask Agent[]           @relation(name: "AgentCurrentTask")
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([agentId])
+}
+
+model AgentReset {
+  id        String       @id
+  agentId   String
+  createdAt DateTime?
+  taskId    String?
+  task      AgentPrompt? @relation(fields: [taskId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([agentId])
+  @@index([createdAt])
+  @@index([taskId])
+}
+
+model AgentContextEvent {
+  id                      String       @id
+  agentId                 String
+  type                    String       // 'context_warning' | 'compaction_start' | 'compaction_complete'
+  taskId                  String?
+  contextUsedPercent      Int?
+  contextRemainingPercent Int?
+  inputTokens             Int?
+  cacheTokens             Int?
+  contextWindow           Int?
+  summary                 String?      // For compaction_complete
+  tokensBefore            Int?
+  tokensAfter             Int?
+  tokensSaved             Int?
+  triggerReason           String?      // For compaction_start
+  createdAt               DateTime?
+
+  @@index([agentId])
+  @@index([createdAt])
+  @@index([type])
+}
+
+model GitHubCache {
+  id           String      @id
+  endpoint     String
+  repositoryId String?
+  cacheKey     String
+  data         String
+  expiresAt    DateTime
+  createdAt    DateTime?
+  updatedAt    DateTime?
+  repository   Repository? @relation(fields: [repositoryId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([repositoryId])
+  @@index([expiresAt])
+}
+
+model GitHubToken {
+  id            String        @id
+  userId        String
+  accessToken   String
+  refreshToken  String?
+  scope         String?
+  tokenType     String?       @default("bearer")
+  expiresAt     DateTime?
+  createdAt     DateTime?
+  githubProfile GitHubProfile @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([userId])
+}
+
+
+model Repository {
+  id           String        @id
+  githubId     Int           @unique
+  name         String
+  fullName     String
+  description  String?
+  url          String
+  baseBranch   String        @default("main")
+  lastCommitAt DateTime?
+  lastSyncAt   DateTime?
+  createdAt    DateTime?
+  updatedAt    DateTime?
+  projects     Project[]
+  githubCaches GitHubCache[]
+
+  @@index([githubId])
+}
+
+model UserAgentAccess {
+  id        String    @id
+  userId    String
+  agentId   String
+  access    String    @default("write")
+  createdAt DateTime?
+  updatedAt DateTime?
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([userId, agentId])
+  @@index([userId])
+  @@index([agentId])
+  @@index([access])
+}
+
+model AgentAttachments {
+  id                 String    @id
+  agentId            String    @unique
+  claudeDirectoryZip String?
+  pendingDiff        String?
+  totalDiff          String?
+  updatedAt          DateTime?
+  agent              Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([agentId])
+  @@index([updatedAt])
+}
+
+model UserLimits {
+  id                         String              @id
+  label                      String
+
+  // Projects
+  maxProjectsTotal           Int
+  maxProjectsPerMinute       Int
+  maxProjectsPer24Hours      Int
+
+  // Agents
+  maxAgentsPerMonth          Int
+  maxAgentsPerMinute         Int
+  maxAgentsPer24Hours        Int
+
+  // Prompts
+  maxPromptsPerMinute        Int
+  maxPromptsPer24Hours       Int
+
+  users                      User[]
+  subscriptionPlans          SubscriptionPlan[]
+}
+
+model SubscriptionPlan {
+  id                String      @id
+  stripePriceId     String?
+  stripePriceIdTest String?
+  label             String
+  userLimitId       String
+  userLimit         UserLimits  @relation(fields: [userLimitId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users             User[]
+
+  @@index([userLimitId])
+}
+
+model UserUsage {
+  id                        String    @id
+  userId                    String    @unique
+  user                      User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  // Projects
+  projectsTotal             Int       @default(0)
+  projectsLastMinute        Json      @default("[]")  // Array of timestamps
+  projectsLast24Hours       Json      @default("[]")  // Array of timestamps
+
+  // Agents
+  agentsThisMonth           Int       @default(0)
+  agentsLastMinute          Json      @default("[]")
+  agentsLast24Hours         Json      @default("[]")
+  agentsMonthResetAt        DateTime? // Track when to reset monthly counter
+
+  // Prompts (no "total" limit)
+  promptsLastMinute         Json      @default("[]")
+  promptsLast24Hours        Json      @default("[]")
+
+  updatedAt                 DateTime?
+
+  @@index([userId])
+}
+
+model ParkedMachine {
+  id                String    @id
+  machineId         String?   @unique
+  machineName       String?
+  ipv4              String?
+  url               String?   // HTTPS URL via cert-gateway (e.g., https://abc123.a.ariana.dev)
+  desktopUrl        String?   // HTTPS URL for moonlight desktop streaming
+  streamingToken    String?   // Moonlight-web session token
+  streamingHostId   String?   // Moonlight-web host ID
+  streamingAppId    String?   // Moonlight-web app ID
+  sharedKey         String?   // Pre-generated during parking, server already running
+  status            String    @default("launching") // "launching", "ready", "claimed"
+  createdAt         DateTime  @default(now())
+  claimedAt         DateTime?
+  claimedByAgentId  String?
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model MachineHealthCheck {
+  id                  String    @id
+  agentId             String    @unique
+  machineId           String
+  consecutiveFailures Int       @default(0)
+  lastCheckAt         DateTime  @default(now())
+  lastSuccessAt       DateTime?
+  lastFailureAt       DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([agentId])
+  @@index([consecutiveFailures])
+  @@index([lastCheckAt])
+}
+
+model AgentUploadProgress {
+  id              String    @id
+  agentId         String    @unique
+  totalChunks     Int
+  chunksReceived  Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([agentId])
+  @@index([createdAt])
+}
+
+model MachineReservationQueue {
+  id                String    @id
+  agentId           String    @unique
+  requestedAt       DateTime  @default(now())
+  assignedMachineId String?
+  assignedIpv4      String?
+  assignedUrl       String?   // HTTPS URL via cert-gateway (e.g., https://abc123.a.ariana.dev)
+  assignedDesktopUrl String?  // HTTPS URL for moonlight desktop streaming
+  assignedStreamingToken  String?  // Moonlight-web session token
+  assignedStreamingHostId String?  // Moonlight-web host ID
+  assignedStreamingAppId  String?  // Moonlight-web app ID
+  assignedSharedKey String?
+  status            String    @default("queued") // "queued", "processing", "assigned", "fulfilled", "cancelled"
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([status, requestedAt])
+  @@index([agentId])
+}
+
+model PersonalEnvironment {
+  id           String                         @id
+  projectId    String
+  userId       String
+  data         String                         @default("{}") // JSON string containing { name, envContents, secretFiles: [{ path, contents }], automationIds?: string[] }
+  isDefault    Boolean                        @default(false)
+  createdAt    DateTime?
+  updatedAt    DateTime?
+  project      Project                        @relation(fields: [projectId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user         User                           @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  agents       Agent[]
+  automations  PersonalEnvironmentAutomation[]
+
+  @@index([projectId])
+  @@index([userId])
+  @@index([isDefault])
+  @@index([createdAt])
+}
+
+model PendingMachineRegistration {
+  token      String   @id
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  status     String   @default("pending") // pending, used, expired
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([status])
+  @@index([expiresAt])
+}
+
+model CustomMachine {
+  id             String    @id @default(cuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  name           String    // hostname
+  sharedKey      String    // encryption key
+  ipv4           String    // public IP address
+  port           Int       @default(8911) // agent server port
+  status         String    @default("offline") // online, offline, in_use
+
+  // Machine specs
+  os             String
+  arch           String
+  cpuCount       Int
+  memoryGB       Int
+
+  // Current usage
+  currentAgentId String?   @unique
+  currentAgent   Agent?    @relation(fields: [currentAgentId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  lastSeenAt     DateTime  @default(now())
+  createdAt      DateTime  @default(now())
+
+  @@index([userId])
+  @@index([status])
+  @@index([currentAgentId])
+}
+
+model Automation {
+  id           String                         @id
+  projectId    String
+  userId       String
+  data         String                         @default("{}") // JSON string containing full automation config
+  createdAt    DateTime?
+  updatedAt    DateTime?
+  project      Project                        @relation(fields: [projectId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user         User                           @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  environments PersonalEnvironmentAutomation[]
+  events       AutomationEvent[]
+
+  @@index([projectId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// Join table for many-to-many relationship between PersonalEnvironment and Automation
+model PersonalEnvironmentAutomation {
+  id            String              @id
+  environmentId String
+  automationId  String
+  createdAt     DateTime?
+  environment   PersonalEnvironment @relation(fields: [environmentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  automation    Automation          @relation(fields: [automationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([environmentId, automationId])
+  @@index([environmentId])
+  @@index([automationId])
+}
+
+model AutomationEvent {
+  id               String       @id
+  agentId          String
+  automationId     String
+  taskId           String?      // Links to AgentPrompt (task ID)
+  trigger          String       // JSON string with trigger info and variables
+  output           String?      // stdout/stderr combined (last 1000 lines)
+  isStartTruncated Boolean      @default(false)
+  status           String       @default("running") // 'running' | 'finished' | 'failed' | 'killed'
+  exitCode         Int?
+  startedAt        DateTime?
+  finishedAt       DateTime?
+  createdAt        DateTime?
+  automation       Automation   @relation(fields: [automationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  task             AgentPrompt? @relation(fields: [taskId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([agentId])
+  @@index([automationId])
+  @@index([taskId])
+  @@index([status])
+}
+
+
+model MachineSnapshot {
+  id          String    @id
+  machineId   String    // Hetzner machine ID
+  status      String    @default("queued")  // queued, in_progress, completed, failed, cancelled
+  r2Key       String?
+  sizeBytes   BigInt?
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+  expiresAt   DateTime  // 30 days from creation
+  deleteAfter DateTime? // Soft delete - actually delete after this time
+  error       String?
+  retryCount  Int       @default(0)  // Number of retries attempted (max 10)
+  priority    Boolean   @default(false)  // True for pre-archival snapshots
+
+  @@index([machineId, status])
+  @@index([machineId, completedAt])
+  @@index([expiresAt])
+  @@index([status])
+  @@index([deleteAfter])
+}
+
+// Single-slot queue per machine for pending snapshots
+model MachineSnapshotQueue {
+  id          String    @id
+  machineId   String    @unique  // Only one queued snapshot per machine
+  priority    Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+
+  @@index([machineId])
+}
+
+// Lock table to track which machines have snapshots in progress
+model MachineSnapshotLock {
+  id          String    @id
+  machineId   String    @unique  // Only one lock per machine
+  snapshotId  String    // The snapshot currently being processed
+  acquiredAt  DateTime  @default(now())
+  retryCount  Int       @default(0)
+
+  @@index([machineId])
+  @@index([acquiredAt])
+}
+
+// Per-step LUX computer-use usage records (one row per API call)
+model LuxUsageRecord {
+  id                String    @id
+  userId            String
+  agentId           String
+  projectId         String
+  sessionId         String    // LUX session ID (logical grouping of steps)
+  model             String    // "lux-actor-1" or "lux-thinker-1"
+  task              String    // Task description for the session
+  promptTokens      Int       @default(0)
+  completionTokens  Int       @default(0)
+  totalTokens       Int       @default(0)
+  actionsReturned   Int       @default(0)
+  stopped           Boolean   @default(false) // Whether LUX signaled task complete
+  reason            String?              // LUX AI reasoning/thinking for this step
+  createdAt         DateTime  @default(now())
+
+  @@index([userId])
+  @@index([agentId])
+  @@index([projectId])
+  @@index([sessionId])
+  @@index([createdAt])
+}
+
+model DashboardSnapshot {
+  id                     String    @id
+  snapshotDate           DateTime  @unique // Date of the snapshot (midnight UTC)
+
+  // Summary stats
+  totalUsers             Int
+  totalProjects          Int
+  totalAgents            Int
+  agentsWithPushAndPR    Int
+  totalCommits           Int
+  pushedCommits          Int
+
+  // User distribution data (JSON arrays)
+  usersByAgentCount      Json      // [{ count: 0, users: N }, { count: 1, users: M }, ...]
+  usersByPromptCount     Json      // Same structure
+  usersByPRCount         Json      // Same structure
+
+  // Retention cohort data (JSON arrays)
+  retentionNoGap         Json      // [{ day: 1, users: N }, { day: 2, users: M }, ...]
+  retentionGap1Day       Json      // Same structure
+  retentionGap3Days      Json      // Same structure
+  retentionGap7Days      Json      // Same structure
+
+  // Session duration data (JSON array)
+  sessionDurationDist    Json      // [{ halfHours: 0, users: N }, { halfHours: 1, users: M }, ...]
+
+  createdAt              DateTime  @default(now())
+
+  @@index([snapshotDate])
+  @@index([createdAt])
+}
+
+// Tracks port subdomains registered via cert-gateway for each agent
+// Max 50 per agent. Backend proxies cert-gateway calls to prevent key exposure.
+model AgentPortDomain {
+  id             String    @id @default(cuid())
+  agentId        String
+  port           Int
+  machineName    String    // Cert-gateway machine identifier (e.g., "subdomain-port-3000")
+  subdomain      String    // Full subdomain (e.g., "subdomain-3000")
+  url            String?   // Full HTTPS URL from cert-gateway response
+  createdAt      DateTime  @default(now())
+
+  @@unique([agentId, port])
+  @@index([agentId])
+  @@index([machineName])
+}

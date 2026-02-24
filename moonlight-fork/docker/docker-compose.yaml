@@ -1,0 +1,18 @@
+version: "3.9"
+
+services:
+  moonlight-web:
+    image: mrcreativ3001/moonlight-web-stream:latest
+    container_name: moonlight-web
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "40000-40100:40000-40100/udp"
+    environment:
+      - WEBRTC_NAT_1TO1_HOST=127.0.0.1 # Set this to your LAN ip or public ip
+    volumes:
+      - moonlight-server:/moonlight-web/server
+
+volumes:
+  moonlight-server:
+    name: moonlight-server

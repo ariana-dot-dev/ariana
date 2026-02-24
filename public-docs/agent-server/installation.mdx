@@ -1,0 +1,64 @@
+---
+title: "Installation"
+description: "Install the Ariana Agent Server on your custom machines"
+---
+
+The Ariana Agent Server allows you to run AI agents on your own cloud VMs or local machines. The agent server comes with a CLI that makes installation and management straightforward.
+
+<Note>
+Your machine must be publicly accessible and reachable over the internet.
+</Note>
+
+## Quick Install (Recommended)
+
+The easiest way to install the agent server is through the Ariana app:
+
+1. Open the Ariana app
+2. Click the top-left menu
+3. Go to **Custom Machines**
+4. Click **Add**
+
+This generates a dynamic one-liner installation script that's valid for 60 minutes. The script automatically installs everything and connects to your Ariana account.
+
+<Frame>
+  <img src="/images/add-custom-machine.gif" alt="Adding a custom machine" />
+</Frame>
+
+## Install and Connect via CLI
+
+Alternatively, you can install the CLI manually. The Ariana Agent Server is managed through the Ariana CLI. Install the CLI first:
+
+```bash
+curl -fsSL https://github.com/ariana-dot-dev/agent-server/releases/latest/download/install-cli.sh | sudo bash
+```
+
+**What this does:**
+
+1. Detects your platform (Linux/macOS) and architecture (x64/ARM64)
+2. Downloads the appropriate CLI binary from GitHub releases
+3. Installs it to `/usr/local/bin/ariana`
+4. Makes it executable and verifies the installation
+
+After installation, you'll have access to the `ariana` command for managing your agent server.
+
+<Warning>
+Some `ariana` commands may require sudo access to manage system services and install dependencies.
+</Warning>
+
+## Post-Installation
+
+### Connect to Ariana
+
+After installing the CLI, connect your machine to your Ariana account using a registration token:
+
+```bash
+ariana connect --token <YOUR_TOKEN>
+```
+
+Get your registration token from the Ariana app: **Top-left menu → Custom Machines → Add**.
+
+This will:
+1. Register your machine with Ariana
+2. Install the agent server
+3. Install required dependencies (Git, GitHub CLI, Node.js, Claude Code CLI)
+4. Start the agent server automatically

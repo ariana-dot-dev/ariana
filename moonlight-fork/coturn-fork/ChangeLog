@@ -1,0 +1,1900 @@
+Release 4.8.0
+
+Changelist:
+- Allow faster packet validation on listener threads (#1768) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Fix order of arguments to calloc (#1790) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Fix crashes while setting socket buffer size (#1789) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Implement configurable buffer sizes (#1780) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Update Alpine to 3.23.2 version in Docker image (tyranron <tyranron@gmail.com>)
+- Update Debian "trixie" to 20251208 snapshot in Docker image (tyranron <tyranron@gmail.com>)
+- Use bool to enable prometheus (#1779) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Fix memory leak using libevent (#1751) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Addressed possible null pointer dereferences (#1729) (redraincatching <99604494+redraincatching@users.noreply.github.com>)
+- Address possible null pointer dereferences (#1744) (redraincatching <99604494+redraincatching@users.noreply.github.com>)
+- Improve const correctness in coturn (#1424) (Michael Jones <jonesmz@users.noreply.github.com>)
+- Update attribute values according to RFC 8656 (#1748) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Fixing missing dependencies in Makefile (#1739) (Jun Lyu <71107931+Meiye-lj@users.noreply.github.com>)
+- Add fuzzing to ci workflows (#1745) (redraincatching <99604494+redraincatching@users.noreply.github.com>)
+- mainreplay: fix leak in decrypt_aes_128() (#1737) (Lidong Yan <502024330056@smail.nju.edu.cn>)
+- Upgrade Debian to "trixie" in Docker image (tyranron <tyranron@gmail.com>)
+- Fix typo in Docker CI spec (tyranron <tyranron@gmail.com>)
+- Verify CHANGELOG date on Docker CI (tyranron <tyranron@gmail.com>)
+- Fix logging before parsing logging cmd line args (#1723) (Gustavo Garcia <gustavogb@gmail.com>)
+- Fix dead link in turnserver.spec Source0 field (#1722) (Copilot <198982749+Copilot@users.noreply.github.com>)
+- reduce calls to random (#1710) (redraincatching <99604494+redraincatching@users.noreply.github.com>)
+- Fix null pointer dereference in set_ssl_ctx function (#1720) (Gustavo Garcia <gustavogb@gmail.com>)
+- Add configurable CPU count option for containerized environments (#1717) (Copilot <198982749+Copilot@users.noreply.github.com>)
+- Fix memory and resource leaks in udp_create_server_socket( ) (#1714) (lhywk <lhywkd22@gmail.com>)
+- Add define to disable OAuth support (#1713) (Shane <ignignokterr@gmail.com>)
+- typo correction (#1715) (redraincatching <99604494+redraincatching@users.noreply.github.com>)
+- refactored tri-state to bools (#1709) (redraincatching <99604494+redraincatching@users.noreply.github.com>)
+- addressed null pointer deref warnings (#1712) (redraincatching <99604494+redraincatching@users.noreply.github.com>)
+- removed unnecessary null check (#1706) (redraincatching <99604494+redraincatching@users.noreply.github.com>)
+- Fix compiler warnings in source files (#1704) (Gustavo Garcia <gustavogb@gmail.com>)
+- Revert random number generation (Pavel Punsky <eakraly@users.noreply.github.com>)
+- guarantee no oob write in strncat (#1702) (redraincatching <99604494+redraincatching@users.noreply.github.com>)
+- Fix issues with Global Allocation Count for drain mode (#1699) (Scott Godin <sgodin@sipspectrum.com>)
+- fix: comment out verbose mode by default (#1696) (Amin Farjadi <31803062+amin-farjadi@users.noreply.github.com>)
+
+Contributors:
+- Amin Farjadi <31803062+amin-farjadi@users.noreply.github.com>
+- Copilot <198982749+Copilot@users.noreply.github.com>
+- dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>
+- Gustavo Garcia <gustavogb@gmail.com>
+- Jun Lyu <71107931+Meiye-lj@users.noreply.github.com>
+- Kai Ren <tyranron@gmail.com>
+- lhywk <lhywkd22@gmail.com>
+- Lidong Yan <502024330056@smail.nju.edu.cn>
+- Michael Jones <jonesmz@users.noreply.github.com>
+- Pavel Punsky <eakraly@users.noreply.github.com>
+- redraincatching <99604494+redraincatching@users.noreply.github.com>
+- Scott Godin <sgodin@sipspectrum.com>
+- Shane <ignignokterr@gmail.com>
+- tyranron <tyranron@gmail.com>
+
+Release 4.7.0
+
+Changelist:
+- [BREAKING] Remove support for openssl older than 1.1.1 (#1397) (Michael Jones <jonesmz@users.noreply.github.com>)
+- [BREAKING] Cleanup deprecated options (#1599) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- [BREAKING] Reverse SOFTWARE_ATTRIBUTE_OPT to avoid inverse logic (#1598) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- [BREAKING] Deprecate response-origin-only-with-rfc5780 (#1690) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- [BREAKING] Invert no-stun-backward-compatibility to be default on (#1689) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Make older TLS versions optional (#1693) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Add missing close socket when ioa_socket call fails (#1694) (tyranron <tyranron@gmail.com>)
+- Add spdx tags to all source files (#1510) (Michael Jones <jonesmz@users.noreply.github.com>)
+- Address various minor clang-tidy warnings (#1513) (Michael Jones <jonesmz@users.noreply.github.com>)
+- Update reference to old draft in README to RFC8016 (Gustavo Garcia <gustavogb@gmail.com>)
+- Invert RFC5780 option to default off (#1688) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Add modules diagram to developer doc (#1685) (Gustavo Garcia <gustavogb@gmail.com>)
+- Fix compilation warning with const - non const conversions (#1686) (Gustavo Garcia <gustavogb@gmail.com>)
+- Makefile.in: Don't install sql schema into DOCSDIR (#1684) (Greg Troxel <gdt@lexort.com>)
+- Fix infinite loop in ns_turn_server.c (#1460) (Asmir Mehic <asmir.mehic@gmail.com>)
+- Fix the ability to compile coturn using C++ compiler (#1546) (Michael Jones <jonesmz@users.noreply.github.com>)
+- Restore returning 200 OK on root prometheus path for health check (#1678) (Gustavo Garcia <gustavogb@gmail.com>)
+- Improve MySQL connection error logging to include actual MySQL error message (#1679) (Gustavo Garcia <gustavogb@gmail.com>)
+- redis: use dbname param when redis is unauthenticated (#1668) (maddy <maddy@kitty.garden>)
+- Show allocations increment/decrement logs behind verbose flag (#1677) (Gustavo Garcia <gustavogb@gmail.com>)
+- [Fix] Fix Repeated Line in Example turnserver.conf (#1671) (Stefan Kieszkowski <85728496+stefankiesz@users.noreply.github.com>)
+- change for incorrect handling of TURN_NO_TLS environment variable (#1663) (Leonid Gorbachev <60500216+leonidgorbachev@users.noreply.github.com>)
+- Add Content-Type header to prometheus response (#1662) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Fix infinite loop while triggering SIGHUP and log file reset causing … (#1630) (nicolas-laduguie <111897939+nicolas-laduguie@users.noreply.github.com>)
+- rename and dependency extraction (#1634) (redraincatching <99604494+redraincatching@users.noreply.github.com>)
+- updated types to bool in _turn_params_ to reflect C11 (#1406) (redraincatching <99604494+redraincatching@users.noreply.github.com>)
+- Windows '_WTA' bug (#1624) (guoyingbo <guoyingbo@gmail.com>)
+- Fix cmake issues detecting mongo and libsystemd on macOS (#1621) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Fix hiredis detection by cmake (#1620) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Drop TLS version support detection (#1617) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Cleanup ALPN_SUPPORTED define usage (#1616) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Fix warnings type conversion (#1615) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Add parameter for specifying prometheus path (#1602) (Alex Gustafsson <89969483+alexg-axis@users.noreply.github.com>)
+- Do not build with Ubuntu 18, use 24 (#1613) (Pavel Punsky <eakraly@users.noreply.github.com>)
+
+Contributors:
+- Alex Gustafsson <89969483+alexg-axis@users.noreply.github.com>
+- Asmir Mehic <asmir.mehic@gmail.com>
+- Greg Troxel <gdt@lexort.com>
+- guoyingbo <guoyingbo@gmail.com>
+- Gustavo Garcia <gustavogb@gmail.com>
+- Kai Ren <tyranron@gmail.com>
+- Leonid Gorbachev <60500216+leonidgorbachev@users.noreply.github.com>
+- maddy <maddy@kitty.garden>
+- Michael Jones <jonesmz@users.noreply.github.com>
+- nicolas-laduguie <111897939+nicolas-laduguie@users.noreply.github.com>
+- Pavel Punsky <eakraly@users.noreply.github.com>
+- redraincatching <99604494+redraincatching@users.noreply.github.com>
+- Stefan Kieszkowski <85728496+stefankiesz@users.noreply.github.com>
+- tyranron <tyranron@gmail.com>
+
+Release 4.6.3
+
+Changelist:
+- Implement custom prometheus http handler (#1591) (Alex Gustafsson <89969483+alexg-axis@users.noreply.github.com>)
+- Add MariaDB support to README.md (#1601) (Robert Silén <robert.silen@mariadb.org>)
+- Allow authenticating with a username to redis (#1488) (maddy <maddy@kitty.garden>)
+- Easy installation of coturn on AWS (#1581) (hariprasadt <hariprasad.t@samsung.com>)
+- Add prometheus setting suggestions on turn.conf in example folder (#1597) (Chai-Shi <changchaishi@gmail.com>)
+- Install openssl-1.1.1 on amazonlinux:2 instead of openssl-1.0.1 (#1595) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Add new Drain feature (#1529) (Scott Godin <sgodin@sipspectrum.com>)
+- Additional refactoring of ns_turn_allocation.* to address security scanner concerns (#1514) (Michael Jones <jonesmz@users.noreply.github.com>)
+- Fix linting error in mainrelay.c (#1558) (redraincatching <99604494+redraincatching@users.noreply.github.com>)
+- Fix rpm version scripts (#1556) (eakraly <eakraly@users.noreply.github.com>)
+- Delete dead code (#1563) (Sven Tennie <sven.tennie@gmail.com>)
+- Fix cli auth (#1578) (Mészáros Mihály <misi@majd.eu>)
+- Use bool, instead of int, for the functions in ns_turn_msg.c (#1553) (Michael Jones <jonesmz@users.noreply.github.com>)
+- Reformat code (#1557) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- configure: data files shouldn't be executable (#1542) (Sergey Radionov <RSATom@gmail.com>)
+- Update libtelnet (#1545) (Michael Jones <jonesmz@users.noreply.github.com>)
+- Use calloc where appropriate, avoid memset when normal buffer initialization works (#1550) (Michael Jones <jonesmz@users.noreply.github.com>)
+- Fix make lint (#1547) (Michael Jones <jonesmz@users.noreply.github.com>)
+- Fix compiler warnings from continuous integration (#1555) (Michael Jones <jonesmz@users.noreply.github.com>)
+- Fix nodejs/glibc problem with old container images. (#1548) (Michael Jones <jonesmz@users.noreply.github.com>)
+- Windows: Only attempt to bind when the network interface is up (#1527) (David Smitmanis <davidsm@axis.com>)
+- Memset user_db before reading conf file, not after (#1537) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- added support for amazon linux and renamed tests.yml (#1401) (redraincatching <99604494+redraincatching@users.noreply.github.com>)
+- Check the result of malloc in send_message_to_redis (#1515) (Michael Jones <jonesmz@users.noreply.github.com>)
+- Check the result of malloc in mongo_set_realm_option_one (#1516) (Michael Jones <jonesmz@users.noreply.github.com>)
+- Simplify workflow for codeql (#1517) (Michael Jones <jonesmz@users.noreply.github.com>)
+- Move the hiredis_libevent2 code from common to relay (#1509) (Michael Jones <jonesmz@users.noreply.github.com>)
+- Include what you use (#1512) (Michael Jones <jonesmz@users.noreply.github.com>)
+- Check the result of malloc in string_list_add (#1495) (Michael Jones <jonesmz@users.noreply.github.com>)
+- Check the result of realloc and calloc in ch_map_get (#1497) (Michael Jones <jonesmz@users.noreply.github.com>)
+- Address clang-tidy warnings in db files (#1405) (Michael Jones <jonesmz@users.noreply.github.com>)
+- malloc now allocates space for string terminator (#1507) (redraincatching <99604494+redraincatching@users.noreply.github.com>)
+- Use bool over int for the turnutils_uclient program (#1420) (Michael Jones <jonesmz@users.noreply.github.com>)
+- Fix lint complaint about comment (#1506) (Michael Jones <jonesmz@users.noreply.github.com>)
+- Run all of the CI except for Docker builds on any change (#1415) (Michael Jones <jonesmz@users.noreply.github.com>)
+- Avoid read-past-end of string in get_bold_admin_title (#1499) (Michael Jones <jonesmz@users.noreply.github.com>)
+- Check allocation results in add_static_user_account (#1501) (Michael Jones <jonesmz@users.noreply.github.com>)
+- Address some build issues introduced by api changes (#1505) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Check the result of calloc in handle_logon_request (#1498) (Michael Jones <jonesmz@users.noreply.github.com>)
+- Avoid writing potentially uninitialized data to aes_128 key file (#1500) (Michael Jones <jonesmz@users.noreply.github.com>)
+- Use active CPU number instead of total number (#1469) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- defined a magic number for stun fingerprinting (#1489) (redraincatching <99604494+redraincatching@users.noreply.github.com>)
+- Always run lint, regardless of branch (#1492) (Michael Jones <jonesmz@users.noreply.github.com>)
+- avoid potential nullptr derefernence in udp_create_server_socket (#1496) (Michael Jones <jonesmz@users.noreply.github.com>)
+- Change the various map functions to return bool instead of inconsistantly return 0, 1, or -1 (#1502) (Michael Jones <jonesmz@users.noreply.github.com>)
+- Check the result of malloc in del_alt_server (#1503) (Michael Jones <jonesmz@users.noreply.github.com>)
+- Avoid nullptr dereference of server variable in various functions (#1504) (Michael Jones <jonesmz@users.noreply.github.com>)
+- Fix msvc analyzer error on goto label on rfc5769check (#1486) (Gustavo Garcia <gustavogb@gmail.com>)
+- Fix buffer overflow in generate_enc_password with increase rsalt by 2 (#1463) (Stefan Junker <1181362+steveej@users.noreply.github.com>)
+- Fix lint errors (Gustavo Garcia <gustavogb@gmail.com>)
+- Add support for raw public keys (Rfc 7250) (#1458) (Nikolayshcx <77790944+Nikolayshcx@users.noreply.github.com>)
+- Fix clang-format lint warnings (Gustavo Garcia <gustavogb@mail.com>)
+- Fix const during free warning in rfc5769check app (Gustavo Garcia <gustavogb@mail.com>)
+- Refactor: peer_input_handle (#1325) (Kang Lin <kl222@126.com>)
+- workflow tidying (#1396) (redraincatching <99604494+redraincatching@users.noreply.github.com>)
+- Update turnserver.conf Example about listening-ip (#1336) (Wittmer, Christian <chris@computersalat.de>)
+- Fix Cmake find issue in libevent (#1466) (NO NAME <45446340+linwenchen@users.noreply.github.com>)
+- CMake: Declare the variable nearby (#1387) (Kang Lin <kl222@126.com>)
+- Print version only, no extra lines (#1441) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Fix memory leak in rfc5769check.c (#1410) (ashamedbit <muralianiruddhan@gmail.com>)
+- Fix memory leak in netengine.c (#1411) (ashamedbit <muralianiruddhan@gmail.com>)
+- Fix memory leak on http_server.c (#1412) (ashamedbit <muralianiruddhan@gmail.com>)
+- ubuntu build dependencies extracted to composite actions (#1399) (redraincatching <99604494+redraincatching@users.noreply.github.com>)
+- Delete unused variable (#1437) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- changed variables in stunclient.c to bool (C11) (#1421) (redraincatching <99604494+redraincatching@users.noreply.github.com>)
+- added missing function prototype of turn_random_number() (#1428) (redraincatching <99604494+redraincatching@users.noreply.github.com>)
+- Fix no-tls warning typo (#1426) (Jan Brasna <1784648+janbrasna@users.noreply.github.com>)
+- Update SQLite.md (#1429) (dominiquefournier <dominique@fournier38.fr>)
+- Adjust wording in cmake message when prometheous cannot be found. (#1418) (Michael Jones <jonesmz@users.noreply.github.com>)
+- Add the InsertBraces command for clang-format to ensure that all conditionals always have braces (#1408) (Michael Jones <jonesmz@users.noreply.github.com>)
+- Change minimal required cmake version to 3.16 (#1388) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Replace HeapAlloc with malloc (#1378) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Added sessionID to some log lines (#1334) (korayvt <korayvt@users.noreply.github.com>)
+- Update FlowChart (#1377) (Kang Lin <kl222@126.com>)
+- Add clang-tidy, include-what-you-use, and msvc-analyzer github actions (#1363) (Michael Jones <jonesmz@users.noreply.github.com>)
+- Doc: add flowchart (#1328) (Kang Lin <kl222@126.com>)
+- Missing session ID in coturn logs for denied IP - 1330 (#1332) (Cybermilitia <Cybermilitia@users.noreply.github.com>)
+- Update lukka/run-vcpkg@11 (#1374) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Fix typos (#1345) (vuittont60 <81072379+vuittont60@users.noreply.github.com>)
+- Fix mingw build (#1376) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Add github action that runs tests with compiler sanitizers (#1370) (Michael Jones <jonesmz@users.noreply.github.com>)
+- Simplify macOS detection macros (#1372) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Fix potential null passed to function expecting nonnull (#1373) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Only set MHD_USE_DUAL_STACK if IPv6 is available (#1362) (Evgeny Khramtsov <xramtsov@gmail.com>)
+- Remove unimplemented test folder reference from CMakeLists.txt (#1371) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Fix cmake find prometheus(fix #1304) (#1315) (Kang Lin <kl222@126.com>)
+- Fix run cmake.yml in any github action (#1320) (Kang Lin <kl222@126.com>)
+- Fix return correct error code for `create_relay_connection` in case of `RESERVATION-TOKEN` failure (#1319) (Subhra264 <chakrabortysubhradeep556@gmail.com>)
+- Reduce ifdefs in code: TURN_NO_PROMETHEUS (#1116) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- strncpy doesn't return size_t (#1296) (Richard Russo <richard@signal.org>)
+- Return a 400 response to HTTP requests (#1231) (Dave Lambley <dave@lambley.me.uk>)
+- Fix missing strncpy in fix_stun_check_message_integrity_str (#1282) (Gustavo Garcia <gustavogb@gmail.com>)
+- Fix ubuntu 16 build with GH action checkout version to v3 (#1281) (Gustavo Garcia <gustavogb@gmail.com>)
+- Fix memleak in pgsql_reread_realms (#1278) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Replace srand/rand with srandom/random (#1279) (Gustavo Garcia <gustavogb@gmail.com>)
+- Fix memcpy len checks stun_is_challenge_response_str (#1280) (Gustavo Garcia <gustavogb@gmail.com>)
+- Add warning and disable web admin if no-tls option used (#1256) (Alexander Udovichenko <udovichenko48@gmail.com>)
+- Fix formatting to fix lint error (#1258) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- added warnings for prometheus apt unavailability (#1184) (czephyr <alfredo.funicello@studenti.unimi.it>)
+- Update version in vcpkg.json (#1254) (Kang Lin <kl222@126.com>)
+- Fix error of make command in Cygwin environment (#1236) (Aaron Bird <25508292+Aaron-Bird@users.noreply.github.com>)
+- Fix recursive call in delete alternate server (#1250) (Cybermilitia <Cybermilitia@users.noreply.github.com>)
+- Add CodeQL workflow (#1228) (Jorge <46056498+jorgectf@users.noreply.github.com>)
+- Change printf() to TURN_LOG_FUNC() for --no-stdout-log (#1221) (Robert Scheck <robert-scheck@users.noreply.github.com>)
+- Fix build with libressl 3.6+ (#1198) (rim <11380091+rozhuk-im@users.noreply.github.com>)
+- Update turnserver.spec (#1192) (Mathieu Aubin <mathieu@zeroserieux.com>)
+
+Contributors:
+- Aaron Bird <25508292+Aaron-Bird@users.noreply.github.com>
+- Alex Gustafsson <89969483+alexg-axis@users.noreply.github.com>
+- Alexander Udovichenko <udovichenko48@gmail.com>
+- Chai-Shi <changchaishi@gmail.com>
+- Cybermilitia <Cybermilitia@users.noreply.github.com>
+- Dave Lambley <dave@lambley.me.uk>
+- David Smitmanis <davidsm@axis.com>
+- Evgeny Khramtsov <xramtsov@gmail.com>
+- Gustavo Garcia <gustavogb@gmail.com>
+- Gustavo Garcia <gustavogb@mail.com>
+- Jan Brasna <1784648+janbrasna@users.noreply.github.com>
+- Jorge <46056498+jorgectf@users.noreply.github.com>
+- Kang Lin <kl222@126.com>
+- Mathieu Aubin <mathieu@zeroserieux.com>
+- Mészáros Mihály <misi@majd.eu>
+- Michael Jones <jonesmz@users.noreply.github.com>
+- NO NAME <45446340+linwenchen@users.noreply.github.com>
+- Nikolayshcx <77790944+Nikolayshcx@users.noreply.github.com>
+- Pavel Punsky <eakraly@users.noreply.github.com>
+- Richard Russo <richard@signal.org>
+- Robert Scheck <robert-scheck@users.noreply.github.com>
+- Robert Silén <robert.silen@mariadb.org>
+- Scott Godin <sgodin@sipspectrum.com>
+- Sergey Radionov <RSATom@gmail.com>
+- Stefan Junker <1181362+steveej@users.noreply.github.com>
+- Subhra264 <chakrabortysubhradeep556@gmail.com>
+- Sven Tennie <sven.tennie@gmail.com>
+- Wittmer, Christian <chris@computersalat.de>
+- Zoey <zoey@z0ey.de>
+- ashamedbit <muralianiruddhan@gmail.com>
+- czephyr <alfredo.funicello@studenti.unimi.it>
+- dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>
+- dominiquefournier <dominique@fournier38.fr>
+- eakraly <eakraly@users.noreply.github.com>
+- hariprasadt <hariprasad.t@samsung.com>
+- korayvt <korayvt@users.noreply.github.com>
+- maddy <maddy@kitty.garden>
+- redraincatching <99604494+redraincatching@users.noreply.github.com>
+- rim <11380091+rozhuk-im@users.noreply.github.com>
+- vuittont60 <81072379+vuittont60@users.noreply.github.com>
+
+Release 4.6.2
+
+Changelist:
+- Fix MSVC CI build (#1182) (Cédric DIJOUX <45537432+PrinceChoco@users.noreply.github.com>)
+- Prometheus: make sure microhttpd starts using epoll if supported (#1173) (Thibaut ACKERMANN <thib-ack@users.noreply.github.com>)
+- Fix typo in mainrelay.c (#1169) (Stefan Sundin <git@stefansundin.com>)
+- Remove unused include that breaks OpenBSD (#1165) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Delete LICENSE.OpenSSL (Pavel Punsky <eakraly@users.noreply.github.com>)
+- use santisied psql string (#1144) (r3g_5z <june@girlboss.ceo>)
+- Use the actual redis connection string to connect, not the sanitized one (#1141) (Jasper <jasper@jasperhugo.com>)
+- Implement non-blocking recvfrom on Windows (#1124) (Emil Ljungdahl <111423223+pando-emil@users.noreply.github.com>)
+- Add contributing guidelines (#1135) (Gustavo Garcia <gustavogb@gmail.com>)
+- Move and split documentation files (#1096) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Use inline functions for errno checks (#1123) (Emil Ljungdahl <111423223+pando-emil@users.noreply.github.com>)
+- Add STUN request/response/error prometheus counters (#1115) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Add configuration option for TLS 1.3 ciphersuites (#1118) (Molly Miller <33266253+sysvinit@users.noreply.github.com>)
+- Fix wrong usage of C-sytle in place generated array (#1122) (Paul Kramer <47924093+paulkram@users.noreply.github.com>)
+- bugfix: fix broken type label of turn_total_allocations gauge (#1119) (Paul Kramer <47924093+paulkram@users.noreply.github.com>)
+- Add explicit SIGTERM and SIGINT handlers. (#1106) (Molly Miller <33266253+sysvinit@users.noreply.github.com>)
+- Set string bytes to null to prevent random origin (#1114) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Regenerate manual pages from README files (#1117) (Molly Miller <33266253+sysvinit@users.noreply.github.com>)
+- Fix inverted logic in TLS configuration options (#1105) (Molly Miller <33266253+sysvinit@users.noreply.github.com>)
+- Reduce code duplication when printing userdb (#1103) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Fix memory corruption on socket close (#1113) (Paul Kramer <47924093+paulkram@users.noreply.github.com>)
+- Cleanup logs on turnserver start (#1088) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Optional build info compiled into turnserver binary (#1083) (Erik Moqvist <erik.moqvist@axis.com>)
+- Fix duplicate prometheus metric report (#1079) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Add sessioncount to prometheus metrics (#1075) (Paul Kramer <47924093+paulkram@users.noreply.github.com>)
+- Update openssl API use to non-deprecated version (#1072) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Log threadId to logs to aid in multi-threaded debugging. (#1030) (Scott Godin <sgodin@sipspectrum.com>)
+- Use khash 0.2.8 (#1047) (Gregor Jasny <gjasny@googlemail.com>)
+- Reflect new native Windows build support in documentation (#1060) (Samuel Marks <807580+SamuelMarks@users.noreply.github.com>)
+- Check and fix format string for turn_log_func_default (#1064) (Gregor Jasny <gjasny@googlemail.com>)
+- Properly calculate size for sm_allocated (#1063) (Gregor Jasny <gjasny@googlemail.com>)
+- Do not discard qualifiers in free() (#1065) (Gregor Jasny <gjasny@googlemail.com>)
+- Simplify defines for macOS platform (#1058) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- WINDOWS: unsigned long should not be used to store pointers (#1055) (Emil Ljungdahl <111423223+pando-emil@users.noreply.github.com>)
+- Reduce usage of TURN_NO_HIREDIS macros (#1022) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Update to fix duplicate stdout log output (#1054) (Yoshiki Kadoshita <sublimer.me@gmail.com>)
+- Use c11 standard See: #1055 (#1056) (Kang Lin <kl222@126.com>)
+- Reduce usage of TURN_NO_PROMETHEUS (#1023) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Remove unnecessary declaration from header file (#1052) (Yoshiki Kadoshita <sublimer.me@gmail.com>)
+- Support Windows MSVC (#855) (Kang Lin <kl222@126.com>)
+- Fix resource leaks (#1048) (Gregor Jasny <gjasny@googlemail.com>)
+- Backlog fifo (#1029) (Scott Godin <sgodin@sipspectrum.com>)
+- Change rpm systemd service type from notify to exec (#1043) (Gustavo Garcia <gustavogb@gmail.com>)
+- Add missing comma (#1041) (Gregor Jasny <gjasny@googlemail.com>)
+- Fix off-by-one when terminating gcm_nonce (#1039) (Gregor Jasny <gjasny@googlemail.com>)
+- Use %zu format specifier for size_t (#1040) (Gregor Jasny <gjasny@googlemail.com>)
+- Fix variable argument handling (#1042) (Gregor Jasny <gjasny@googlemail.com>)
+- Cleanup openssl initialization (#1012) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- fuzzing support (#982) (Arjun <36335769+0x34d@users.noreply.github.com>)
+- created netengine.c get_relay_server utility method to reduce code duplication (#1032) (Scott Godin <sgodin@sipspectrum.com>)
+- fix bug in calls to ssl_read and ssl_send where extra verbose flag goes missing (#1033) (Scott Godin <sgodin@sipspectrum.com>)
+- ignore raw UDP if no_udp is enabled (#1031) (Scott Godin <sgodin@sipspectrum.com>)
+- Sanitize DB connection string before printing to log (#1020) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Better detect SCTP protocol (#1016) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Redis memleaks and socketleaks (#1015) (Thibaut ACKERMANN <thib-ack@users.noreply.github.com>)
+- Fix issue 51563 in oss-fuzz (#1010) (Arjun <36335769+0x34d@users.noreply.github.com>)
+- Fix multiple warnings in libtelnet.c file (#1011) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Update libtelnet to 0.23 (portability issues) (#1005) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Remove debug publish to redis (#1008) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Cleanup unused include of header files (#1004) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Use single SSL_CTX for DTLS support (#996) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Malformed response to mobility refresh request (#1006) (Tom Bevan <thehorrorthehorror@gmail.com>)
+- Silence warnings by converting STRCPY to strncpy calls (#995) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Build CI with prometheus support (#999) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Replace references to non-existent pdf file with links (#1002) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Fix TLS1.3 support (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Use a single SSL context object (#989) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Use epoll for promhttp server if supported.  (#997) (Joachim Bauch <bauch@struktur.de>)
+- Fix issues reported by cppcheck (#987) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Replace bcopy with memcpy (#991) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Replace bzero with memset (#986) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Improve openssl3 and FIPS support (#955) (Pavel Punsky <eakraly@users.noreply.github.com>)
+- Preserve file timestamps when using install(1) (#983) (Robert Scheck <robert-scheck@users.noreply.github.com>)
+- Fix renegotiation flag for older version of openssl (#978) (Pavel Punsky <eakraly@users.noreply.github.com>)
+
+Contributors:
+- Arjun <36335769+0x34d@users.noreply.github.com>
+- Cédric DIJOUX <45537432+PrinceChoco@users.noreply.github.com>
+- Emil Ljungdahl <111423223+pando-emil@users.noreply.github.com>
+- Erik Moqvist <erik.moqvist@axis.com>
+- Gregor Jasny <gjasny@googlemail.com>
+- Gustavo Garcia <gustavogb@gmail.com>
+- Hyorin Choi <17173216+hyorin@users.noreply.github.com>
+- Jasper <jasper@jasperhugo.com>
+- Joachim Bauch <bauch@struktur.de>
+- Kang Lin <kl222@126.com>
+- Molly Miller <33266253+sysvinit@users.noreply.github.com>
+- Paul Kramer <47924093+paulkram@users.noreply.github.com>
+- Pavel Punsky <eakraly@users.noreply.github.com>
+- Robert Scheck <robert-scheck@users.noreply.github.com>
+- Samuel Marks <807580+SamuelMarks@users.noreply.github.com>
+- Scott Godin <sgodin@sipspectrum.com>
+- Stefan Sundin <git@stefansundin.com>
+- Thibaut ACKERMANN <thib-ack@users.noreply.github.com>
+- Tom Bevan <thehorrorthehorror@gmail.com>
+- Yoshiki Kadoshita <sublimer.me@gmail.com>
+- r3g_5z <june@girlboss.ceo>
+
+
+03/12/2022 Gustavo Garcia <gustavogb@gmail.com> Paul Kramer <paul.kramer@logmein.com>
+Version 4.6.1 'Gorst':
+	- merge PR #1113 (paulkram)
+		* fix memory corruption on socket close
+
+13/09/2022 Oleg Moskalenko <mom040267@gmail.com> Mihály Mészáros <misi@majd.eu> Gustavo Garcia <gustavogb@gmail.com> Pavel Punsky <pavel.punsky@epicgames.com>
+Version 4.6.0 'Gorst':
+	- merge PR #967 (eakraly)
+		* fix small issues reported by cppcheck
+	- merge PR #974 (eakraly)
+		* fix long log line printing
+	- merge PR #973 (eakraly)
+		* Print turnserver version with --version
+	- merge PR #972 (eakraly)
+		* do not write outside of a buffer in admin interface
+	- merge PR #970 (eakraly)
+		* fix uclient certificate loading bug
+	- merge PR #971 (eakraly)
+		* fix duplicate TCP flag in run_tests.sh script
+    - merge PR #962 (huhaipeng)
+		* fix turn session leak
+    - merge PR #963 (eakraly)
+		* Document dependency of new-log-timestamp-format on new-log-timestamp
+    - merge PR #951 (steffen-moser)
+		* Enable compilation of coturn on Solaris 11.4
+    - merge PR #949 (eakraly)
+		* First step to re-enable compilation with OpenSSL 1.0.x
+    - merge PR #949 (eakraly)
+		* Fix cmake build on macOS
+    - merge PR #942 (eakraly)
+		* Disable SSL renegotiation
+    - merge PR #792 (yfaker)
+		* Fix user quota release #786
+    - merge PR #829 (fancycode)
+		* add more info to redis allocation status
+    - merge PR #938 (eakraly)
+		* update turnserver.conf comment
+    - merge PR #773 (haseebq)
+		* fix performance regression
+    - merge PR #773 (korayvt)
+		* add syslog facility config
+    - merge PR #897 (unicode-it)
+		* add support for dual-stack prom listener
+    - merge PR #984 (rozhuk-im)
+		* fix build with libressl 3.4.0+
+    - merge PR #926 (ggarber)
+		* add ci tests workflow
+    - merge PR #934 (neocat)
+		* show error on invalid config
+    - merge PR #787 (dsmeytis)
+		* add new prom allocations metric
+    - merge PR #869 (micmac1)
+		* don't link in libintl
+    - merge PR #895 (alexnedo)
+		* fix access to freed memory
+    - merge PR #919 (sysvinit)
+		* configurable prom username labels
+    - merge PR #840 (sysvinit)
+		* configurable prometheus listener port
+    - merge PR #870 (micmac1)
+		* fix build mariadb connector
+    - merge PR #851 (freedomben)
+		* fix README typo
+    - merge PR #877 (davel)
+		* correct doc typo
+	- merge PR #755(moznuy) and #825(by argggh)
+		* fix sqlite3_shutdown and sqlite3_config race
+	- merge PR #826 (by giavac)
+		* prom server better
+	- merge PR #684 (by brevilo)
+		* Define OPENSSL_VERSION_1_1_1 on systems where it doesn't (yet) exist
+		* Regression in 4.5.2 that cause issues in openssl version < 1.1.1.
+	- typo fix in prometheus (by fcecagno)
+	- merge PR #687 (by Wuelber Castillo)
+		* Add hash algorithm for hmackey value to redis userdb schema docs
+	- replace keep-address-family with allocation-default-address-family (keep-address-family deprecated and will be removed!!)
+	- merge PR #703 (by j4zzc4t)
+		* Restore no_stdout_log behavior
+	- merge PR #727 (by JoKoT3)
+		* Support older mysql client version in configure
+	- merge PR #721 (by KangLin)
+		* Add to support cmake
+	- merge PR #717 (by marcoschum)
+		* Fix typo in turnserver.conf
+	- merge PR #704 (by hills)
+		* Packaging scripts can miss out on these errors (exit code)
+	- merge PR #679 (by rubo77)
+		* Readme.turnserver: how to run server as a daemon
+	- merge PR #739 (by hills)
+		* SSL reload has hidden bugs which cause crashes
+	- Fix regression in PR #739
+	- Try to mitigate STUN amplification attatck
+		* Add new option --no-rfc5780
+		to force disable RFC8750
+		* Add new option --no-stun-backward-compatibility
+		Disable handling old STUN Binding requests and disable
+		MAPPED-ADDRESS attribute in binding response (use only the
+		XOR-MAPPED-ADDRESS)
+		* Add new option --response-origin-only-with-rfc5780
+		Add RESPONSE_ORIGIN attribute only if rfc5780 is enabled
+		* Don't send SOFTWARE attribute if --no-software-attribute
+		set on (BREAKING CHANGE)
+	- merge PR #767 (by ggalperi)
+	    * fix for log_binding (regression)
+
+10/01/2021 Oleg Moskalenko <mom040267@gmail.com> Mihály Mészáros <misi@majd.eu>
+Version 4.5.2 'dan Eider':
+	- fix null pointer dereference in case of out of memory. (thanks to Thomas Moeller for the report)
+	- merge PR #517 (by wolmi)
+		* add prometheus metrics
+	- merge PR #637 (by David Florness)
+	    * Delete trailing whitespace in example configuration files
+	- merge PR #631 (by Debabrata Deka)
+	    * Add architecture ppc64le to travis build
+	- merge PR #627 (by Samuel)
+		* Fix misleading option in doc (prometheus)
+	- merge PR #643 (by tupelo-schneck)
+		* Allow RFC6062 TCP relay data to look like TLS
+	- merge PR #655 (by plinss)
+		* Add support for proxy protocol V1
+	- merge PR #618 (by Paul Wayper)
+		* Print full date and time in logs
+		* Add new options: "new-log-timestamp" and "new-log-timestamp-format"
+	- merge PR #599 (by Cédric Krier)
+		* Do not use FIPS and remove hardcode OPENSSL_VERSION_NUMBER with LibreSSL
+	- update Docker mongoDB and fix with workaround the missing systemctl
+	- merge PR #660 (by Camden Narzt)
+		* fix compilation on macOS Big Sur
+	- merge PR #546 (by jelmd)
+		* Add ACME redirect url
+	- merge PR #551 (by jelmd)
+		* support of --acme-redirect <URL>
+	- merge PR #672 further acme fixes (by jemld)
+		* fix acme security, redundancy, consistency
+	- Disable binding request logging to avoid DoS attacks. (Breaking change!)
+		* Add new --log-binding option to enable binding request logging
+	- Fix stale-nonce documentation. Resolves #604
+	- Version number is changed to semver 2.0
+	- Merge PR #288 (by Hristo Venev)
+		* pkg-config, and various cleanups in configure file
+	- Add systemd notification for better systemd integration
+	- Fix Issue #621 (by ycaibb)
+		* Fix: Null pointer dereference on tcp_client_input_handler_rfc6062data function
+	- Fix Issue #600 (by ycaibb)
+		* Fix: use-after-free vulnerability on write_to_peerchannel function
+	- Fix Issue #601 (by ycaibb)
+		* Fix: use-after-free vulnerability on write_client_connection function
+	- Little refactoring prometheus
+		* Fix c++ support
+		* Simplify (as agreed in Issue #666)
+			* Remove session id/allocation labels
+			* Remove per session metrics. We should later add more counters.
+	- Fix CVE-2020-26262 (credits: Enable-Security)
+		* Fix ipv6 ::1 loopback check
+		* Not allow allocate peer address 0.0.0.0/8 and ::/128
+		* For more details see the github security advisory:
+			https://github.com/coturn/coturn/security/advisories/GHSA-6g6j-r9rf-cm7p
+
+24/06/2020 Oleg Moskalenko <mom040267@gmail.com> Mihály Mészáros <misi@majd.eu>
+Version 4.5.1.3 'dan Eider':
+	- merge PR #575: (by osterik)
+		* fix rpm packaging
+	- merge PR #576: (by osterik)
+		* tell tar to not include the metadata into release
+	- merge PR #574: (by DevRockstarZ)
+		* change Docker turnserver.conf to latest turnserver.conf
+	- merge PR #566: (by bpcurse)
+		* Remove reference to SSLv3
+	- merge PR #579: (by islamoglus)
+		*Ignore MD5 for BoringSSL
+	- merge PR #577: (by osterik)
+		*build RPM from local folder instead of git repo
+	- Fix for CVE-2020-4067
+		* STUN response buffer not initialized properly
+		* The issue found and reported #583 by Felix Dörre all credits belongs to him.
+
+30/04/2020 Oleg Moskalenko <mom040267@gmail.com> Mihály Mészáros <misi@majd.eu>
+Version 4.5.1.2 'dan Eider':
+	- merge regression fix: (by Mathieu Brunot)
+		* Do not display empty CLI passwd alert if CLI is not enabled
+	- merge PR #359: (by bradleythughes)
+		* Remove turn_free_simple
+		* Remove turn_malloc()
+		* Remote turn_realloc()
+		* Remote turn_free()
+		* Remove turn_calloc()
+		* Remove turn_strdup()
+		* Remove SSL_NEW() and SSL_FREE()
+		* Remove pointer debugging machinery
+		* Remove ns_bzero(), ns_bcopy(), and ns_bcmp()
+		* Remove [su]{08,16,32,64}bits type defines
+	- merge PR #327 (by Alexander Terczka)
+		* Strip white-spaces from config file lines end
+	- merge PR #386 (by Thibaut ACKERMANN)
+		* fix the webadmin ip permission add/delete sql injection
+	- merge PR #390 (by Thibaut ACKERMANN)
+		* fix mongo driver crash when invalid connection string is used
+	- merge PR #392 enhanced fread return length check (by islamoglus)
+	- merge PR #367 disconnect database gracefully (by Shu Muto)
+	- merge PR #382 (by islamoglus)
+		* Using SSL_get_version method for BoringSSL compatibility
+		* Now we put in turn_session_info->tls_method the real TLS version.
+		  Earlier we put UNKNOWN in this field if it was a TLS protocol
+		  that was not defined supportel TLS protocol during compile time.
+	- merge PR #276 Add systemd service example (by Liberasys)
+	- merge PR #284 Add bandwidth usage reporting packet/bandwidth usage by peers
+	- merge PR #381 Modifying configure to enable compile with private libraries
+	- merge PR #455 Typo corrected (by chanduthedev)
+	- merge PR #417 Append only to log files rather to override them (by robert-scheck)
+	- merge PR #442 Updated incorrect string length check for 'ssh' (by chanduthedev)
+	- merge PR #449 Fix Dockerfile for latest Debian (by rao-donut)
+	- http server NULL dereference
+		* Reported (by quarkslab.com, cisco/talos)
+		* CVE-2020-6061 / TALOS-2020-0984
+	- http server out of bound read
+		* Reported (by quarkslab.com, cisco/talos)
+		* CVE-2020-6061 / TALOS-2020-0984
+	- merge PR #472 STUN input validation (by bobsayshilol)
+	- merge PR #398 FIPS (by  byronclark)
+	- merge PR #478 prod (by alepolidori)
+	- merge PR #463 fix typos and grammar (by xthursdayx)
+	- update travis config ubuntu/mac images
+	- merge PR #466 added null check for second char (by chanduthedev)
+	- merge PR #470 compiler warning fixes (by bobsayshilol)
+	- merge PR #475 Update README.docker (by raksonibs)
+	- merge PR #471 Fix a memory leak when an SHATYPE isn't supported (by bobsayshilol)
+	- merge PR #488 Fix typos about INSTALL filenames (by raccoonback)
+	- fix compiler warning comparison between signed and unsigned integer expressions
+	- fix compiler warning string truncation
+	- change Diffie Hellman default key length from 1066 to 2066
+	- merge PR #522 drop of supplementary group IDs (by weberhofer)
+	- merge PR #514 Unify spelling of Coturn (by paulmenzel)
+	- merge PR#506 Rename "prod" config option to "no-software-attribute" (by dbrgn)
+	- merge PR #519 fix config extension in README.docker (by ooookai)
+	- merge PR #516 change sql data dir in docker-compose-all.yml (by raghumuppa)
+	- merge PR #513 remove trailing spaces from READMEs (by paulmenzel)
+	- merge PR #525 add flags to disable periodic use of dynamic tables (by gfodor)
+
+02/03/2019 Oleg Moskalenko <mom040267@gmail.com> Mihály Mészáros <misi@majd.eu>
+Version 4.5.1.1 'dan Eider':
+	- merge PR #330 missing \r\n after http Connection:close (by gribunin)
+	- merge PR #303 fix typo enpoint (by Majid Motallebikashani)
+	- merge PR #129 seperate http web-admin listener (by Thibaut ACKERMANN)
+	- regression from 4.5.1.0
+		* readd pwd check
+		* add to config missing web-admin-listen-on-workers option
+	- merge docker branch
+		* Add Docker file for all database backend.
+	- merge sparc64 branch
+		* Fix mem alingment issue on 64 bit architecture
+		That issue caused earlier "bus error" on sparc64 and armhf
+	- merge PR #336 Clarify Debian install (by David-dp-)
+	- merge PR #339 RPM build fix (by Peter Hudec )
+
+24/11/2018 Oleg Moskalenko <mom040267@gmail.com> Mihály Mészáros <misi@majd.eu>
+Version 4.5.1.0 'dan Eider':
+	Consider to change config file after upgrade, because it contains some
+	not backward compatible breaking changes !!
+	- Security fixes
+	  Many thanks to Nicolas Edet (Cisco) !!
+	  who reported all of the following issues:
+		* DB/SQL injection in stun realm. Fix: add extra string validation.
+		* DB/SQL injection in web-admin interface lack of admin user validation.
+		  Fix: add extra string validation.
+	 	* Fix for earlier unsafe default settings:
+			o HTTPS administrator interface should be disabled by default
+			  It could be enbled with "web-admin" option.
+			o Default configuration allowed earlier forwarding traffic
+			  from an external interface to loopback interface. Now it
+			  has been changed and option name is also changed!
+
+			  !!BREAKING change!! Don't forget to change config!!
+			  "no-loopback-peers" replaced by "allow-loopback-peers"
+
+			o Unauthenticated telnet admin interface runs on the
+			  loopback interface, which can be accessed by exploiting the
+			  loopback relay that was enabled by default.
+		*  Add username string sanity check on web admin interface to
+		   avoid any sql-injection attacks.
+	- Admin portal does not list TCP session ( reported and fixed by Nicolas Edet )
+	- Fix memory leak in read_config_file (by Thibaut Ackermann)
+	- Add a release helper script.
+	- Web Admin interface use own listener (it is disableb by default) (by Thibaut ACKERMANN)
+
+	  !!BREAKING change!! Don't forget to change/review config!!
+
+		* Add new option "web-admin-ip" to set listener ip. By default (127.0.0.1)
+		* Add new option "web-admin-port" to set webadmin listen port
+		* Add new option "web-admin-listen-on-workers" to change back to earlier
+		  behaviour and listen web admin on all worker processes and ports.
+	- Not allow to start server if "allow-loopback-peers" set without "cli-password"
+
+	  !!BREAKING change!! Don't forget to change config!!
+
+	  Added a warning if cli-password is empty or missing, but allow-loopback-peers
+	  set, and so loopback allocation is enalbed.
+
+27/09/2018 Oleg Moskalenko <mom040267@gmail.com> Mihály Mészáros <misi@majd.eu>
+Version 4.5.0.8 'dan Eider':
+	- Travis CI integration
+	- to avoid warnings add compiler comment hint to fallthrough
+	- reload-tls-certs PR#236 (by Arne Georg Gisnås Gleditsch)
+	- minor fixes PR#223 (by Pavel Kretov)
+	  move rm Makefile to distclean
+	  list all phony targets
+	- Fix typo PR#253 (by Orsiris de Jong)
+	- Fix stuck IPv6 connections. (issue #217)
+	  THX to damencho, vol4iniche
+	- Spelling fixes.
+	- Add a warning if --lt-cred-mech and --use-auth-secret both presents.
+	- Revert "Add the realm parameter in the example config file (by Domenico)"
+	- Fix for Verbose config file option -v cli option override
+	- Add a Notice to config about realm default value is the domain name.
+	- Update total allocation usage on client shutdown
+	- Fix total and user quota mix-up
+	- Fixed typos in postinstall.txt (by Prashanth Rajaram)
+	- MySQL password encryption (by Mustafa Bingül & Erdem Duman)
+	- Do not write to log before logging configuration is read from a config file (by eiver)
+	- Add more explanation on use-auth-secret / REST in example config (by Krithin Sitaram)
+	- Add a Warning if lines in config file ends with semicolon (by heyheyjc)
+	- Fix --prod pointer bug
+	- Fix auth server thread detach race (by weishuyin)
+	- New Feature: Add -K --keep-address-family
+	  Be aware if you enable it, then it breaks rfc6156 section 4.2 (default IPv4 family fallback)
+	- Fix dtls double free crash
+	- Fix compilation errors and warnings (by Oleg)
+
+12/10/2017 Oleg Moskalenko <mom040267@gmail.com>
+Version 4.5.0.7 'dan Eider':
+	- Misc security improvements.
+
+10/17/2016 Oleg Moskalenko <mom040267@gmail.com>
+Version 4.5.0.6 'dan Eider':
+	- Typos in the text fixed.
+	- TLS1.2 support fixed.
+	- uclient minor performance tweak.
+	- Issue #113 fixed (by David Benjamin)
+	- Report total traffic used per allocation via Redis (by Bradley T. Hughes)
+	- Add the realm parameter in the example config file (by Domenico)
+
+08/27/2016 Oleg Moskalenko <mom040267@gmail.com>
+Version 4.5.0.5 'dan Eider':
+	- Typos in the text fixed.
+	- LibreSSL compatibility fixed.
+	- "read_timeout" option support for MySQL.
+	- new NAT behavior discovery utilty.
+	- new OAuth access_token encrypt/decrypt utilty.
+	- improved configurability: added parameters for
+	allocate, channel and permission lifetimes (by Richard Garnier).
+
+08/20/2016 Oleg Moskalenko <mom040267@gmail.com>
+Version 4.5.0.4 'dan Eider':
+	- OpenSSL 1.1.0 support added.
+	- CentOS 7 installation updated.
+	- hiredis and mongo compilation configuration fixed
+	(fix provided by Harsha Bellur).
+	- RPM: Systemd optimization.
+	- REST API option fixed.
+	- Thread creation error handling fixed.
+	- Issue #36 fixed.
+
+11/15/2015 Oleg Moskalenko <mom040267@gmail.com>
+Version 4.5.0.3 'dan Eider':
+	- SSLv3 support removed. That provides extra security and
+	compatibility with OpenSSL distributions or clones
+	that do not support SSLv3 (like LibreSSL 2.3.0).
+	This fix is required for fresh FreeBSD and for Debian unstable.
+	- Compilation and configuration cleaning.
+	- Fix for non-interactive shells.
+	- RPM: Fixed mongo-c-driver include path (by Sergey Safarov).
+	- RPM: Fixed startup daemon as non root user (by Sergey Safarov).
+	- RPM: Systemd optimized for high-volume network traffic (by Sergey Safarov).
+
+9/29/2015 Oleg Moskalenko <mom040267@gmail.com>
+Version 4.5.0.2 'dan Eider':
+	- DTLS segmentation fault fixed;
+
+9/13/2015 Oleg Moskalenko <mom040267@gmail.com>
+Version 4.5.0.1 'dan Eider':
+	- multiple realms based on oAuth (third-party authorization);
+	- STUN attributes conflict resolution;
+	- SIGHUP handler fixed;
+	- error message logging improved;
+	- mongo test db files fixed.
+
+7/18/2015 Oleg Moskalenko <mom040267@gmail.com>
+Version 4.4.5.4 'Ardee West':
+	- moved to github.
+
+6/20/2015 Oleg Moskalenko <mom040267@gmail.com>
+Version 4.4.5.3 'Ardee West':
+	- third-party authorization STUN attributes adjusted according
+		to the values assigned by IANA.
+	- SQL injection security hole fixed.
+
+5/29/2015 Oleg Moskalenko <mom040267@gmail.com>
+Version 4.4.5.2 'Ardee West':
+	- dual allocation adjusted according to the new TURN-bis draft;
+	- options sha256, sha384, sha512 retired as non-standard;
+	- third-party authorization (oAuth) updated according to the
+	version 16 of the draft;
+	- C++ compilation fixes;
+	- cosmetic fixes;
+	- fixed binary package for CentOS 7.1;
+	- support for older SQLite versions added;
+	- compilation support for older CentOS release 5.x added;
+	- Issue 11 fixed;
+	- Issue 12 fixed.
+
+3/31/2015 Oleg Moskalenko <mom040267@gmail.com>
+Version 4.4.4.2 'Ardee West':
+	- SCTP fixes;
+
+3/15/2015 Oleg Moskalenko <mom040267@gmail.com>
+Version 4.4.4.1 'Ardee West':
+	- 'native' SCTP support (experimental);
+	- option of encrypted stored passwords for web admin users;
+	- option of encrypted stored password for CLI user;
+
+2/28/2015 Oleg Moskalenko <mom040267@gmail.com>
+Version 4.4.2.3 'Ardee West':
+	- bandwidth control fixed;
+	- STUN/TURN control traffic counted separately from data traffic,
+	for the sake of the bandwidth control;
+	- higher bandwidth limit capacity on 64 bits systems;
+	- redis operations with the realm options fixed;
+
+2/18/2015 Oleg Moskalenko <mom040267@gmail.com>
+Version 4.4.2.2 'Ardee West':
+	- admin_user table schema fixed;
+	- REST API docs fixed;
+	- Amazon AWS uses syslog;
+
+2/3/2015 Oleg Moskalenko <mom040267@gmail.com>
+Version 4.4.2.1 'Ardee West':
+	- (HMAC-)SHA-512 and -384 algorithms added;
+	- TOS (DiffServer) and TTL IP header field handling fixed;
+	- updates according to the new third-party-auth draft (oauth);
+	- peer logging added;
+
+2/1/2015 Oleg Moskalenko <mom040267@gmail.com>
+Version 4.4.1.2 'Ardee West':
+	- SSODA updates according to turnbis specs;
+	- TRANSPORT attribute handling fixed;
+	- hostname-to-IP-address resolution fix;
+	- updates for Solaris (name resolution libraries);
+
+1/24/2015 Oleg Moskalenko <mom040267@gmail.com>
+Version 4.4.1.1 'Ardee West':
+	- https admin server;
+	- SSLv2 support cancelled (security concern fixed);
+	- The server-side short-term credentials mechanism support cancelled;
+	- OpenSSL 1.1.0 supported;
+	- shared secrets fixed in MongoDB: multiple secrets per realm allowed;
+	- shared secrets admin fixed in Redis;
+
+12/24/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 4.3.3.1 'Tolomei':
+	- multiple authentication threads;
+	- database code cleaned;
+
+12/14/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 4.3.2.2 'Tolomei':
+	- Redis read message queue bug fixed;
+	- STUN/TURN ALPN supported (when compiled with OpenSSL 1.0.2+ );
+	- DTLS v1.2 supported (when compiled with OpenSSL 1.0.2+ );
+	- Auto optimal ECDH parameters (when compiled with OpenSSL 1.0.2+ );
+	- TLS/DTLS code cleaning.
+
+11/29/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 4.3.1.3 'Tolomei':
+	- Reliability fixes (Issue 141 from rfc5766-turn-server).
+	- HTTP/HTTPS echo fixed.
+	- External address mapping fixes for Amazon EC2.
+	- Minor docs improvements.
+
+11/23/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 4.3.1.2 'Tolomei':
+	- Debian package fixes.
+
+11/22/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 4.3.1.1 'Tolomei':
+	- SQLite supported as the default user database.
+	- Support of the flat-file user database removed.
+	- TLS connection procedure improved in uclient test program.
+
+11/07/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 4.2.3.1 'Monza':
+	- Request re-transmission implemented in uclient test program.
+	- TLS connection procedure improved in uclient test program.
+
+10/26/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 4.2.2.2 'Monza':
+	- Black- and white- IP lists are divided per realm
+		(the DB schema for those two tables changed);
+	- Updated Redis database schema.
+	- Debian UFW file added (Issue 1 fixed).
+	- TCP/TLS tests extended.
+	- Relay RTCP sockets ports allocation fixed.
+	- List of libraries cleaned.
+	- SSL renegotiation callback fixed.
+
+10/05/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 4.2.1.2 'Monza':
+	- oAuth security experimental implementation;
+	- The "TLS renegotiation" DoS attack prevention implemented;
+	- FQDN as relay-ip and listener-ip parameters (issue 6)
+	(patch provided by Iñaki Baz Castillo);
+	- redis user key operation fixed.
+	- redis, mysql and psql db operations fixed.
+	- SHA-256 memory leak fixed.
+	- Mobility ticket retransmission fixed.
+	- Move debian package from SVN to GIT.
+	- Move secondary download area to coturn.net.
+	- Quota allocation fixed.
+	- Core dump fixed.
+	- Bandwidth allocation fixed.
+	- Memory code cleaning.
+	- Logging fixed.
+
+08/14/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 4.1.2.1 'Vitari':
+	- The origin attribute is verified in the subsequent
+	session messages (server flag --check-origin-consistency).
+	- MySQL SSL connection support.
+	- Crash fixed when the DB connection string is incorrect.
+	- Minor docs fixes.
+
+07/29/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 4.1.1.1 'Vitari':
+	- Forceful server-side session cancellation implemented
+	(in telnet console).
+
+07/22/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 4.1.0.2 'Vitari':
+	- SSODA (double allocation) draft support added.
+	- DB "driver" abstraction and MongoDB support (by Federico Pinna).
+	- multiple origins supported per request.
+	- "allocation mismatch" condition fixed (merged from rfc5766-turn-server).
+	- STUN BINDING response fixed in the case of -X (external address) option.
+	- "pu" CLI command fixed.
+	- session cleaning fixed in TCP relay functionality (RFC 6062).
+	- some crash conditions fixed.
+	- working on compilation warnings.
+
+06/21/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 4.0.1.3 'Severard':
+	- Redis DB connection status fixed (Issue 129).
+	- Logfile reset on SIGHUP
+	(Gustavo Garcia suggestion).
+	- Log reset CLI command.
+	- Some error code corrections:
+	    * "Mobility forbidden" error changed, to value 405.
+	    * "Wrong credentials" situation is now treated as error 441.
+
+06/06/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 4.0.1.2 'Severard':
+	- Bandwidth draft implemented.
+	- Issues 126, 127 and 128 fixes merged from rfc5766-turn-server.
+
+05/18/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 4.0.0.2 'Threetrees':
+	- Code cleaning.
+
+05/07/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 4.0.0.1 'Threetrees':
+	- Kernel channel placeholder definitions.
+
+05/02/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 4.0.0.0 'Threetrees':
+	- Multi-tenant server.
+
+04/13/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 3.2.3.6 'Marshal West':
+	- Addresses logging fixed.
+	- Redis admin options fixed.
+	- Redis compilation cleaned.
+
+04/07/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 3.2.3.5 'Marshal West':
+	- Mobile allocation quota fixed (issue 121);
+	- --simple-log option added (Issue 122);
+	- documentation fixes (REST API, Redis).
+
+04/06/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 3.2.3.4 'Marshal West':
+	- Mobile TCP sessions fixed (issue 120);
+	- log information improvements.
+
+04/04/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 3.2.3.3 'Marshal West':
+	- Pkey and cert file descriptors to be closed
+	on initialization (issue 118);
+	- Address bind indefinite cycle on start-up fixed
+	(Issue 119);
+	- Allocation counters time lag improved.
+
+03/30/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 3.2.3.2 'Marshal West':
+	- Allocation counters fixed (issue 117);
+	- a possible core dump in the server code fixed;
+	- a possible memory leak in server fixed.
+
+03/29/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 3.2.3.1 'Marshal West':
+	- TCP congestion avoidance completed.
+	- Read and write streams are treated separately in
+	bandwidth control.
+	- Test client fixed.
+	- Experimental SHA256 key storage supported.
+
+03/17/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 3.2.2.912 'Marshal West':
+	- TCP-in-TCP congestion avoidance implemented.
+	- UDP-in-TCP congestion avoidance improved.
+	- Alternate-server code cleaned.
+
+03/10/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 3.2.2.911 'Marshal West':
+	- "Congestion control" for UDP-inside-TCP tunneling;
+	- memory management improvements;
+	- socket logging improvements;
+	- debug info added to CentOS and Fedora RPMs;
+	- TCP traffic buffering improved;
+	- Thread barriers cleaned;
+	- TCP memory leak fixed;
+	- minor TCP test client improvement.
+
+03/09/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 3.2.2.910 'Marshal West':
+	- Log messages extended and cleaned.
+	- Some memory cleaning.
+
+03/02/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 3.2.2.9 'Marshal West':
+	- Issue 113 fixed (TCP rate limit fixed);
+	- Issue 114 fixed (TCP stability).
+
+02/18/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 3.2.2.8 'Marshal West':
+	- Issue 102: SO_BSDCOMPAT socket option removed;
+	- Issue 104: check for the REALM attribute value;
+	- Issue 105: no-cli segfault fixed;
+	- Issue 106: MESSAGE-INTEGRITY removed from DATA indication;
+	- Issue 108: Server should return 438 on unknown nonce;
+	- Issue 109: make the random functions stronger (mostly for
+	transaction ID and for nonce);
+	- Issue 111: fix valgrind warning on memory initialization.
+	- Issue 112: RTCP sockets logging.
+
+02/12/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 3.2.2.7 'Marshal West':
+	- Possible indefinite cycle fixed in TCP/TCP routing (Issue 99);
+	- Address 0.0.0.0 can be used as a listener address (Issue 100);
+	- DHCP-configured servers supported (Issue 101);
+
+02/04/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 3.2.2.6 'Marshal West':
+	- Channel traffic memory copy elimination.
+	- Send indication memory copy elimination.
+	- DTLS traffic processing memory copy eliminated.
+	- Mobility forbidden error code number fixed - according to the new draft document.
+	- getsockname() usage minimized.
+	- port allocation improved.
+	- default relay behavior fixed (when no relay addresses defined).
+	- atomic create permission request handling (Issue 97).
+
+01/25/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 3.2.2.5 'Marshal West':
+	- code optimization.
+
+01/24/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 3.2.2.4 'Marshal West':
+	- HMAC key handling fixed (Issue 96).
+
+01/23/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 3.2.2.3 'Marshal West':
+	- Security fix (issue 95).
+	- Default "implicit" relay IP allocation policy is more usable
+		(issue 94 fixed).
+	- SSLv2 fixed (for those who are still using it)
+		(issue 93 fixed).
+	- Cosmetic changes.
+
+01/19/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 3.2.2.1 'Marshal West':
+	- CPU/memory cache optimization (memory locality).
+	- torture tests enhanced.
+	- stability fixes.
+	- minor possible memory leak fix.
+	- new TLS options: --no-sslv2, --no-sslv3, --no-tlsv1,
+		--no-tlsv1_1, --no-tlsv1_2
+
+01/06/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 3.2.1.4 'Marshal West':
+	- Linux epoll performance improvements.
+	- DTLS minor fix.
+
+01/06/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 3.2.1.3 'Marshal West':
+	- Telnet client added to installation when necessary.
+
+01/05/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 3.2.1.2 'Marshal West':
+	- Config file adjusted for DragonFly.
+
+01/03/2014 Oleg Moskalenko <mom040267@gmail.com>
+Version 3.2.1.1 'Marshal West':
+	- Minor TLS fix.
+	- Default cipher list is DEFAULT now.
+
+12/26/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 3.2.1.0 'Marshal West':
+	- Optimized TCP network engine for Linux 3.9+.
+	- Security fix: DH and ECDH temporary keys are now
+		regenerated for each TLS or DTLS session.
+	- Fix for systems with multiple CPU cores (more than 128).
+	- DH TLS key now can be configured as 566, 1066 (default) or 2066 bits.
+	- DH TLS key can be taken from a PEM file.
+	- Issue 91 (test client crash) fixed.
+	- Configurable net engine type.
+
+12/25/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 3.1.6.0 'Arch Lector':
+	- Timers optimization: linked list timers structure
+		for often-used intervals.
+
+12/23/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 3.1.5.3 'Arch Lector':
+	- HTTP "keep-alive" support improved.
+	- TCP channel "fortification".
+
+12/19/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 3.1.5.1 'Arch Lector':
+	- Private key password allowed for encrypted keys.
+	- HTTP "keep-alive" supported.
+	- "psd" CLI command added (ps dump to file).
+
+12/18/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 3.1.4.2 'Arch Lector':
+	- Time functions optimization.
+	- Online changes to the alternate servers list thru telnet CLI.
+	- Certificate chain files allowed.
+
+12/13/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 3.1.3.1 'Arch Lector':
+	- "Start time" ps command info added.
+	- Protocol option added to "pu" command.
+	- "Delete allocation" debug message fixed.
+	- "Allocation id" debug info message fixed.
+	- RFC6062 usage statistics fixed.
+	- Info/Debug messages cleaned.
+
+12/11/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 3.1.2.3 'Arch Lector':
+	- CentOS 6 package fixed.
+
+12/10/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 3.1.2.2 'Arch Lector':
+	- ps output typo fixed (TLS params).
+	- configurable EC curve name.
+	- CLI TLS-related information extended.
+	- "print users" (pu) CLI command added.
+
+12/09/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 3.1.2.1 'Arch Lector':
+	- DH cipher suites basic implementation.
+	- Elliptic Curve cipher suites basic implementation.
+	- RFC 6062 crash fixed.
+	- More CLI parameters added.
+	- Redis allocation statistics fixed.
+	- Number of cli max session lines configurable.
+	- uclient cipher suite configurable.
+
+12/08/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 3.1.1.0 'Arch Lector':
+	- Telnet CLI.
+	- RFC 6062 internal messaging fixed.
+	- Server relay endpoints (a non-standard feature).
+	- "atomic line" stdout log print.
+	- printed help minor fix.
+	- client program does not necessary
+		require certificate for TLS.
+	- docs fixes.
+	- allocation quota bug fixed.
+
+11/29/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 3.0.2.1 'Practical Frost':
+	- TCP stability fixes.
+	- RFC 6062 "first packet(s)" bug fixed.
+	- RFC 6062 stability fixes.
+	- Multithreaded Mobile ICE.
+
+11/28/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 3.0.1.4 'Practical Frost':
+	- CentOS/Fedora packaging fixed.
+	- PID file fixed.
+
+11/26/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 3.0.1.3 'Practical Frost':
+	- Misc cosmetic changes.
+	- CentOS/Fedora packaging fixed.
+
+11/25/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 3.0.1.2 'Practical Frost':
+	- Mobility draft implemented.
+	- DTLS communications fixes.
+	- UDP Linux optimization.
+	- Log output time starts with 0.
+	- A new "drop root privileges" options:
+		--proc-user and --proc-group added.
+	- SHA256 agility updated: 426 error code on too weak SHA function.
+	- "-m 0" and "-m 1" options improved.
+	- non-threading environment support dropped.
+	- stability fixes.
+	- OpenSUSE support added.
+
+11/10/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 3.0.0.0 'Practical Frost':
+	- New network engine for Linux kernel 3.9+.
+
+11/08/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 2.6.7.2 'Harding Grim':
+	- SHA256 agility updated: 441 error code on too weak SHA function.
+
+11/07/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 2.6.7.1 'Harding Grim':
+	- CentOS  / Fedora uninstall script.
+	- Debian compilation error fixed.
+	- OpenSSL 0.9.7 and earlier build fixed.
+	- NetBSD build fixed.
+
+11/03/2013 Oleg Moskalenko <mom040267@gmail.com>,
+	Peter Dunkley <peter.dunkley@crocodilertc.net>
+Version 2.6.7.0 'Harding Grim':
+	- CentOS 6 pre-compiled distribution.
+	- Fedora pre-compiled distribution.
+	- TURN_NO_TLS case compilation cleaning.
+	- Text files cleaning.
+	- Issue 68 fixed (no-stun option added).
+
+10/27/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 2.6.6.1 'Harding Grim':
+	- SHA256 added as a non-standard message integrity option.
+	- CentOS rpm specs added.
+	- Peter Dunkley added to the authors list.
+
+10/20/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 2.6.6.0 'Harding Grim':
+	- Cygwin loopback relay interfaces fixed (Issue 62).
+	- rpath added to the Makefile (Issue 63).
+	- CONFLICTS added to FreeBSD port Makefile (Issue 64).
+	- Certificate check options, for server and for the test client (Issue 65).
+	- Some compilation cleaning.
+
+10/09/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 2.6.5.2 'Harding Grim':
+	- Documentation changes.
+	- Redis-related memory leak fixed (Issue 61).
+
+09/25/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 2.6.4.1 'Harding Grim':
+	- Crash on uninitialized redis db name is fixed (Issue 59).
+	- Optional authentication of STUN Binding request is implemented (Issue 60).
+
+09/16/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 2.6.3.1 'Harding Grim':
+	- Issue 58: support changing white/black IP lists while server is running.
+	database tables (keys for redis) added for that new functionality.
+
+09/03/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 2.6.2.2 'Harding Grim':
+	- Issue 52: RFC 6062 relay endpoints connection process
+	fixed for Linux pre-3.9 kernel.
+
+09/03/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 2.6.2.1 'Harding Grim':
+	- UDP performance improvements.
+	- Issue 56: DTLS scaleability improvements.
+	- Issue 55: DTLS support in Cygwin.
+	- Issue 57: --pidfile option
+	- Issue 52: RFC 6062 relay endpoints connection process fixed.
+	- Issue 53: Fingerprints added to the indications.
+	- Issue 54: Long-term credentials mechanism integrity and software attributes
+	added to the indications.
+
+08/11/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 2.6.1.4 'Harding Grim':
+	- UDP memory leak fixed.
+
+08/11/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 2.6.1.3 'Harding Grim':
+	- DTLS crash fix.
+
+08/10/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 2.6.1.2 'Harding Grim':
+	- TLS buffer decreased to avoid memory problems.
+	- TLS BIO object fix.
+	- UDP socket open/reopen process fixed.
+
+08/08/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 2.6.1.1 'Harding Grim':
+	- Network optimization:
+		* "pure" UDP setup optimized (when no DTLS configured);
+		* Auxiliary listening endpoints (configured by
+			--aux-server=<ip:port>).
+		* --udp-self-balance option to balance the UDP traffic
+			among the aux endpoints (for clients supporting
+			300 ALTERNATE-SERVER response).
+	- Security improvements:
+        * no authentication required on the load balancer server (Issue 50).
+		* REST API improvement:
+			= --secret-ts-exp-time option deprecated;
+			= In REST API timestamp, we are now using
+				the expiration time (Issue 31).
+		* Configurable cipher suite in the TURN server.
+		* SSLv3 support.
+		* TLS 1.1 and 1.2 support.
+		* SSLv2 "encapsulation" mode support.
+		* NULL OpenSSL cipher is allowed to be negotiated between
+			server and client.
+		* -U option (NULL cipher) added to the test client.
+		* DTLS crash fixed on overload.
+	- STUN enhancements and fixes:
+		* Classic STUN transaction ID fixed (Issue 48).
+		* Classic STUN attribute ERROR fixed (Issue 49).
+		* Unused RFC 5780 functionality removed from TCP, TLS and DTLS relays.
+		* resources optimization for stun-only: short connection expiration time.
+
+07/26/2013 Oleg Moskalenko <mom040267@gmail.com>,
+			Vladimir Tsanev <tsachev@gmail.com>
+Version 2.5.2.1 'Shivers':
+	- log file placement changes.
+	- Base64 encode/decode memory initialization fix.
+
+07/23/2013 Oleg Moskalenko <mom040267@gmail.com>,
+			Po-sheng Lin <personlin118@gmail.com>
+Version 2.5.1.2 'Shivers':
+	- getopt fix in client test programs.
+	- cosmetic changes.
+	- allow anonymous alternate-server functionality.
+
+07/21/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 2.5.1.1 'Shivers':
+	- Improved "split" network engine:
+	two different threading models for TCP and UDP.
+	- DTLS crash fixed.
+	- Multithreading with Cygwin.
+
+07/20/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 2.1.3.1 'Shivers':
+	- DTLS improvements for DOS attacks
+	- deeper optimization for DOS attack (mostly for Linux)
+
+07/19/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 2.1.2.0 'Shivers':
+	- deeper optimization for DOS attack (mostly for Linux)
+
+07/18/2013 Oleg Moskalenko <mom040267@gmail.com>,
+			Po-sheng Lin <personlin118@gmail.com>
+Version 2.1.1.1 'Shivers':
+	- udp fixes.
+	- Makefile cleaning.
+	- Dependencies cleaning.
+	- DOS attack client emulation.
+	- DOS attack defense logic added to the server.
+
+07/14/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 2.0.0.0 'Shivers':
+	- new networking engine:
+		- scalable UDP socket model.
+		- multithreaded TCP relay implemented.
+		- race condition fixed in authentication of TCP sessions.
+		- Cygwin "port" fixed.
+
+06/23/2013 Oleg Moskalenko <mom040267@gmail.com>,
+			Vladimir Tsanev <tsachev@gmail.com>
+Version 1.8.7.0 'Black Dow':
+
+	- Added support for obsolete "classic" STUN RFC 3489;
+	- Full TURN support for Cygwin implemented: MS-Win UDP sockets fixed;
+	- Relay threads number changed;
+	- Fedora warnings fixed;
+	- turndb/testdbsetup.sh example file added;
+	- Multiple Makefile and ./configure script fixes implemented:
+		* Changes taken from Arch Linux port;
+		* Manpages installation and deinstallation;
+		* rfc5769check utility removed from installation, it is used for the
+		compilation result test only and makes no sense for the end user;
+		* "--parameter" format support in ./configure script; it allows
+		simpler native OS package definitions (like in Debian package);
+		* Mac OS X linking warnings removed.
+		* pthread test fixed.
+
+06/08/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.8.6.3 'Black Dow':
+
+	- DONT-FRAGMENT flag removed on UDP listening (clients-facing) sockets.
+	- UDP fix for Cygwin only: UDP channels work fine now.
+	- docs fixes.
+
+06/06/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.8.6.2 'Black Dow':
+
+	- Just cosmetic re-packaging for Debian, tarball warnings removed.
+
+06/05/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.8.6.1 'Black Dow':
+
+	- Peer permissions bug fixed.
+
+06/03/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.8.6.0 'Black Dow':
+
+	- Optimization.
+	- Mac OS X compilation fixes.
+
+06/01/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.8.5.4 'Black Dow':
+
+	- Issues 29 and 30 fixed (channels padding).
+	- minor fixes.
+	- Mac OS X compilation fixes.
+	- Cygwin-related compilation fixes and INSTALL additions.
+
+05/31/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.8.5.3 'Black Dow':
+
+	- REST API extra script example and docs extension.
+
+05/26/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.8.5.1 'Black Dow':
+
+	- Config file parsing fixed (Issue 28)
+
+05/20/2013 Oleg Moskalenko <mom040267@gmail.com>,
+			Erik Johnston <erikj@openmarket.com>
+Version 1.8.5.0 'Black Dow':
+
+	- IP access control lists.
+	- log file name fix.
+	- alt-* ports default behavior changed.
+	- "passive TCP" option in uclient.
+
+05/18/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.8.4.5 'Black Dow':
+
+	- socket conditions cleaned (SIGPIPE, etc)
+
+05/17/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.8.4.4 'Black Dow':
+
+	- configuration and installation adjusted for:
+		- NetBSD;
+		- Solaris;
+		- OpenBSD;
+	- Screen messages fixed;
+	- code security fixes.
+
+05/15/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.8.4.3 'Black Dow':
+
+	- Compilation warning removed.
+	- Log file fixed (Issue 26)
+
+05/15/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.8.4.2 'Black Dow':
+
+	- repackaging for Debian compliance. Docs separated.
+
+05/14/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.8.4.1 'Black Dow':
+
+        - Cosmetics (docs, warnings, etc).
+        - More complex case of TURN-server-behind-NAT is implemented,
+        when multiple public-ip/private-ip mappings are involved.
+
+05/13/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.8.4.0 'Black Dow':
+
+        - Redis DB support added.
+        - Crash on help text fixed.
+        - Max allocation time can be changed in the command-line or
+        in the config file.
+
+05/09/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.8.3.9 'Black Dow':
+
+        - No changes - just the tarball is repackaged for Debian compatibility.
+
+05/07/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.8.3.8 'Black Dow':
+
+	- multicast and loopback addresses disallow options added.
+	- option to direct all log messages to the system log (syslog).
+
+05/02/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.8.3.7 'Black Dow':
+
+	- Allocation status log.
+
+05/01/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.8.3.6 'Black Dow':
+
+	- Stuntman client interoperability fixed.
+	- Manpages installation fixed.
+
+04/30/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.8.3.5 'Black Dow':
+
+	- Lintian fixes.
+
+04/27/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.8.3.4 'Black Dow':
+
+	- Installation fixes.
+
+04/26/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.8.3.3 'Black Dow':
+
+	- Log file midnight rollover implemented (Issue 15).
+
+04/25/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.8.3.1 'Black Dow':
+
+	- Configurable REST API separator symbol (Issue 16).
+	- Stale Nonce bug fixed (Issue 17).
+	- Minor client fix.
+
+04/21/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.8.3.0 'Black Dow':
+
+	- STUN stand-alone functionality improved according to RFC 5389.
+	- ALTERNATE-SERVER implemented as "light" load balancing feature.
+	- stun-only option implemented.
+	- scripts directory reorganized.
+
+04/19/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.8.2.1 'Black Dow':
+
+	- Misc docs fixes.
+
+04/13/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.8.2.0 'Black Dow':
+
+	- Multiple database shared secrets supported for REST API.
+	- Added support for some OpenSSL FIPS versions (like openssl 0.9.8e-fips-rhel5).
+
+04/13/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.8.1.3 'Black Dow':
+
+	- Maintenance (docs, etc).
+	- Added partial support for Cygwin. Only TCP & TLS protocols
+	are support for client-to-server communications (as in RFC 5766 and
+	RFC 6062). UDP supported only for relay communications. DTLS is not
+	supported at all. The problem is in Winsock UDP sockets implementation.
+
+04/11/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.8.1.2 'Black Dow':
+
+	- Work on configuration and build.
+
+04/9/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.8.1.1 'Black Dow':
+
+	- Docs improvements.
+	- Load balancing use case added to TurnNetworks.pdf.
+	- Verbose mode split into 'normal' and 'extra' modes.
+	- Logging extended and fixed.
+
+04/7/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.8.1.0 'Black Dow':
+
+	- Compilation flags improved.
+	- utility programs renamed and moved to bin/ directory.
+	- README and turnserver man page separated into three sections -
+	turnserver, turnadmin, turnutils.
+
+04/6/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.8.0.6 'Black Dow':
+
+	- Added option "--psql-userdb" for better visual separation
+	between PostgreSQL and MySQL stuff.
+	- turnadmin flat files handling fixed.
+	- added set/show commands to turnadmin for secret key.
+
+04/6/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.8.0.5 'Black Dow':
+
+	- turnadmin MySQL connection fixed.
+	- minor cosmetic changes.
+	- Added "list" commands for long-term and short-term users,
+	 to turnadmin.
+
+04/5/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.8.0.4 'Black Dow':
+
+	- Minor compilation fixes.
+	- Minor docs fixes.
+	- "connect_timeout" option support for MySQL.
+
+04/5/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.8.0.3 'Black Dow':
+
+	- Issue 11 (secret timestamp check) fixed.
+
+04/4/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.8.0.2 'Black Dow':
+
+	- TCP sockets flush removed.
+	- rfc5769check utility removed from the Makefile.
+
+04/4/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.8.0.1 'Black Dow':
+
+	- Some short-term auth problems fixed.
+	- rfc5769check utility added to the Makefile and upgraded.
+
+04/3/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.8.0.0 'Black Dow':
+
+	- Short-term credentials mechanism implemented.
+
+04/2/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.7.3.1 'Superior Glokta':
+
+	- Listeners code cleaned.
+	- The default number of extra relay threads changes from 0 to 1.
+
+04/1/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.7.3.0 'Superior Glokta':
+
+	- Issue 10 fixed: log file control options.
+	  Two options added: --no-stdout-log and --log-file.
+
+03/29/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.7.2.0 'Superior Glokta':
+
+	- Issue 9 fixed (uclient).
+	- Secret-based authentication implemented (see https://github.com/coturn/coturn/blob/master/README.turnserver).
+	- Uclient docs fixed.
+	- database schema extended (table for the secret added).
+
+03/27/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.7.1.2 'Superior Glokta':
+
+	- CHANNEL BIND request handling fixed: now it produces an error
+		when client is trying to tie the same peer address to
+		different channels.
+	- uclient and peer test apps upgraded so that RTP channels
+		are talking  to <port> and RTCP channels are talking
+		to <port+1> in client-to-peer communication patterns.
+	- compilation warning is fixed when MySQL is not used.
+
+03/27/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.7.1.1 'Superior Glokta':
+
+	- CONNECT response fixed in RFC 6062.
+	- uclient checks server responses integrity.
+
+03/26/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.7.1.0 'Superior Glokta':
+
+	- MySQL support added for the user keys repository.
+	- PostgreSQL support improved.
+	- Docs fixed.
+	- 64 bits platform fixes.
+
+03/23/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.7.0.0 'Glokta':
+
+	- Authentication fix.
+	- PostgreSQL database can be used as the user keys repository.
+
+03/21/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.6.1.3 'Whirrun':
+
+	- UDP segmentation fault fixed
+
+03/21/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.6.1.2 'Whirrun':
+
+	- RFC 6062 fix
+
+03/21/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.6.1.1 'Whirrun':
+
+	- Authentication error fixed
+
+03/19/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.6.1.0 'Whirrun':
+
+	- --stale-nonce option
+	- working on userdb
+	- "hang on" option fixed in uclient
+
+03/18/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.6.0.2 'Whirrun':
+
+	- working on userdb
+	- c++ compilation fix
+
+03/17/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.6.0.1 'Whirrun':
+
+	- uclient performance improved
+	- TurnNetworks.pdf document added
+
+03/15/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.6.0.0 'Whirrun':
+
+	- "Pure" TCP relaying (RFC 6062) implemented.
+	- Network interactions fixes.
+	- RFC 6062 test scripts added.
+
+03/03/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.5.2.8 'Iosiv Lestek':
+
+	- authorization processing improvements.
+	- peer application fixed.
+	- some ICE attributes added.
+
+02/27/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.5.2.7 'Iosiv Lestek':
+
+	- authorization processing improvements
+	- Issue 4 fixed.
+	- secure client-to-client script added
+
+02/22/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.5.2.6 'Iosiv Lestek':
+
+	- strcpy/strncpy fixed
+	- some screen messages fixed
+	- uclient statistics fixed
+	- software attribute fixed
+	- example scripts fixed
+
+02/16/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.5.2.5 'Lestek':
+
+	- uclient application fixed
+	- Docs fixes
+
+02/14/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.5.2.4 'Lestek':
+
+	- Crash fixed on unconfigured interfaces
+	- Docs fixes
+
+02/12/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.5.2.3 'Lestek':
+
+	- Added feature: TURN Server always uses fingerprints in a session if
+	  the session client is using fingerprints.
+	- Default unsecure alternative port changed to 3479,
+	  default secure alternative port changed to 5350.
+	- TURN Server always trying to search for default certificate file
+	  turn_server_cert.pem and for default private key file
+	  turn_server_pkey.pem, if not certificate or private key is
+	  explicitly configured.
+	- configurable packet rate in the uclient test program.
+	- default peer port changed to 3480.
+	- -z, --no-auth option added to turnserver.
+
+02/11/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.5.2.2 'Lestek':
+
+	- Some cleanup added to the network input handlers.
+
+02/9/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.5.2.1 'Lestek':
+
+	- Binding requests do not require authentication.
+	- SOFTWARE in the end of the message.
+
+02/8/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.5.2.0 'Lestek':
+
+	- NAT discovery fixed (RFC5780).
+
+02/8/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.5.1.6 'Calder':
+
+	- Installation instructions fixed.
+
+02/8/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.5.1.5 'Calder':
+
+	- Mac compilation fixes.
+	- Fixes for old Linuxes.
+
+02/7/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.5.1.4 'Calder':
+
+	- Configuration alert (warning) messages.
+	- Relay addresses by default use listener addresses.
+	- Realm/user sequence fixed in the config file reading.
+
+01/27/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.5.1.3 'Calder':
+
+	- 'External' IP implemented for TURN-server-behind-NAT situation.
+
+01/26/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.5.1.2 'Calder':
+
+	- Alternative ports moved to 20000-ish territory.
+	- Docs fixes.
+
+01/22/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.5.1.1 'Calder':
+
+	- Docs fixes.
+
+01/22/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.5.1.0 'Calder':
+
+	- C++ compatible headers and build.
+	- C++ library header.
+	- HTML-formatted development reference.
+
+01/14/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.5.0.0 'Calder':
+
+	- RFC 5769 check utility implemented.
+	- RFC 5780 STUN extension implemented.
+
+01/13/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.4.2.5 'Scale':
+
+	- Issue 2 fixed.
+
+01/08/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.4.2.4 'Scale':
+
+	- Bogus "Bind to device" error message removed (Linux).
+	- Docs improvements.
+
+01/08/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.4.2.3 'Scale':
+
+	- Bandwidth limitation implemented (--max-bps option).
+	- DTLS communications improved.
+
+01/07/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.4.2.2 'Scale':
+
+	- Output messages fixed.
+	- Peer test application accepts multiple listening addresses.
+	- config search directories improved.
+
+01/06/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.4.2.1 'Scale':
+
+	- Examples directory structure fixed
+	- Installation fixes
+	- Output messages fixed
+
+01/05/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.4.2 'Scale':
+
+	- Daemon execution improved
+	- Installation fixes
+	- Added comments to the scripts
+
+01/04/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.4.1.2 'Scale':
+
+	- Configure script introduced
+	- Installation fixes
+	- Run as daemon
+
+01/01/2013 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.4.1 'Scale':
+
+	- Options fixes
+	- Build fixes
+	- Script fixes
+	- Installation fixes
+
+12/31/2012 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.4 'Scale':
+
+	- Separate file for the dynamic user database
+	- Build fixes
+	- Script fixes
+	- Logging fixes
+
+12/29/2012 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.3.0.2 'Ferro':
+
+	- Debian 'squeeze' compilation fix
+
+12/26/2012 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.3.0.1 'Ferro':
+
+	- install procedure minor improvements
+
+12/24/2012 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.3 'Ferro':
+
+	- default conf file renamed to turnserver.conf
+	- build script improved
+	- client library linking fixed
+	- install procedure
+
+12/23/2012 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.2.3 'Luthar':
+
+	- turnserver options fixed
+	- man page renamed to turnserver
+
+12/22/2012 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.2.2:
+
+	- Man page fix
+
+12/21/2012 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.2.1 'Juvens':
+
+	- Man page
+
+12/21/2012 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.2 'Euz':
+
+	- Project cleaning
+
+12/20/2012 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.1 'no name':
+
+	- DTLS extension
+
+12/17/2012 Oleg Moskalenko <mom040267@gmail.com>
+Version 1.0 'no name':
+
+	- RFC 5766
+	- RFC 6156

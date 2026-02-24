@@ -1,0 +1,79 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Ariana",
+  "colors": {
+    "primary": "#1273EB",
+    "light": "#1273EB",
+    "dark": "#0052C2"
+  },
+  "favicon": "/favicon.png",
+  "navigation": {
+    "global": {
+      "anchors": [
+        {
+          "anchor": "App",
+          "icon": "code",
+          "href": "https://ariana.dev/app"
+        },
+        {
+          "anchor": "Discord",
+          "icon": "discord",
+          "href": "https://discord.gg/Y3TFTmE89g"
+        },
+        {
+          "anchor": "GitHub",
+          "icon": "github",
+          "href": "https://github.com/ariana-dot-dev"
+        }
+      ]
+    },
+    "groups": [
+      {
+        "group": "Getting started",
+        "pages": [
+          "index",
+          "agent-server/vps-capabilities",
+          "essentials/automations",
+          "essentials/environments"
+        ]
+      },
+      {
+        "group": "Agent Server",
+        "pages": [
+          "agent-server/installation",
+          "agent-server/overview"
+        ]
+      }
+    ]
+  },
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
+  },
+  "contextual": {
+    "options": [
+      "copy",
+      "view",
+      "chatgpt",
+      "claude",
+      "perplexity",
+      "mcp",
+      "cursor",
+      "vscode"
+    ]
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/ariana-dot-dev",
+      "discord": "https://discord.gg/Y3TFTmE89g"
+    }
+  },
+  "navbar": {
+    "primary": {
+      "type": "button",
+      "label": "Go to App",
+      "href": "https://ariana.dev/app"
+    }
+  }
+}

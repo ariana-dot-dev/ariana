@@ -1,0 +1,45 @@
+# Root-level ignores
+.git
+.github
+.vscode
+.venv
+.claude
+docs/
+opencodesdk/
+experiments/
+data/
+moonlight-fork/
+public-docs/
+*.md
+*.stackdump
+.dev-snapshot/
+
+# Backend
+backend/agents-server/node_modules
+backend/agents-server/watcher/target
+backend/node_modules
+backend/dist
+backend/data
+backend/*.log
+backend/.env.development
+backend/.env.staging
+
+# Dashboard
+dashboard/node_modules
+dashboard/dist
+
+# Frontend (will be built in Docker)
+frontend/node_modules
+frontend/dist
+frontend/.vite
+frontend/src-tauri/target
+frontend/src-tauri/gen
+frontend/bin
+frontend/install.js
+frontend/*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo

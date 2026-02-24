@@ -1,0 +1,74 @@
+{
+	"build": {
+		"beforeDevCommand": "npm run dev -- --port 1420",
+		"beforeBuildCommand": "npm run build",
+		"frontendDist": "../dist",
+		"devUrl": "http://localhost:1420"
+	},
+	"bundle": {
+		"active": true,
+		"targets": "all",
+		"createUpdaterArtifacts": false,
+		"resources": [
+			"resources/*"
+		],
+		"icon": [
+			"icons/32x32.png",
+			"icons/128x128.png",
+			"icons/128x128@2x.png",
+			"icons/icon.icns",
+			"icons/icon.ico"
+		],
+		"macOS": {
+			"entitlements": "entitlements.plist",
+			"exceptionDomain": null,
+			"frameworks": [],
+			"providerShortName": null,
+			"signingIdentity": null
+		}
+	},
+	"productName": "Ariana Dev",
+	"mainBinaryName": "ariana-dev",
+	"version": "0.2.7",
+	"identifier": "com.ariana.ide.dev",
+	"plugins": {
+		"shell": {
+			"open": true
+		},
+		"deep-link": {
+			"mobile": [],
+			"desktop": {
+				"schemes": [
+					"ariana-ide-dev"
+				]
+			}
+		},
+		"updater": {
+			"active": false
+		}
+	},
+	"app": {
+		"withGlobalTauri": true,
+		"windows": [
+			{
+				"fullscreen": false,
+				"resizable": true,
+				"title": "Ariana Dev",
+				"width": 1200,
+				"height": 800,
+				"minWidth": 300,
+				"minHeight": 600,
+				"decorations": false,
+				"transparent": true,
+				"center": true,
+				"shadow": false,
+				"useHttpsScheme": true,
+				"dragDropEnabled": false
+			}
+		],
+		"security": {
+			"csp": null
+		},
+		"macOSPrivateApi": true
+	}
+}

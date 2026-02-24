@@ -1,0 +1,65 @@
+version: "3"
+services:
+
+# PostgreSQL
+  postgresql:
+    image: postgres
+    restart: unless-stopped
+    volumes:
+      - ./postgresql/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+      - postgresql-data:/var/lib/postgresql/data
+    env_file: 
+      - postgresql/postgresql.env
+    networks:
+      - backend
+
+
+# Coturn
+  coturn:
+    build:
+      context: ../
+      dockerfile: ./docker/coturn/debian/Dockerfile
+    restart: always
+    volumes:
+      - ./coturn/turnserver.conf:/etc/turnserver.conf:ro
+      - ./coturn/privkey.pem:/etc/ssl/private/privkey.pem:ro
+      - ./coturn/cert.pem:/etc/ssl/certs/cert.pem:ro
+    ports:
+## STUN/TURN
+      - "3478:3478"
+      - "3478:3478/udp"
+      - "3479:3479"
+      - "3479:3479/udp"
+      - "80:80"
+      - "80:80/udp"
+## STUN/TURN SSL
+      - "5349:5349"
+      - "5349:5349/udp"
+      - "5350:5350"
+      - "5350:5350/udp"
+      - "443:443"
+      - "443:443/udp"
+# Relay Ports
+#      - "49152-65535:49152-65535"
+#      - "49152-65535:49152-65535/udp"
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      - postgresql
+    env_file:
+      - coturn/coturn.env
+# DB
+      - postgresql/postgresql.env
+volumes:
+  postgresql-data:
+
+networks:
+  frontend:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.16.238.0/24
+  backend:
+    internal: true

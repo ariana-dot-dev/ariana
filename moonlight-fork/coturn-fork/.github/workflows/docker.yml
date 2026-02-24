@@ -1,0 +1,323 @@
+name: Docker
+
+on:
+  push:
+    branches: ["master"]
+    tags: ["docker/*"]
+  pull_request:
+    branches: ["master"]
+  schedule:
+    - cron: "13 13 * * 3"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  ############
+  # Building #
+  ############
+
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        dist: ["alpine", "debian"]
+        arch:
+          - amd64
+          - arm32v6
+          - arm32v7
+          - arm64v8
+          - i386
+          - ppc64le
+          - s390x
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # for correct image labeling via `git describe --tags`
+      # TODO: Try remove once `moby/buildkit` image upgrades its default QEMU version.
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Detect correct Git ref for image build
+        id: git
+        uses: actions/github-script@v8
+        with:
+          script: |
+            let out = {ref: 'HEAD', ver: ''};
+            if ('${{ github.ref }}'.startsWith('refs/tags/docker/')) {
+              out.ref = '${{ github.ref }}'.substring(17).split('-')[0];
+              out.ver = out.ref;
+            }
+            return out;
+      - name: Verify Git ref matches Makefile version
+        run: |
+          test "${{ fromJSON(steps.git.outputs.result).ref }}" \
+            == "$(grep -m1 'COTURN_VER ?=' Makefile | cut -d'=' -f2 | tr -d ' ')"
+        working-directory: docker/coturn/
+        if: ${{ github.event_name == 'push'
+             && startsWith(github.ref, 'refs/tags/docker/') }}
+
+      - run: make docker.image no-cache=yes
+                  dockerfile=${{ matrix.dist }}
+                  platform=linux/${{ matrix.arch }}
+                  ref=${{ fromJSON(steps.git.outputs.result).ref }}
+                  tag=build-${{ github.run_number }}-${{ matrix.dist }}-${{ matrix.arch }}
+        working-directory: docker/coturn/
+
+      - run: make docker.tar to-file=.cache/image.tar
+                  tags=build-${{ github.run_number }}-${{ matrix.dist }}-${{ matrix.arch }}
+        working-directory: docker/coturn/
+      - uses: actions/upload-artifact@v6
+        with:
+          name: ${{ matrix.dist }}-${{ matrix.arch }}-${{ github.run_number }}
+          path: docker/coturn/.cache/image.tar
+          retention-days: 1
+
+
+
+
+  ###########
+  # Testing #
+  ###########
+
+  changelog:
+    if: ${{ github.event_name == 'push'
+         && (startsWith(github.ref, 'refs/tags/')
+             || github.ref == 'refs/heads/master') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+
+      - name: Parse semver versions from Git tag
+        id: semver
+        uses: actions-ecosystem/action-regex-match@v2
+        with:
+          text: ${{ github.ref }}
+          regex: '^refs/tags/docker/(((([0-9]+)\.[0-9]+)\.[0-9]+)-(.+))$'
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+
+      - name: Ensure CHANGELOG date is today
+        run: |
+          today="$(date '+%Y-%m-%d')"
+          changelog="$(grep -E '^## \[${{ steps.semver.outputs.group1 }}\] ·' \
+                            CHANGELOG.md \
+                       | cut -d' ' -f4 | tr -d ' ')"
+          echo "Changelog: $changelog"
+          echo "Today: $today"
+          [ "$changelog" = "$today" ]
+        working-directory: docker/coturn/
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+
+  test:
+    needs: ["build"]
+    strategy:
+      fail-fast: false
+      matrix:
+        dist: ["alpine", "debian"]
+        arch:
+          - amd64
+          - arm32v6
+          - arm32v7
+          - arm64v8
+          - i386
+          - ppc64le
+          - s390x
+        # TODO: Try remove on new QEMU or Coturn versions.
+        # Temporarily exclude `alpine` on `s390x` arch, as QEMU emulation
+        # currently times out and fails the CI.
+        exclude:
+          - dist: alpine
+            arch: s390x
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-qemu-action@v3
+      - run: make npm.install
+        working-directory: docker/coturn/
+
+      - name: Detect correct Git version for image tests
+        id: git
+        uses: actions/github-script@v8
+        with:
+          script: |
+            let out = {ref: 'HEAD', ver: ''};
+            if ('${{ github.ref }}'.startsWith('refs/tags/docker/')) {
+              out.ref = '${{ github.ref }}'.substring(17).split('-')[0];
+              out.ver = out.ref;
+            }
+            return out;
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: ${{ matrix.dist }}-${{ matrix.arch }}-${{ github.run_number }}
+          path: docker/coturn/.cache/
+      - run: make docker.untar from-file=.cache/image.tar
+        working-directory: docker/coturn/
+
+      - run: make test.docker
+                  platform=linux/${{ matrix.arch }}
+                  tag=build-${{ github.run_number }}-${{ matrix.dist }}-${{ matrix.arch }}
+        env:
+          COTURN_VERSION: ${{ fromJSON(steps.git.outputs.result).ver }}
+        working-directory: docker/coturn/
+
+
+
+
+  #############
+  # Releasing #
+  #############
+
+  push:
+    if: ${{ github.event_name == 'push'
+         && github.repository_owner == 'coturn'
+         && (startsWith(github.ref, 'refs/tags/')
+             || github.ref == 'refs/heads/master') }}
+    needs: ["build", "changelog", "test"]
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        registry: ["docker.io", "ghcr.io", "quay.io"]
+        dist: ["alpine", "debian"]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Parse Docker image name from Git repository name
+        id: image
+        uses: actions-ecosystem/action-regex-match@v2
+        with:
+          text: ${{ github.repository }}
+          regex: '^${{ github.repository_owner }}/(.+)$'
+      - name: Parse semver versions from Git tag
+        id: semver
+        uses: actions-ecosystem/action-regex-match@v2
+        with:
+          text: ${{ github.ref }}
+          regex: '^refs/tags/docker/(((([0-9]+)\.[0-9]+)\.[0-9]+)-(.+))$'
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+      - name: Form main Docker image tag
+        id: docker
+        run: echo "tag=${{ (startsWith(github.ref, 'refs/tags/')
+                            && steps.semver.outputs.group1)
+                        ||     'edge' }}-${{ matrix.dist }}"
+             >> $GITHUB_OUTPUT
+
+      - uses: actions/download-artifact@v7
+        with:
+          path: docker/coturn/.cache/
+
+      - name: Login to ${{ matrix.registry }} container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ matrix.registry }}
+          username: ${{ (matrix.registry == 'docker.io'
+                         && secrets.DOCKERHUB_BOT_USER)
+                     || (matrix.registry == 'quay.io'
+                         && secrets.QUAYIO_ROBOT_USERNAME)
+                     || github.repository_owner }}
+          password: ${{ (matrix.registry == 'docker.io'
+                         && secrets.DOCKERHUB_BOT_PASS)
+                     || (matrix.registry == 'quay.io'
+                         && secrets.QUAYIO_ROBOT_TOKEN)
+                     || secrets.GITHUB_TOKEN }}
+
+      - name: Tag and push single-platform images
+        run: |
+          for arch in amd64 \
+                      arm32v6 \
+                      arm32v7 \
+                      arm64v8 \
+                      i386 \
+                      ppc64le \
+                      s390x
+          do
+            make docker.untar \
+                 from-file=.cache/${{ matrix.dist }}-$arch-${{ github.run_number }}/image.tar
+            make docker.tags \
+                 of=build-${{ github.run_number }}-${{ matrix.dist }}-$arch \
+                 tags=${{ steps.docker.outputs.tag }}-$arch \
+                 registries=${{ matrix.registry }}
+            make docker.push \
+                 tags=${{ steps.docker.outputs.tag }}-$arch \
+                 registries=${{ matrix.registry }}
+          done
+        working-directory: docker/coturn/
+      - name: Tag and push multi-platform images
+        run: make docker.manifest push=yes
+                  registries=${{ matrix.registry }}
+                  of='${{ steps.docker.outputs.tag }}-amd64
+                      ${{ steps.docker.outputs.tag }}-arm32v6
+                      ${{ steps.docker.outputs.tag }}-arm32v7
+                      ${{ steps.docker.outputs.tag }}-arm64v8
+                      ${{ steps.docker.outputs.tag }}-i386
+                      ${{ steps.docker.outputs.tag }}-ppc64le
+                      ${{ steps.docker.outputs.tag }}-s390x'
+                 tags=${{ (!startsWith(github.ref, 'refs/tags/')
+                           && steps.docker.outputs.tag)
+                       ||     '' }}
+        env:
+          DOCKERFILE: ${{ matrix.dist }}  # for correct `tags` auto-detection
+        working-directory: docker/coturn/
+
+      # On GitHub Container Registry README is automatically updated on pushes.
+      - name: Update README on Docker Hub
+        uses: christian-korneck/update-container-description-action@v1
+        with:
+          provider: dockerhub
+          destination_container_repo: ${{ github.repository_owner }}/${{ steps.image.outputs.group1 }}
+          readme_file: docker/coturn/README.md
+        env:
+          DOCKER_USER: ${{ secrets.DOCKERHUB_BOT_USER }}
+          DOCKER_PASS: ${{ secrets.DOCKERHUB_BOT_PASS }}
+        if: ${{ startsWith(github.ref, 'refs/tags/')
+             && matrix.registry == 'docker.io' }}
+      - name: Update README on Quay.io
+        uses: christian-korneck/update-container-description-action@v1
+        with:
+          provider: quay
+          destination_container_repo: ${{ matrix.registry }}/${{ github.repository_owner }}/${{ steps.image.outputs.group1 }}
+          readme_file: docker/coturn/README.md
+        env:
+          DOCKER_APIKEY: ${{ secrets.QUAYIO_API_TOKEN }}
+        if: ${{ startsWith(github.ref, 'refs/tags/')
+             && matrix.registry == 'quay.io' }}
+
+  release-github:
+    name: release (GitHub)
+    if: ${{ github.event_name == 'push'
+         && github.repository_owner == 'coturn'
+         && startsWith(github.ref, 'refs/tags/') }}
+    needs: ["push"]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Parse semver versions from Git tag
+        id: semver
+        uses: actions-ecosystem/action-regex-match@v2
+        with:
+          text: ${{ github.ref }}
+          regex: '^refs/tags/docker/(((([0-9]+)\.[0-9]+)\.[0-9]+)-(.+))$'
+
+      - name: Parse CHANGELOG link
+        id: changelog
+        run: echo "link=${{ github.server_url }}/${{ github.repository }}/blob/docker/${{ steps.semver.outputs.group1 }}/docker/coturn/CHANGELOG.md#$(sed -n '/^## \[${{ steps.semver.outputs.group1 }}\]/{s/^## \[\(.*\)\][^0-9]*\([0-9].*\)/\1--\2/;s/[^0-9a-z-]*//g;p;}' CHANGELOG.md)"
+             >> $GITHUB_OUTPUT
+        working-directory: docker/coturn/
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: docker/${{ steps.semver.outputs.group1 }}
+          body: |
+            `${{ steps.semver.outputs.group1 }}` Docker image version of ${{ steps.semver.outputs.group2 }} Coturn release.
+
+            [Docker Hub](https://hub.docker.com/r/coturn/coturn) | [GitHub Container Registry](https://github.com/orgs/coturn/packages/container/package/coturn) | [Quay.io](https://quay.io/repository/coturn/coturn)
+
+            [Changelog](${{ steps.changelog.outputs.link }})

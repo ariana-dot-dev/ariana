@@ -1,0 +1,16 @@
+{
+  "name": "ariana-cli",
+  "version": "1.0.0",
+  "description": "Ariana Agent Server CLI",
+  "main": "cli.ts",
+  "bin": {
+    "ariana": "./cli.ts"
+  },
+  "scripts": {
+    "build": "bun build cli.ts --compile --outfile ariana",
+    "build:all": "../scripts/build-cli.sh"
+  },
+  "keywords": ["ariana", "cli", "agent-server"],
+  "author": "Ariana",
+  "license": "AGPL-3"
+}

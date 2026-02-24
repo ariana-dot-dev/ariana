@@ -1,0 +1,8 @@
+# Rust
+/target
+finalOutput
+ignore
+web/api_bindings.ts
+
+# VsCode
+.vscode

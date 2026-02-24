@@ -1,0 +1,49 @@
+version: "3.9"
+
+services:
+  moonlight-web:
+    image: mrcreativ3001/moonlight-web-stream:${ML_WEB_VERSION}
+    container_name: moonlight-web
+    restart: unless-stopped
+    depends_on:
+      - turn
+    ports:
+      - "8080:8080"
+      - "40000-40100:40000-40100/udp"
+    environment:
+      - WEBRTC_NAT_1TO1_HOST=${LAN_ADDRESS}
+      - WEBRTC_ICE_SERVER_0_URL=turn:127.0.0.1:3478?transport=udp # localhost, because we're hosting the turn
+      - WEBRTC_ICE_SERVER_0_USERNAME=${TURN_USERNAME}
+      - WEBRTC_ICE_SERVER_0_CREDENTIAL=${TURN_CREDENTIAL}
+      - WEBRTC_ICE_SERVER_1_URL=turn:${TURN_URL}:3478?transport=udp # 3478 udp
+      - WEBRTC_ICE_SERVER_1_USERNAME=${TURN_USERNAME}
+      - WEBRTC_ICE_SERVER_1_CREDENTIAL=${TURN_CREDENTIAL}
+      - WEBRTC_ICE_SERVER_2_URL=turn:${TURN_URL}:3478?transport=tcp # 3478 tcp
+      - WEBRTC_ICE_SERVER_2_USERNAME=${TURN_USERNAME}
+      - WEBRTC_ICE_SERVER_2_CREDENTIAL=${TURN_CREDENTIAL}
+      - WEBRTC_ICE_SERVER_3_URL=turn:${TURN_URL}:5349?transport=tcp # 5349 tcp
+      - WEBRTC_ICE_SERVER_3_USERNAME=${TURN_USERNAME}
+      - WEBRTC_ICE_SERVER_3_CREDENTIAL=${TURN_CREDENTIAL}
+      - WEBRTC_ICE_SERVER_4_URL=turn:${TURN_URL}:443?transport=tcp # 443 tcp
+      - WEBRTC_ICE_SERVER_4_USERNAME=${TURN_USERNAME}
+      - WEBRTC_ICE_SERVER_4_CREDENTIAL=${TURN_CREDENTIAL}
+    volumes:
+      - moonlight-server:/moonlight-web/server
+
+  turn:
+    image: coturn/coturn:latest
+    container_name: turn
+    restart: unless-stopped
+    command: >
+      --log-file=stdout --external-ip=$(detect-external-ip) --realm=myrealm  --lt-cred-mech --user=${TURN_USERNAME}:${TURN_CREDENTIAL} --verbose --min-port=55000 --max-port=55100
+    ports:
+      - "3478:3478/udp"
+      - "3478:3478/tcp"
+      - "5349:5349/tcp"
+      - "443:5349/tcp" # allow TURN-TLS over HTTPS port
+      - "55000-55100:55000-55100/udp"
+      - "55000-55100:55000-55100/tcp"
+
+volumes:
+  moonlight-server:
+    name: moonlight-server

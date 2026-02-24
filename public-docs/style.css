@@ -1,0 +1,211 @@
+/* Global background image for documentation */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: url('/images/background.jpg');
+  background-size: cover;
+  background-attachment: fixed;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0.45;
+  z-index: -2;
+  pointer-events: none;
+}
+
+/* Add subtle white overlay to maintain readability */
+body::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.7);
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* Dark mode overlay */
+.dark body::after {
+  background: rgba(0, 0, 0, 0.75);
+}
+
+/* Navigation sidebar - remove gradient */
+nav,
+aside,
+.sidebar,
+[role="navigation"],
+.navigation,
+.nav-container,
+.sidebar-container,
+div[class*="sidebar"],
+div[class*="navigation"],
+div[class*="nav"] {
+  background: transparent !important;
+  background-image: none !important;
+  background-color: transparent !important;
+  backdrop-filter: none !important;
+}
+
+/* Remove gradient overlay at top of navigation */
+.sticky.bg-gradient-to-b,
+div[class*="bg-gradient-to-b"],
+.from-background-light,
+.dark\:from-background-dark {
+  background: transparent !important;
+  background-image: none !important;
+}
+
+/* Remove any gradient overlays on navigation */
+nav::before,
+nav::after,
+aside::before,
+aside::after,
+.sidebar::before,
+.sidebar::after {
+  display: none !important;
+}
+
+/* Main content area solid background */
+main,
+article,
+.content-wrapper,
+[role="main"] {
+  background-color: #f5f5f5 !important;
+}
+
+.dark main,
+.dark article,
+.dark .content-wrapper,
+.dark [role="main"] {
+  background-color: #1a1a1a !important;
+}
+
+/* Mermaid diagram theming - Light mode */
+.mermaid .actor {
+  fill: #F5F5F5 !important;
+  stroke: #0052BA !important;
+}
+
+.mermaid .actor-line {
+  stroke: #0073EB !important;
+}
+
+.mermaid .messageLine0,
+.mermaid .messageLine1 {
+  stroke: #0073EB !important;
+}
+
+.mermaid .arrowheadPath {
+  fill: #0073EB !important;
+  stroke: #0073EB !important;
+}
+
+.mermaid marker path {
+  fill: #0073EB !important;
+  stroke: #0073EB !important;
+}
+
+.mermaid .messageText {
+  fill: #1a1a1a !important;
+  stroke: none !important;
+}
+
+.mermaid .labelBox {
+  fill: #F5F5F5 !important;
+  stroke: #0052BA !important;
+}
+
+.mermaid .labelText {
+  fill: #1a1a1a !important;
+}
+
+.mermaid .loopText {
+  fill: #1a1a1a !important;
+}
+
+.mermaid .loopLine {
+  stroke: #0052BA !important;
+}
+
+.mermaid .note {
+  fill: #F5F5F5 !important;
+  stroke: #0052BA !important;
+}
+
+.mermaid .noteText {
+  fill: #1a1a1a !important;
+}
+
+.mermaid rect.activation0,
+.mermaid rect.activation1,
+.mermaid rect.activation2 {
+  fill: #F5F5F5 !important;
+  stroke: #0052BA !important;
+}
+
+/* Mermaid diagram theming - Dark mode */
+.dark .mermaid .actor {
+  fill: #262626 !important;
+  stroke: #5665D1 !important;
+}
+
+.dark .mermaid .actor-line {
+  stroke: #8A94FF !important;
+}
+
+.dark .mermaid .messageLine0,
+.dark .mermaid .messageLine1 {
+  stroke: #8A94FF !important;
+}
+
+.dark .mermaid .arrowheadPath {
+  fill: #8A94FF !important;
+  stroke: #8A94FF !important;
+}
+
+.dark .mermaid marker path {
+  fill: #8A94FF !important;
+  stroke: #8A94FF !important;
+}
+
+.dark .mermaid .messageText {
+  fill: #E8E8E8 !important;
+}
+
+.dark .mermaid .labelBox {
+  fill: #262626 !important;
+  stroke: #5665D1 !important;
+}
+
+.dark .mermaid .labelText {
+  fill: #E8E8E8 !important;
+}
+
+.dark .mermaid .loopText {
+  fill: #E8E8E8 !important;
+}
+
+.dark .mermaid .loopLine {
+  stroke: #5665D1 !important;
+}
+
+.dark .mermaid .note {
+  fill: #262626 !important;
+  stroke: #5665D1 !important;
+}
+
+.dark .mermaid .noteText {
+  fill: #E8E8E8 !important;
+}
+
+.dark .mermaid rect.activation0,
+.dark .mermaid rect.activation1,
+.dark .mermaid rect.activation2 {
+  fill: #1D1D1D !important;
+  stroke: #5665D1 !important;
+}

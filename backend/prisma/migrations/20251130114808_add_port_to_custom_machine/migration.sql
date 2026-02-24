@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "CustomMachine" ADD COLUMN     "port" INTEGER NOT NULL DEFAULT 11891;

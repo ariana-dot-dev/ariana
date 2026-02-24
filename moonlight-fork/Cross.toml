@@ -1,0 +1,5 @@
+[build]
+dockerfile = "./Cross/Dockerfile"
+
+[target.x86_64-pc-windows-gnu]
+dockerfile = "./Cross/Dockerfile.x86_64-pc-windows-gnu"

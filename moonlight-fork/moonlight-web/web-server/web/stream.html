@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en" class="stream">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stream</title>
+    <link rel="icon" href="resources/moonlight.svg" sizes="any" type="image/svg+xml">
+
+    <link rel="stylesheet" href="styles/standard.css" id="style">
+    <script type="module" src="styles/index.js"></script>
+
+    <script type="module" src="stream.js" defer></script>
+</head>
+
+<body class="stream">
+    <!-- Modal -->
+    <div id="modal-overlay" class="modal-background modal-disabled">
+        <!-- Modal Content -->
+        <div id="modal-parent" class="modal-content">
+        </div>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="sidebar-overlay prevent-start-transition" id="sidebar-root">
+        <div class="sidebar-background prevent-start-transition">
+            <button id="sidebar-button" class="sidebar-button"><img src="resources/arrow_left.svg"
+                    class="sidebar-button-image prevent-start-transition" /></button>
+            <div id="sidebar-parent" class="sidebar-content">
+            </div>
+        </div>
+    </div>
+
+    <!-- Errors -->
+    <div id="error-list">
+    </div>
+
+    <!-- A dummy element for capturing inputs -->
+    <div id="input" tabindex="0"></div>
+
+    <!-- Loading indicator (behind the fixed-position video) -->
+    <div id="stream-loading" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#888;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:0.95rem;">
+        Connecting to desktop stream...
+    </div>
+
+    <!-- Main App View -->
+    <div id="root">
+    </div>
+
+<!-- Keyboard Fix for Embedded Iframe Mode -->
+<script>
+(function() {
+    'use strict';
+    console.log('[KEYBOARD FIX] Initializing keyboard capture v5');
+
+    // Hide modal overlay on load
+    const hideModal = () => {
+        const modal = document.getElementById('modal-overlay');
+        if (modal) {
+            modal.style.display = 'none';
+            modal.classList.add('modal-disabled');
+        }
+    };
+    hideModal();
+    setTimeout(hideModal, 500);
+    setTimeout(hideModal, 1500);
+
+    // Detect if running in iframe (embedded mode)
+    const isEmbedded = window.parent !== window;
+    console.log('[KEYBOARD FIX] Embedded mode:', isEmbedded);
+
+    if (isEmbedded) {
+        // EMBEDDED MODE: Listen for postMessage from parent
+        window.addEventListener('message', function(event) {
+            if (event.data && event.data.type === 'keydown') {
+                console.log('[KEYBOARD FIX] Received keydown via postMessage:', event.data.key);
+                const inputElement = document.getElementById('input');
+                if (inputElement) {
+                    const syntheticEvent = new KeyboardEvent('keydown', {
+                        key: event.data.key,
+                        code: event.data.code,
+                        keyCode: event.data.keyCode,
+                        which: event.data.which,
+                        bubbles: true,
+                        cancelable: true
+                    });
+                    inputElement.dispatchEvent(syntheticEvent);
+                }
+            } else if (event.data && event.data.type === 'keyup') {
+                const inputElement = document.getElementById('input');
+                if (inputElement) {
+                    const syntheticEvent = new KeyboardEvent('keyup', {
+                        key: event.data.key,
+                        code: event.data.code,
+                        keyCode: event.data.keyCode,
+                        which: event.data.which,
+                        bubbles: true,
+                        cancelable: true
+                    });
+                    inputElement.dispatchEvent(syntheticEvent);
+                }
+            }
+        });
+        console.log('[KEYBOARD FIX] Listening for postMessage keyboard events');
+    } else {
+        // DIRECT MODE: Create textarea for keyboard capture
+        console.log('[KEYBOARD FIX] Direct mode - creating textarea capture');
+        const textarea = document.createElement('textarea');
+        textarea.id = 'keyboard-capture';
+        textarea.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;opacity:0.01;z-index:9999;pointer-events:none;';
+        document.body.appendChild(textarea);
+
+        document.addEventListener('click', function() {
+            textarea.focus();
+        });
+
+        textarea.addEventListener('keydown', function(e) {
+            console.log('[KEYBOARD FIX] Textarea keydown:', e.key);
+            const inputElement = document.getElementById('input');
+            if (inputElement) {
+                const syntheticEvent = new KeyboardEvent('keydown', {
+                    key: e.key,
+                    code: e.code,
+                    keyCode: e.keyCode,
+                    which: e.which,
+                    bubbles: true,
+                    cancelable: true
+                });
+                inputElement.dispatchEvent(syntheticEvent);
+            }
+            e.preventDefault();
+        });
+
+        textarea.addEventListener('keyup', function(e) {
+            const inputElement = document.getElementById('input');
+            if (inputElement) {
+                const syntheticEvent = new KeyboardEvent('keyup', {
+                    key: e.key,
+                    code: e.code,
+                    keyCode: e.keyCode,
+                    which: e.which,
+                    bubbles: true,
+                    cancelable: true
+                });
+                inputElement.dispatchEvent(syntheticEvent);
+            }
+            e.preventDefault();
+        });
+
+        setTimeout(() => textarea.focus(), 1000);
+    }
+
+    // Heartbeat to keep connection alive
+    setInterval(function() {
+        fetch(window.location.origin + '/api/authenticate', {
+            method: 'GET',
+            credentials: 'include'
+        }).catch(() => {});
+    }, 30000);
+})();
+</script>
+</body>
+
+</html>

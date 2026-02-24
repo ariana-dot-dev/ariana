@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/png" href="icon.png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans+Code:ital,wght@0,300..800;1,300..800&family=Work+Sans:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+  <title>Ariana</title>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module">
+    // Only load Eruda on staging environment
+    // Use import.meta.env to check if we're on staging
+    const apiUrl = import.meta.env.VITE_API_URL || '';
+    const isStaging = apiUrl.includes('staging');
+
+    if (isStaging) {
+      // Dynamically load Eruda script
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/eruda';
+      script.onload = function() {
+        try {
+          window.eruda.init({
+            tool: ['console', 'elements', 'network', 'resources', 'info', 'sources']
+          });
+          console.log('Eruda initialized successfully on staging');
+        } catch (e) {
+          console.error('Failed to initialize Eruda:', e);
+        }
+      };
+      document.head.appendChild(script);
+    } else {
+      console.log('Eruda disabled - not on staging environment');
+    }
+  </script>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+
+</html>

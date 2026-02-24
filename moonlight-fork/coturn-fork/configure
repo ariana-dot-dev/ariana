@@ -1,0 +1,1113 @@
+#!/bin/sh
+
+# Proprietary configure script of Coturn project
+
+cleanup() {
+	rm -rf ${TMPCPROGC}
+	rm -rf ${TMPCPROGB}
+	rm -rf ${TH_TMPCPROGC}
+	rm -rf ${TH_TMPCPROGB}
+	rm -rf ${GCM_TMPCPROGC}
+	rm -rf ${GCM_TMPCPROGB}
+	rm -rf ${D_TMPCPROGC}
+	rm -rf ${D_TMPCPROGB}
+	rm -rf ${TMPCADDRPROGO}
+}
+
+testlibraw() {
+    ${CC} ${TMPCPROGC} -o ${TMPCPROGB} ${OSCFLAGS} ${OSLIBS} -${1} 2>>/dev/null
+    ER=$?
+    if ! [ ${ER} -eq 0 ] ; then
+        ${ECHO_CMD} "Library option -${1} cannot be used"
+        return 0
+    else
+        OSLIBS="${OSLIBS} -${1}"
+        return 1
+    fi
+}
+
+# testpkg pkg1 pkg2 ...
+# If all libraries are found, sets PKG_CFLAGS/PKG_LIBS and returns success.
+# Otherwise, returns failure.
+testpkg() {
+    PKG_LIBS="$($PKGCONFIG --libs "$@" 2>/dev/null)"
+    if [ $? -ne 0 ] ; then
+        return 1
+    fi
+    PKG_CFLAGS="$($PKGCONFIG --cflags "$@")"
+}
+
+# testpkg_db pkg1 pkg2 ...
+# If all libraries are found, adds them to DBCFLAGS/DBLIBS and returns success.
+# Otherwise, returns failure.
+testpkg_db() {
+    testpkg "$@" || return $?
+    DBCFLAGS="${DBCFLAGS} ${PKG_CFLAGS}"
+    DBLIBS="${DBLIBS} ${PKG_LIBS}"
+}
+
+# support for older mysql version
+# if mysql_config is found in path adds librairies to DBCFLAGS/DBLIBS and returns success.
+# Otherwise, returns failure.
+test_mysql_config() {
+    which mysql_config &>/dev/null || return $?
+    DBCFLAGS="${DBCFLAGS} $(mysql_config --cflags)"
+    DBLIBS="${DBLIBS} $(mysql_config --libs)"
+}
+
+# testpkg_common pkg1 pkg2 ...
+# If all libraries are found, adds them to OSCFLAGS/OSLIBS and returns success.
+# Otherwise, returns failure.
+testpkg_common() {
+    testpkg "$@" || return $?
+    OSCFLAGS="${OSCFLAGS} ${PKG_CFLAGS}"
+    OSLIBS="${OSLIBS} ${PKG_LIBS}"
+}
+
+testlib() {
+    testlibraw l${1}
+}
+
+pthread_testlib() {
+    if [ -n "${PTHREAD_LIBS}" ] ; then
+        OSLIBS="${OSLIBS} ${PTHREAD_LIBS}"
+        return
+    fi
+
+    if [ "$(uname)" = "DragonFly" ] ; then
+        OSLIBS="${OSLIBS} -pthread"
+        TURN_NO_SCTP=1
+        return
+    fi
+
+    if [ -n "$(uname | grep -i bsd)" ] ; then
+        OSLIBS="${OSLIBS} -pthread"
+        return
+    fi
+
+    ${CC} ${TH_TMPCPROGC} -o ${TH_TMPCPROGB} ${OSCFLAGS} ${OSLIBS} 2>>/dev/null
+    ER=$?
+    if [ ${ER} -eq 0 ] ; then
+        return
+    fi
+
+    ${CC} ${TH_TMPCPROGC} -o ${TH_TMPCPROGB} ${OSCFLAGS} ${OSLIBS} -pthread 2>>/dev/null
+    ER=$?
+    if [ ${ER} -eq 0 ] ; then
+        OSLIBS="${OSLIBS} -pthread"
+        return
+    fi
+
+    ${CC} ${TH_TMPCPROGC} -o ${TH_TMPCPROGB} ${OSCFLAGS} ${OSLIBS} -lpthread 2>>/dev/null
+    ER=$?
+    if [ ${ER} -eq 0 ] ; then
+        OSLIBS="${OSLIBS} -lpthread"
+        return
+    fi
+
+    ${CC} ${TH_TMPCPROGC} -o ${TH_TMPCPROGB} ${OSCFLAGS} ${OSLIBS} 2>>/dev/null
+    ER=$?
+    if [ ${ER} -eq 0 ] ; then
+        return
+    fi
+
+    ${CC} ${TH_TMPCPROGC} -o ${TH_TMPCPROGB} ${OSCFLAGS} ${OSLIBS} -D_GNU_SOURCE 2>>/dev/null
+    ER=$?
+    if [ ${ER} -eq 0 ] ; then
+        ${ECHO_CMD} "Older GNU pthread library found"
+        OSCFLAGS="${OSCFLAGS} -D_GNU_SOURCE"
+        return
+    fi
+
+    ${ECHO_CMD} "Do not use pthreads"
+    return 1
+}
+
+pthread_testbarriers() {
+
+    ${ECHO_CMD} "pthread_barrier_t barrier;" >> ${TH_TMPCPROGC}
+    ${CC} ${TH_TMPCPROGC} -o ${TH_TMPCPROGB} ${OSCFLAGS} ${OSLIBS} 2>>/dev/null
+    ER=$?
+    if ! [ ${ER} -eq 0 ] ; then
+		${ECHO_CMD} "pthread barriers not found"
+		OSCFLAGS="${OSCFLAGS} -DTURN_NO_THREAD_BARRIERS"
+    fi
+}
+
+gcm_testlib() {
+
+    if [ -z "${TURN_NO_GCM}" ] ; then
+    	${CC} ${GCM_TMPCPROGC} -o ${GCM_TMPCPROGB} ${OSCFLAGS} ${OSLIBS} 2>>/dev/null
+    	ER=$?
+    	if [ ${ER} -eq 0 ] ; then
+    	    return 1
+    	else
+    	    return 0
+    	fi
+    else
+		return 0
+    fi
+}
+
+testdaemon() {
+
+	${CC} ${D_TMPCPROGC} -o ${D_TMPCPROGB} ${OSCFLAGS} ${OSLIBS} 2>>/dev/null
+	ER=$?
+	if [ ${ER} -eq 0 ] ; then
+	    OSCFLAGS="${OSCFLAGS} -DTURN_HAS_DAEMON"
+	fi
+}
+
+test_sin_len() {
+    TMPCADDRPROGC=src/client/ns_turn_ioaddr.c
+    ${CC} -c ${OSCFLAGS} -DTURN_HAS_SIN_LEN -Isrc ${TMPCADDRPROGC} -o ${TMPCADDRPROGO} 2>>/dev/null
+    ER=$?
+    if [ ${ER} -eq 0 ] ; then
+	OSCFLAGS="${OSCFLAGS} -DTURN_HAS_SIN_LEN"
+	${ECHO_CMD} "Sockets code is fine: sin_len field present"
+    else
+	${CC} -c ${OSCFLAGS} -Isrc ${TMPCADDRPROGC} -o ${TMPCADDRPROGO} 2>>/dev/null
+	ER=$?
+	if [ ${ER} -eq 0 ] ; then
+	    ${ECHO_CMD} "Sockets code is fine: no sin_len field present"
+	else
+	    ${ECHO_CMD} "WARNING: trial compilation failed: src/client/ns_turn_ioaddr.c"
+	fi
+    fi
+}
+
+#########################
+# Start
+#########################
+
+cleanup
+
+#########################
+# To be set:
+#########################
+
+if [ -z "${ECHO_CMD}" ] ; then
+	ECHO_CMD=echo
+fi
+
+if [ -z "${FIND_CMD}" ] ; then
+	FIND_CMD=find
+fi
+
+if [ -z "${PORTNAME}" ] ; then
+	PORTNAME=turnserver
+fi
+
+#########################
+
+# Installation directory options
+
+ac_prev=
+ac_dashdash=
+for ac_option
+do
+  # If the previous option needs an argument, assign it.
+  if test -n "$ac_prev"; then
+    eval $ac_prev=\$ac_option
+    ac_prev=
+    continue
+  fi
+
+  case $ac_option in
+  *=?*) ac_optarg=`expr "X$ac_option" : '[^=]*=\(.*\)'` ;;
+  *=)   ac_optarg= ;;
+  *)    ac_optarg=yes ;;
+  esac
+
+  # Accept the important Cygnus configure options, so we can diagnose typos.
+
+  case $ac_dashdash$ac_option in
+  --)
+    ac_dashdash=yes ;;
+
+  -bindir | --bindir | --bindi | --bind | --bin | --bi)
+    ac_prev=BINDIR ;;
+  -bindir=* | --bindir=* | --bindi=* | --bind=* | --bin=* | --bi=*)
+    BINDIR=$ac_optarg ;;
+
+  -localstatedir | --localstatedir | --localstatedi | --localstated | --localstate | --localstat)
+    ac_prev=LOCALSTATEDIR ;;
+  -localstatedir=* | --localstatedir=* | --localstatedi=* | --localstated=* | --localstate=* | --localstat=*)
+    LOCALSTATEDIR=$ac_optarg ;;
+
+  -turndbdir | --turndbdir | --turndbdi | --turndbd | --turndb | --turnd)
+    ac_prev=TURNDBDIR ;;
+  -turndbdir=* | --turndbdir=* | --turndbdi=* | --turndbd=* | --turndb=* | --turnd=*)
+    TURNDBDIR=$ac_optarg ;;
+
+  -datadir | --datadir | --datadi | --datad | -schemadir | --schemadir)
+    ac_prev=SCHEMADIR ;;
+  -datadir=* | --datadir=* | --datadi=* | --datad=* | -schemadir=* | --schemadir=*)
+    SCHEMADIR=$ac_optarg ;;
+
+  -docdir | --docdir | --docdi | --doc | --do | -docsdir | --docsdir | --docsdi | --docs)
+    ac_prev=DOCDIR ;;
+  -docdir=* | --docdir=* | --docdi=* | --doc=* | --do=* | -docsdir=* | --docsdir=* | --docsdi=* | --docs=*)
+    DOCSDIR=$ac_optarg ;;
+
+  -examplesdir | --examplesdir | -examples | --examples)
+    ac_prev=EXAMPLESDIR ;;
+  -examplesdir=* | --examplesdir=* | -examples=* | --examples=*)
+    EXAMPLESDIR=$ac_optarg ;;
+
+  -includedir | --includedir | --includedi | --included | --include \
+  | --includ | --inclu | --incl | --inc)
+    ac_prev=INCLUDEDIR ;;
+  -includedir=* | --includedir=* | --includedi=* | --included=* | --include=* \
+  | --includ=* | --inclu=* | --incl=* | --inc=*)
+    INCLUDEDIR=$ac_optarg ;;
+
+  -turnincludedir | --turnincludedir)
+    ac_prev=TURNINCLUDEDIR ;;
+  -turnincludedir=* | --turnincludedir=*)
+    TURNINCLUDEDIR=$ac_optarg ;;
+
+  -libdir | --libdir | --libdi | --libd)
+    ac_prev=LIBDIR ;;
+  -libdir=* | --libdir=* | --libdi=* | --libd=*)
+    LIBDIR=$ac_optarg ;;
+
+  -mandir | --mandir | --mandi | --mand | --man | --ma | --m | -manprefix | --manprefix)
+    ac_prev=MAXPREFIX ;;
+  -mandir=* | --mandir=* | --mandi=* | --mand=* | --man=* | --ma=* | --m=* | -manprefix=* | --manprefix=*)
+    MANPREFIX=$ac_optarg ;;
+
+  -prefix | --prefix | --prefi | --pref | --pre | --pr | --p)
+    ac_prev=PREFIX ;;
+  -prefix=* | --prefix=* | --prefi=* | --pref=* | --pre=* | --pr=* | --p=*)
+    PREFIX=$ac_optarg ;;
+
+  -sysconfdir | --sysconfdir | --sysconfdi | --sysconfd | --sysconf \
+  | --syscon | --sysco | --sysc | --sys | --sy | -confdir | --confdir)
+    ac_prev=CONFDIR ;;
+  -sysconfdir=* | --sysconfdir=* | --sysconfdi=* | --sysconfd=* | --sysconf=* \
+  | --syscon=* | --sysco=* | --sysc=* | --sys=* | --sy=* | -confdir=* | --confdir=*)
+    CONFDIR=$ac_optarg ;;
+
+  -disable-rpath | --disable-rpath)
+  	TURN_DISABLE_RPATH=1 ;;
+
+  esac
+
+done
+
+if test -n "$ac_prev"; then
+  ac_option=--`echo $ac_prev | sed 's/_/-/g'`
+  as_fn_error $? "missing argument to $ac_option"
+fi
+
+#############################################
+
+if [ -z "${PREFIX}" ] ; then
+
+	if [ -z "${prefix}" ] ; then
+
+		SYSTEM=`uname`
+
+		if [ "${SYSTEM}" = "NetBSD" ] ; then
+			# A little tough guy
+			PREFIX=/usr/pkg
+		elif [ "${SYSTEM}" = "SunOS" ] ; then
+			# A fat guy
+			PREFIX=/usr
+		else
+			# An ordinary person
+			PREFIX=/usr/local
+		fi
+	else
+		PREFIX=${prefix}
+	fi
+fi
+
+if [ -z "${BINDIR}" ] ; then
+    if [ -z "${bindir}" ] ; then
+		BINDIR=${PREFIX}/bin
+    else
+		BINDIR=${bindir}
+    fi
+fi
+
+if [ -z "${LOCALSTATEDIR}" ] ; then
+    if [ -z "${localstatedir}" ] ; then
+
+    	if [ "${PREFIX}" = "/usr" ] ; then
+			LOCALSTATEDIR=/var
+		else
+			LOCALSTATEDIR=${PREFIX}/var
+		fi
+
+    else
+		LOCALSTATEDIR=${localstatedir}
+    fi
+fi
+
+if [ -z "${CONFDIR}" ] ; then
+    if [ -z "${confdir}" ] ; then
+	CONFDIR=${PREFIX}/etc
+    else
+	CONFDIR=${confdir}
+    fi
+fi
+
+if [ -z "${MANPREFIX}" ] ; then
+    if [ -z "${manprefix}" ] ; then
+	MANPREFIX=${PREFIX}
+    else
+	MANPREFIX=${manprefix}
+    fi
+fi
+
+if [ -z "${EXAMPLESDIR}" ] ; then
+    if [ -z "${examplesdir}" ] ; then
+	EXAMPLESDIR=${PREFIX}/share/examples/${PORTNAME}
+    else
+	EXAMPLESDIR=${examplesdir}
+    fi
+fi
+
+if [ -z "${DOCSDIR}" ] ; then
+    if [ -z "${docsdir}" ] ; then
+	DOCSDIR=${PREFIX}/share/doc/${PORTNAME}
+    else
+	DOCSDIR=${docsdir}
+    fi
+fi
+
+if [ -z "${LIBDIR}" ] ; then
+    if [ -z "${libdir}" ] ; then
+	LIBDIR=${PREFIX}/lib
+    else
+	LIBDIR=${libdir}
+    fi
+fi
+
+if [ -z "${SCHEMADIR}" ] ; then
+    if [ -z "${schemadir}" ] ; then
+	SCHEMADIR=${PREFIX}/share/${PORTNAME}
+    else
+	SCHEMADIR=${schemadir}
+    fi
+fi
+
+if [ -z "${INCLUDEDIR}" ] ; then
+    if [ -z "${includedir}" ] ; then
+	INCLUDEDIR=${PREFIX}/include
+    else
+	INCLUDEDIR=${includedir}
+    fi
+fi
+
+if [ -z "${TURNINCLUDEDIR}" ] ; then
+    if [ -z "${turnincludedir}" ] ; then
+	TURNINCLUDEDIR=${INCLUDEDIR}/turn
+    else
+	TURNINCLUDEDIR=${turnincludedir}
+    fi
+fi
+
+###############################################
+
+if [ -z "${ARCHIVERCMD}" ] ; then
+	ARCHIVERCMD="ar -r"
+fi
+
+if [ -z "${MORECMD}" ]; then
+	MORECMD="cat"
+fi
+
+OSCFLAGS="${CFLAGS}"
+OSLIBS="${LDFLAGS}"
+
+SYSTEM=`uname`
+if [ "${SYSTEM}" = "NetBSD" ] ; then
+	OSCFLAGS="${OSCFLAGS} -I/usr/pkg/include"
+	OSLIBS="-L/usr/pkg/lib ${OSLIBS}"
+	if ! [ -z "${TURN_ACCEPT_RPATH}" ] ; then
+	    TURN_RPATH="${TURN_RPATH} -Wl,-rpath,/usr/pkg/lib"
+	fi
+fi
+
+# If acme_redirect does not work, send_data_from_ioa_socket_nbh() probably
+# does not work. Set LIBEV_OK=1 to use a workaround for it.
+if [ -z "${LIBEV_OK}" ]; then
+	LIBEV_OK=1
+	if [ "${SYSTEM}" = "Linux" ]; then
+		OS=$( lsb_release -si 2>/dev/null )
+		[ "${OS}" = "Ubuntu" ] && LIBEV_OK=0
+	fi
+fi
+[ "${LIBEV_OK}" = "1" ] && OSCFLAGS="${OSCFLAGS} -DLIBEV_OK"
+
+###########################
+# Install shell commands
+###########################
+
+type ginstall 2>>/dev/null
+ER=$?
+if [ ${ER} -eq 0 ] ; then
+	INSTALL_PROGRAM="ginstall"
+	INSTALL_MAN="ginstall"
+	INSTALL_SCRIPT="ginstall"
+	INSTALL_SHARED_LIB="ginstall"
+	INSTALL_STATIC_LIB="ginstall"
+	INSTALL_DATA="ginstall"
+	MKDIR="ginstall -d"
+else
+	type install 2>>/dev/null
+	ER=$?
+	if [ ${ER} -eq 0 ] ; then
+		INSTALL_PROGRAM="install -p"
+		INSTALL_MAN="install -p -m 0644"
+		INSTALL_SCRIPT="install -p"
+		INSTALL_SHARED_LIB="install -p"
+		INSTALL_STATIC_LIB="install -p"
+		INSTALL_DATA="install -p -m 0644"
+		MKDIR="install -d"
+	else
+		INSTALL_PROGRAM="cp -pf"
+		INSTALL_MAN="cp -pf"
+		INSTALL_SCRIPT="cp -pf"
+		INSTALL_SHARED_LIB="cp -pf"
+		INSTALL_STATIC_LIB="cp -pf"
+		INSTALL_DATA="cp -pf"
+		MKDIR="mkdir -p"
+	fi
+fi
+
+type pkill 2>>/dev/null
+ER=$?
+if [ ${ER} -eq 0 ] ; then
+	PKILL_PROGRAM="pkill"
+else
+	PKILL_PROGRAM="${ECHO_CMD}"
+fi
+
+INSTALL_DIR="cp -rpf"
+MKBUILDDIR="mkdir -p"
+RMCMD="rm -rf"
+
+type sqlite3 2>>/dev/null
+ER=$?
+if [ ${ER} -eq 0 ] ; then
+    SQLITE_CMD="sqlite3"
+else
+    type sqlite 2>>/dev/null
+    ER=$?
+    if [ ${ER} -eq 0 ] ; then
+		SQLITE_CMD="sqlite"
+    else
+		SQLITE_CMD=${ECHO_CMD}
+    fi
+fi
+
+#############################
+# Adjustments for Solaris
+#############################
+
+SYSTEM=`uname`
+
+if [ "${SYSTEM}" = "SunOS" ] ; then
+# Solaris ? is this you ?!
+    OSCFLAGS="${OSCFLAGS} -D__EXTENSIONS__ -D_XOPEN_SOURCE=500 -DTURN_NO_GETDOMAINNAME"
+    OSLIBS="${OSLIBS} -lnsl"
+    TURN_NO_SCTP=1
+fi
+
+#########################
+# Temporary DIR location:
+#########################
+
+TMPDIR="."
+
+if [ -d /var/tmp ] ; then
+  TMPDIR="/var/tmp"
+elif [ -d /tmp ] ; then
+  TMPDIR=/tmp
+fi
+
+${ECHO_CMD} Use TMP dir ${TMPDIR}
+
+#########################
+# Basic C test programs
+#########################
+
+TMPCADDRPROGO=${TMPDIR}/__test__ccomp_addr_$$.o
+
+TMPCPROG=__test__ccomp__$$
+TMPCPROGC=${TMPDIR}/${TMPCPROG}.c
+TMPCPROGB=${TMPDIR}/${TMPCPROG}
+
+cat > ${TMPCPROGC} <<!
+#include <stdlib.h>
+int main(int argc, char** argv) {
+    return (int)(argv[argc][0]);
+}
+!
+
+TH_TMPCPROG=__test__ccomp__pthread__$$
+TH_TMPCPROGC=${TMPDIR}/${TH_TMPCPROG}.c
+TH_TMPCPROGB=${TMPDIR}/${TH_TMPCPROG}
+
+cat > ${TH_TMPCPROGC} <<!
+#include <stdlib.h>
+#include <pthread.h>
+int main(int argc, char** argv) {
+    pthread_mutexattr_settype(0,PTHREAD_MUTEX_RECURSIVE);
+    return (int)pthread_create(0,0,0,0)+(int)(argv[argc][0]);
+}
+
+!
+
+GCM_TMPCPROG=__test__ccomp__gcm__$$
+GCM_TMPCPROGC=${TMPDIR}/${GCM_TMPCPROG}.c
+GCM_TMPCPROGB=${TMPDIR}/${GCM_TMPCPROG}
+
+cat > ${GCM_TMPCPROGC} <<!
+#include <stdlib.h>
+#include <openssl/ssl.h>
+#include <openssl/evp.h>
+int main(int argc, char** argv) {
+    return (int)EVP_CIPH_GCM_MODE;
+}
+!
+
+D_TMPCPROG=__test__ccomp__daemon__$$
+D_TMPCPROGC=${TMPDIR}/${D_TMPCPROG}.c
+D_TMPCPROGB=${TMPDIR}/${D_TMPCPROG}
+
+cat > ${D_TMPCPROGC} <<!
+#include <stdlib.h>
+#include <unistd.h>
+int main(int argc, char** argv) {
+    return (int)daemon(0,0)+(int)(argv[argc][0]);
+}
+!
+
+##########################
+# What is our compiler ?
+##########################
+
+if [ -z "${CC}" ] ; then
+    for CC in cc gcc clang; do
+        ${CC} ${TMPCPROGC} ${OSCFLAGS} -o ${TMPCPROGB} 2>>/dev/null
+        ER=$?
+        if [ ${ER} -eq 0 ] ; then
+            break
+        fi
+        CC=
+    done
+
+    if [ -z "$CC" ] ; then
+        ${ECHO_CMD} "ERROR: failed to a find working C compiler"
+        cleanup
+        exit 1
+    fi
+else
+    CC_OUTPUT=$(${CC} ${TMPCPROGC} ${OSCFLAGS} -o ${TMPCPROGB})
+    ER=$?
+    if ! [ ${ER} -eq 0 ] ; then
+        ${ECHO_CMD} "ERROR: cannot use compiler ${CC} properly."
+        ${ECHO_CMD} "${CC_OUTPUT}"
+        cleanup
+        exit 1
+    fi
+fi
+
+${ECHO_CMD} "Compiler: ${CC}"
+
+if [ -z "${TURN_ACCEPT_RPATH}" ] ; then
+    ${CC} ${TMPCPROGC} ${OSCFLAGS} -o ${TMPCPROGB} -Wl,-rpath,/usr/lib 2>>/dev/null
+    ER=$?
+    if [ ${ER} -eq 0 ] ; then
+	TURN_ACCEPT_RPATH=1
+    fi
+fi
+
+##########################
+# Which pkg-config?
+##########################
+
+if [ -z "$PKGCONFIG" ] ; then
+    for PKGCONFIG in pkgconf pkg-config ; do
+        if type "$PKGCONFIG" 2>/dev/null ; then
+            break
+        fi
+        PKGCONFIG=
+    done
+
+    if [ -z "$PKGCONFIG" ] ; then
+        ${ECHO_CMD} "ERROR: pkg-config not found"
+        cleanup
+        exit 1
+    fi
+else
+    if ! type "$PKGCONFIG" 2>/dev/null ; then
+        ${ECHO_CMD} "ERROR: cannot use $PKGCONFIG"
+        cleanup
+        exit 1
+    fi
+fi
+
+${ECHO_CMD} "pkg-config: $PKGCONFIG"
+
+###########################
+# Check if we can use GNU
+# or Clang compiler flags
+###########################
+
+GNUOSCFLAGS="-g ${GNUOSCFLAGS}"
+GNUOSCFLAGS="${GNUOSCFLAGS} -Wall -Wno-deprecated-declarations -Wextra -Wformat-security -Wnested-externs -Wstrict-prototypes  -Wmissing-prototypes -Wpointer-arith -Wcast-qual"
+GNUOSCFLAGS="${GNUOSCFLAGS}"
+
+${CC} -Werror ${GNUOSCFLAGS} ${TMPCPROGC} ${OSCFLAGS} -o ${TMPCPROGB} 2>>/dev/null
+ER=$?
+if ! [ ${ER} -eq 0 ] ; then
+    ${ECHO_CMD} "Hm..."
+    ${CC} -Wall ${TMPCPROGC} ${OSCFLAGS} -o ${TMPCPROGB} 2>>/dev/null
+    ER=$?
+    if ! [ ${ER} -eq 0 ] ; then
+		${ECHO_CMD} "Not an ordinary GNU or Clang compiler"
+    else
+		${ECHO_CMD} "g++ or something..."
+		GNUOSCFLAGS="-g -Wall -Wno-deprecated-declarations -Wextra -Wformat-security -Wpointer-arith -Wcast-qual"
+		${CC} -Werror ${GNUOSCFLAGS} ${TMPCPROGC} ${OSCFLAGS} -o ${TMPCPROGB} 2>>/dev/null
+		ER=$?
+		if ! [ ${ER} -eq 0 ] ; then
+	    	${ECHO_CMD} "Not an ordinary g++ compiler"
+	    	GNUOSCFLAGS="-x c++ -g -Wall -Wno-deprecated-declarations -Wextra -Wformat-security -Wpointer-arith -Wcast-qual"
+	    	${CC} -Werror ${GNUOSCFLAGS} ${TMPCPROGC} ${OSCFLAGS} -o ${TMPCPROGB} 2>>/dev/null
+	    	ER=$?
+	    	if ! [ ${ER} -eq 0 ] ; then
+	    		${ECHO_CMD} "Not an ordinary c++ compiler"
+	    	else
+				${ECHO_CMD} "Clang++ compiler ?"
+	    		OSCFLAGS="${GNUOSCFLAGS} ${OSCFLAGS}"
+	    	fi
+		else
+	    	OSCFLAGS="${GNUOSCFLAGS} ${OSCFLAGS}"
+		fi
+    fi
+else
+    OSCFLAGS="${GNUOSCFLAGS} ${OSCFLAGS}"
+fi
+
+###########################
+# Test some general-purpose
+# libraries
+###########################
+
+testlib socket
+testlib rt
+testlib wldap32
+ER=$?
+if ! [ ${ER} -eq 0 ] ; then
+    echo "CYGWIN ?"
+fi
+testlib wldap64
+testlib nsl
+testlib resolv
+
+###########################
+# Test sockets compilation
+###########################
+
+test_sin_len
+
+###########################
+# Can we use multi-threading ?
+###########################
+
+pthread_testlib
+ER=$?
+if [ ${ER} -ne 0 ] ; then
+    ${ECHO_CMD} "ERROR: Cannot find pthread library functions."
+    exit 1
+fi
+
+if [ -z ${TURN_NO_THREAD_BARRIERS} ] ; then
+	pthread_testbarriers
+else
+	TURN_NO_THREAD_BARRIERS="-DTURN_NO_THREAD_BARRIERS"
+fi
+
+if [ -z ${TURN_IP_RECVERR} ] ; then
+	${ECHO_CMD} "Ignore IP_RECVERR"
+else
+	${ECHO_CMD} "Use IP_RECVERR"
+	TURN_IP_RECVERR="-DTURN_IP_RECVERR"
+	OSCFLAGS="${OSCFLAGS} ${TURN_IP_RECVERR}"
+fi
+
+###########################
+# Can we use daemon ?
+###########################
+
+testdaemon
+
+###########################
+# Test OpenSSL installation
+###########################
+
+if [ -n "${SSL_CFLAGS}" ] && [ -n "${SSL_LIBS}" ]; then
+    ${CC} ${TMPCPROGC} ${SSL_CFLAGS} -o ${TMPCPROGB} ${OSCFLAGS} ${OSLIBS} ${SSL_LIBS} 2>>/dev/null
+    ER=$?
+    if ! [ ${ER} -eq 0 ] ; then
+        ${ECHO_CMD} "Private SSL Library option cannot be used"
+        exit 1
+    else
+        OSCFLAGS="${OSCFLAGS} ${SSL_CFLAGS}"
+        OSLIBS="${OSLIBS} ${SSL_LIBS}"
+    fi
+else
+    if testpkg_common libcrypto; then
+        ${ECHO_CMD} "OpenSSL Crypto lib found."
+    else
+	    testlib crypto
+	    ER=$?
+        if ! [ ${ER} -eq 0 ] ; then
+            ${ECHO_CMD} "OpenSSL Crypto lib found."
+        else
+            ${ECHO_CMD} "ERROR: OpenSSL Crypto development libraries are not installed properly in required location."
+            ${ECHO_CMD} "Abort."
+            cleanup
+            exit 1
+        fi
+    fi
+
+    if testpkg_common libssl; then
+        ${ECHO_CMD} "OpenSSL lib found."
+    else
+       testlib ssl
+        ER=$?
+        if ! [ ${ER} -eq 0 ] ; then
+            ${ECHO_CMD} "OpenSSL lib found."
+        else
+            ${ECHO_CMD} "ERROR: OpenSSL development libraries are not installed properly in required location."
+            ${ECHO_CMD} "Abort."
+            cleanup
+            exit 1
+        fi
+    fi
+fi
+###########################
+# Can we use GCM cipher ?
+###########################
+
+if [ -z ${TURN_NO_GCM} ] ; then
+
+gcm_testlib
+ER=$?
+if [ ${ER} -eq 0 ] ; then
+	${ECHO_CMD} "WARNING: Cannot find GCM support."
+	${ECHO_CMD} "Turning GCM off."
+	TURN_NO_GCM="-DTURN_NO_GCM"
+fi
+
+else
+	TURN_NO_GCM="-DTURN_NO_GCM"
+fi
+
+###########################
+# Test Libevent2 setup
+###########################
+if [ -n "${EVENT_CFLAGS}" ] && [ -n "${EVENT_LIBS}" ]; then
+    ${CC} ${TMPCPROGC} ${EVENT_CFLAGS} -o ${TMPCPROGB} ${OSCFLAGS} ${OSLIBS} ${EVENT_LIBS} 2>>/dev/null
+    ER=$?
+    if ! [ ${ER} -eq 0 ] ; then
+        ${ECHO_CMD} "Private Event Library option cannot be used"
+        exit 1
+    else
+        OSCFLAGS="${OSCFLAGS} ${EVENT_CFLAGS}"
+        OSLIBS="${OSLIBS} ${EVENT_LIBS}"
+    fi
+else
+    if testpkg_common libevent_core libevent_extra libevent_openssl libevent_pthreads || testpkg_common libevent libevent_openssl libevent_pthreads; then
+        ${ECHO_CMD} "Libevent2 runtime found."
+    else
+        ${ECHO_CMD} "ERROR: Libevent2 development libraries are not installed properly in required location."
+        ${ECHO_CMD} "ERROR: may be you have just too old libevent tool - then you have to upgrade it."
+        ${ECHO_CMD} "See the docs/Build.md file."
+        ${ECHO_CMD} "Abort."
+        cleanup
+        exit 1
+    fi
+fi
+
+###########################
+# Test Prometheus
+###########################
+
+if [ -z "${TURN_NO_PROMETHEUS}" ] ; then
+
+    testlib prom
+    ER=$?
+    if ! [ ${ER} -eq 0 ] ; then
+        ${ECHO_CMD} "Prometheus lib found."
+        testlib microhttpd
+        ER=$?
+        if ! [ ${ER} -eq 0 ] ; then
+            ${ECHO_CMD} "Microhttpd lib found."
+            # Adjustments for Debian
+            # See: https://github.com/coturn/coturn/pull/754#issuecomment-824693226
+            if [ -f "/etc/debian_version" ] ; then
+                OSLIBS="${OSLIBS} -latomic"
+            fi
+        else
+            ${ECHO_CMD}
+            ${ECHO_CMD} "Warning: microhttpd development libraries are not installed properly in required location."
+            ${ECHO_CMD} "Prometheus support will be disabled."
+            ${ECHO_CMD} "See the docs/Prometheus.md file."
+            ${ECHO_CMD}
+            OSCFLAGS="${OSCFLAGS} -DTURN_NO_PROMETHEUS"
+        fi
+    else
+        ${ECHO_CMD}
+        ${ECHO_CMD} "Warning: Libprom development libraries are not installed properly in required location."
+        ${ECHO_CMD} "Prometheus support will be disabled."
+        ${ECHO_CMD} "See the docs/Prometheus.md file."
+        ${ECHO_CMD}
+        OSCFLAGS="${OSCFLAGS} -DTURN_NO_PROMETHEUS"
+    fi
+
+else
+    OSCFLAGS="${OSCFLAGS} -DTURN_NO_PROMETHEUS"
+fi
+
+###########################
+# Test libsystemd
+###########################
+
+if [ -z "${TURN_NO_SYSTEMD}" ] ; then
+    if testpkg_common libsystemd; then
+        ${ECHO_CMD} "Systemd library found."
+    else
+        ${ECHO_CMD} "Systemd library not found. Building without systemd support."
+        TURN_NO_SYSTEMD="-DTURN_NO_SYSTEMD"
+    fi
+else
+    TURN_NO_SYSTEMD="-DTURN_NO_SYSTEMD"
+fi
+
+###########################
+# Test SQLite3 setup
+###########################
+
+if [ -z "${TURN_NO_SQLITE}" ] ; then
+    if testpkg_db sqlite3; then
+        ${ECHO_CMD} "SQLite3 library found."
+    else
+        ${ECHO_CMD} "SQLite3 development library not found. Building without SQLite3 support."
+        TURN_NO_SQLITE="-DTURN_NO_SQLITE"
+    fi
+else
+    TURN_NO_SQLITE="-DTURN_NO_SQLITE"
+    SQLITE_CMD=${ECHO_CMD}
+fi
+
+if [ -z "${TURNDBDIR}" ] ; then
+	TURNDBDIR=${LOCALSTATEDIR}/db
+fi
+
+###########################
+# Test PostgreSQL
+###########################
+
+if [ -z "${TURN_NO_PQ}" ] ; then
+    if testpkg_db libpq; then
+        ${ECHO_CMD} "PostgreSQL found."
+    else
+        ${ECHO_CMD} "PostgreSQL not found. Building without PostgreSQL support."
+        TURN_NO_PQ="-DTURN_NO_PQ"
+    fi
+else
+    TURN_NO_PQ="-DTURN_NO_PQ"
+fi
+
+###########################
+# Test MySQL
+###########################
+
+if [ -z "${TURN_NO_MYSQL}" ] ; then
+    if testpkg_db libmariadb || testpkg_db mariadb || testpkg_db mysqlclient || test_mysql_config; then
+        ${ECHO_CMD} "MySQL found."
+    else
+        ${ECHO_CMD} "MySQL not found. Building without MySQL support."
+        TURN_NO_MYSQL="-DTURN_NO_MYSQL"
+    fi
+else
+    TURN_NO_MYSQL="-DTURN_NO_MYSQL"
+fi
+
+###########################
+# Test MongoDB
+###########################
+
+if [ -z "${TURN_NO_MONGO}" ] ; then
+    if testpkg_db libmongoc-1.0; then
+        ${ECHO_CMD} "MongoDB found."
+    else
+        ${ECHO_CMD} "MongoDB not found. Building without MongoDB support."
+        TURN_NO_MONGO="-DTURN_NO_MONGO"
+    fi
+else
+    TURN_NO_MONGO="-DTURN_NO_MONGO"
+fi
+
+###########################
+# Test Redis
+###########################
+
+if [ -z "${TURN_NO_HIREDIS}" ] ; then
+    if testpkg_db hiredis; then
+        ${ECHO_CMD} "Hiredis found."
+    else
+        ${ECHO_CMD} "Hiredis not found. Building without hiredis support."
+        TURN_NO_HIREDIS="-DTURN_NO_HIREDIS"
+    fi
+else
+    TURN_NO_HIREDIS="-DTURN_NO_HIREDIS"
+fi
+
+###############################
+# LDCONFIG
+###############################
+
+if [ -z "${LDCONFIG}" ] ; then
+	ISBSD=`uname | grep -i bsd`
+	if [ -z "${ISBSD}" ] ; then
+		ISLINUX=`uname | grep -i linux`
+		if [ -z "${ISLINUX}" ] ; then
+			SYSTEM=`uname`
+			if [ "${SYSTEM}" = "SunOS" ] ; then
+				LDCONFIG="crle -u -l"
+			else
+				LDCONFIG=${ECHO_CMD}
+			fi
+		else
+			LDCONFIG="ldconfig -n"
+		fi
+	else
+		LDCONFIG="ldconfig -m"
+	fi
+fi
+
+###############################
+# SCTP
+###############################
+
+if [ -z "${TURN_NO_SCTP}" ] ; then
+    if [ -z "${TURN_SCTP_INCLUDE}" ] ; then
+		if [ -f /usr/include/netinet/sctp.h ] ; then
+	    	TURN_SCTP_INCLUDE="-DTURN_SCTP_INCLUDE=\"</usr/include/netinet/sctp.h>\""
+		else
+	    	TURN_NO_SCTP="-DTURN_NO_SCTP"
+		fi
+    else
+		TURN_SCTP_INCLUDE="-DTURN_SCTP_INCLUDE=\"\\\"${TURN_SCTP_INCLUDE}\\\"\""
+    fi
+else
+    TURN_NO_SCTP="-DTURN_NO_SCTP"
+fi
+
+###############################
+# TLS
+###############################
+
+if [ -n "${TURN_NO_TLS}" ]; then
+    TURN_NO_TLS="-DTURN_NO_TLS"
+fi
+
+###############################
+# OAUTH
+###############################
+
+# Uncomment to disable OAuth support
+#TURN_NO_OAUTH="-DTURN_NO_OAUTH"
+
+###############################
+# So, what we have now:
+###############################
+
+OSCFLAGS="${OSCFLAGS} ${TURN_NO_SCTP} ${TURN_SCTP_INCLUDE} ${TURN_NO_THREAD_BARRIERS} ${TURN_NO_DTLS} ${TURN_NO_GCM} ${TURN_NO_TLS} -DINSTALL_PREFIX=${PREFIX} -DTURNDB=${TURNDBDIR}/turndb ${TURN_NO_OAUTH}"
+
+if ! [ -z "${TURN_ACCEPT_RPATH}" ] ; then
+  if [ -z "${TURN_DISABLE_RPATH}" ] ; then
+    TURN_RPATH="${TURN_RPATH} -Wl,-rpath,/usr/local/lib"
+    OSLIBS="${OSLIBS} ${TURN_RPATH}"
+  fi
+fi
+
+${ECHO_CMD} PREFIX="${PREFIX}" LOCALSTATEDIR="${LOCALSTATEDIR}" OSLIBS="${OSLIBS}" DBLIBS="${DBLIBS}" OSCFLAGS="${OSCFLAGS}" DBCFLAGS="${DBCFLAGS}" $@
+
+###############################
+# Make make:
+###############################
+
+${ECHO_CMD} "#################################" > Makefile
+${ECHO_CMD} "# Generated by configure script #" >> Makefile
+${ECHO_CMD} "#################################" >> Makefile
+${ECHO_CMD} "ECHO_CMD = ${ECHO_CMD}" >> Makefile
+${ECHO_CMD} "CC = ${CC}" >> Makefile
+${ECHO_CMD} "LDFLAGS += ${OSLIBS}" >> Makefile
+${ECHO_CMD} "DBLIBS += ${DBLIBS}" >> Makefile
+${ECHO_CMD} "CFLAGS += ${OSCFLAGS}" >> Makefile
+${ECHO_CMD} "CPPFLAGS = ${CPPFLAGS}" >> Makefile
+${ECHO_CMD} "DBCFLAGS += ${DBCFLAGS} ${TURN_NO_PQ} ${TURN_NO_MYSQL} ${TURN_NO_SQLITE} ${TURN_NO_MONGO} ${TURN_NO_HIREDIS} ${TURN_NO_SYSTEMD}" >> Makefile
+${ECHO_CMD} "#" >> Makefile
+${ECHO_CMD} "PORTNAME = ${PORTNAME}" >> Makefile
+${ECHO_CMD} "PREFIX = ${PREFIX}" >> Makefile
+${ECHO_CMD} "prefix = ${PREFIX}" >> Makefile
+${ECHO_CMD} "BINDIR = ${BINDIR}" >> Makefile
+${ECHO_CMD} "bindir = ${BINDIR}" >> Makefile
+${ECHO_CMD} "LOCALSTATEDIR = ${LOCALSTATEDIR}" >> Makefile
+${ECHO_CMD} "localstatedir = ${LOCALSTATEDIR}" >> Makefile
+${ECHO_CMD} "TURNDBDIR = ${TURNDBDIR}" >> Makefile
+${ECHO_CMD} "turndbdir = ${TURNDBDIR}" >> Makefile
+${ECHO_CMD} "CONFDIR = ${CONFDIR}" >> Makefile
+${ECHO_CMD} "confdir = ${CONFDIR}" >> Makefile
+${ECHO_CMD} "MANPREFIX = ${MANPREFIX}" >> Makefile
+${ECHO_CMD} "manprefix = ${MANPREFIX}" >> Makefile
+${ECHO_CMD} "EXAMPLESDIR = ${EXAMPLESDIR}" >> Makefile
+${ECHO_CMD} "examplesdir = ${EXAMPLESDIR}" >> Makefile
+${ECHO_CMD} "DOCSDIR = ${DOCSDIR}" >> Makefile
+${ECHO_CMD} "docsdir = ${DOCSDIR}" >> Makefile
+${ECHO_CMD} "LIBDIR = ${LIBDIR}" >> Makefile
+${ECHO_CMD} "libdir = ${LIBDIR}" >> Makefile
+${ECHO_CMD} "SCHEMADIR = ${SCHEMADIR}" >> Makefile
+${ECHO_CMD} "schemadir = ${SCHEMADIR}" >> Makefile
+${ECHO_CMD} "INCLUDEDIR = ${INCLUDEDIR}" >> Makefile
+${ECHO_CMD} "includedir = ${INCLUDEDIR}" >> Makefile
+${ECHO_CMD} "TURNINCLUDEDIR = ${TURNINCLUDEDIR}" >> Makefile
+${ECHO_CMD} "turnincludedir = ${TURNINCLUDEDIR}" >> Makefile
+${ECHO_CMD} "#" >> Makefile
+${ECHO_CMD} "ARCHIVERCMD = ${ARCHIVERCMD}" >> Makefile
+${ECHO_CMD} "MKDIR = ${MKDIR}" >> Makefile
+${ECHO_CMD} "SQLITE_CMD = ${SQLITE_CMD}" >> Makefile
+${ECHO_CMD} "INSTALL_PROGRAM = ${INSTALL_PROGRAM}" >> Makefile
+${ECHO_CMD} "PKILL_PROGRAM = ${PKILL_PROGRAM}" >> Makefile
+${ECHO_CMD} "INSTALL_MAN = ${INSTALL_MAN}" >> Makefile
+${ECHO_CMD} "INSTALL_SCRIPT = ${INSTALL_SCRIPT}" >> Makefile
+${ECHO_CMD} "INSTALL_SHARED_LIB = ${INSTALL_SHARED_LIB}" >> Makefile
+${ECHO_CMD} "INSTALL_STATIC_LIB = ${INSTALL_STATIC_LIB}" >> Makefile
+${ECHO_CMD} "INSTALL_DATA = ${INSTALL_DATA}" >> Makefile
+${ECHO_CMD} "INSTALL_DIR = ${INSTALL_DIR}" >> Makefile
+${ECHO_CMD} "MKBUILDDIR = ${MKBUILDDIR}" >> Makefile
+${ECHO_CMD} "RMCMD = ${RMCMD}" >> Makefile
+${ECHO_CMD} "MORECMD = ${MORECMD}" >> Makefile
+${ECHO_CMD} "LDCONFIG=${LDCONFIG}" >> Makefile
+${ECHO_CMD} "################################" >> Makefile
+${ECHO_CMD} "" >> Makefile
+cat Makefile.in >> Makefile
+
+###############################
+# End:
+###############################
+
+cleanup
+
+${ECHO_CMD} "Makefile created: success."

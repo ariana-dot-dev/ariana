@@ -1,0 +1,10 @@
+export default function Share({ className }: { className?: string }) {
+    return (
+        <svg className={'min-h-full min-w-full ' + className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" color="#000000" fill="none">
+            <path className="dark:opacity-40 opacity-60" fillRule="evenodd" clipRule="evenodd" d="M14.25 6.5C14.25 4.42893 15.9289 2.75 18 2.75C20.0711 2.75 21.75 4.42893 21.75 6.5C21.75 8.57107 20.0711 10.25 18 10.25C15.9289 10.25 14.25 8.57107 14.25 6.5Z" fill="currentColor"></path>
+            <path className="dark:opacity-40 opacity-60" fillRule="evenodd" clipRule="evenodd" d="M2.25 12C2.25 9.92893 3.92893 8.25 6 8.25C8.07107 8.25 9.75 9.92893 9.75 12C9.75 14.0711 8.07107 15.75 6 15.75C3.92893 15.75 2.25 14.0711 2.25 12Z" fill="currentColor"></path>
+            <path className="dark:opacity-40 opacity-60" fillRule="evenodd" clipRule="evenodd" d="M14.25 17.5C14.25 15.4289 15.9289 13.75 18 13.75C20.0711 13.75 21.75 15.4289 21.75 17.5C21.75 19.5711 20.0711 21.25 18 21.25C15.9289 21.25 14.25 19.5711 14.25 17.5Z" fill="currentColor"></path>
+            <path className="opacity-30 dark:opacity-20" fillRule="evenodd" clipRule="evenodd" d="M15.6466 8.65973L9.14659 11.6592L8.30859 9.84321L14.8086 6.84375L15.6466 8.65973ZM9.14659 12.3437L15.6466 15.3432L14.8086 17.1592L8.30859 14.1597L9.14659 12.3437Z" fill="currentColor"></path>
+        </svg>
+    );
+}

@@ -1,0 +1,12 @@
+# deps
+node_modules/
+
+# Build artifacts
+dist-binaries/
+build-temp/
+src/embedded/
+
+# Distribution package
+dist/src/
+dist/node_modules/
+dist/bun.lockb

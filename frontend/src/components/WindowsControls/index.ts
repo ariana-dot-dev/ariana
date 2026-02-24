@@ -1,0 +1,1 @@
+export { WindowsControlsIcons } from './WindowsControlsIcons'

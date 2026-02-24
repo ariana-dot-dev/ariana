@@ -1,0 +1,34 @@
+ARG CROSS_BASE_IMAGE
+FROM $CROSS_BASE_IMAGE AS base
+
+# -- Overwrite the openssl finder so we just don't do anything (it'll just error out even though we have the lib)
+RUN echo "" > $(cmake --system-information | grep CMAKE_ROOT | cut -d'"' -f2)/Modules/FindOpenSSL.cmake
+
+# -- This will set flags required for windows
+RUN echo 'set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_WIN32_WINNT=0x0600 -DHAS_PQOS_FLOWID -DHAS_QOS_FLOWID")' >> /opt/toolchain.cmake && \
+    echo 'set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_WIN32_WINNT=0x0600 -DHAS_PQOS_FLOWID -DHAS_QOS_FLOWID")' >> /opt/toolchain.cmake
+
+FROM base AS win
+
+# -- Overwrite system MinGW-w64 headers with latest version
+WORKDIR /tmp
+
+# Install wget/unzip if not already present
+RUN apt-get update && apt-get install -y wget unzip
+
+# Download latest headers from GitHub
+RUN wget -O mingw-w64-headers.zip https://github.com/mirror/mingw-w64/archive/refs/heads/master.zip && \
+    unzip mingw-w64-headers.zip
+
+# Copy headers into system MinGW-w64 include folder, overwriting old files
+RUN cp -r mingw-w64-master/mingw-w64-headers/include/* $CROSS_SYSROOT/include/ && \
+    rm -rf /tmp/*
+
+# -- Some moonlight common c files require windows headers but they have them capitalized so we just symlink them to fix that
+RUN ln -s $CROSS_SYSROOT/include/ws2tcpip.h $CROSS_SYSROOT/include/Ws2tcpip.h && \
+    ln -s $CROSS_SYSROOT/include/mswsock.h $CROSS_SYSROOT/include/Mswsock.h && \
+    ln -s $CROSS_SYSROOT/include/versionhelpers.h $CROSS_SYSROOT/include/VersionHelpers.h && \
+    ln -s $CROSS_SYSROOT/include/windows.h $CROSS_SYSROOT/include/Windows.h && \
+    ln -s $CROSS_SYSROOT/include/winsock2.h $CROSS_SYSROOT/include/Winsock2.h && \
+    # For some reason the stdbool.h is not in the include path
+    ln -s /usr/lib/gcc/x86_64-w64-mingw32/$($CROSS_TOOLCHAIN_PREFIX"gcc"$CROSS_TOOLCHAIN_SUFFIX -dumpversion)/include/stdbool.h $CROSS_SYSROOT/include/stdbool.h

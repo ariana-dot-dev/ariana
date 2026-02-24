@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+package-lock.json
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+bun.lockb
+
+# Development
+.env.development
+.env.staging
+.vscode/
+.claude/
+
+# Tauri (Rust build artifacts)
+src-tauri/target/
+src-tauri/gen/
+src-tauri/Cargo.lock
+
+# Build artifacts (we'll build fresh in Docker)
+dist/
+.vite/
+*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE
+*.iml
+.idea/
+
+# Logs
+logs/
+*.log
+
+# Testing
+coverage/
+.nyc_output/
+
+# Misc
+bin/
+install.js
+README.md

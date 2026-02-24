@@ -1,0 +1,31 @@
+{
+  "name": "moonlight-web",
+  "version": "1.0.0",
+  "description": "",
+  "main": "web/index.ts",
+  "watch": {
+    "build-light": {
+      "patterns": [
+        "src",
+        "web"
+      ],
+      "extensions": "ts,html,css,svg,png,rs",
+      "ignore": "web/api_bindings.d.ts",
+      "runOnChangeOnly": false
+    }
+  },
+  "scripts": {
+    "dev": "npm run generate-bindings && npm-watch build-light",
+    "build": "npm run generate-bindings && npm run build-light",
+    "build-light": "tsc && npm run copy-static",
+    "generate-bindings": "cargo test export_bindings --package common",
+    "copy-static": "cpx \"web/**/*.{html,json,css,svg,png,js,wasm}\" dist/"
+  },
+  "license": "GPL-3.0-or-later",
+  "private": "true",
+  "devDependencies": {
+    "cpx": "1.2.1",
+    "npm-watch": "0.13.0",
+    "typescript": "5.9.3"
+  }
+}

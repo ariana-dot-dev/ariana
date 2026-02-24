@@ -1,0 +1,111 @@
+version: "3"
+services:
+
+# MySQL mariadb
+  mysql:
+    image: mariadb
+    restart: unless-stopped
+    volumes:
+      - ./mysql/init-coturn-db.sql:/docker-entrypoint-initdb.d/init-coturn-db.sql:ro
+      - ./mysql/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+      - mysql-data:/var/lib/mysql
+    env_file: 
+      - mysql/mysql.env
+    networks:
+      - backend
+
+# PostgreSQL
+  postgresql:
+    image: postgres
+    restart: unless-stopped
+    volumes:
+      - ./postgresql/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+      - postgresql-data:/var/lib/postgresql
+    env_file: 
+      - postgresql/postgresql.env
+    networks:
+      - backend
+
+# Redis
+  redis:
+    image: redis
+    restart: unless-stopped
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    volumes:
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - redis-data:/data
+    env_file: 
+      - redis/redis.env
+    networks:
+      - backend
+
+# MongoDB
+  mongodb:
+    image: mongo
+    restart: unless-stopped
+    volumes:
+      - mongodb-data:/data/db
+    env_file: 
+      - mongodb/mongodb.env
+    networks:
+      - backend
+
+
+# Coturn
+  coturn:
+    build:
+      context: ../
+      dockerfile: ./docker/coturn/debian/Dockerfile
+    restart: always
+    volumes:
+      - ./coturn/turnserver.conf:/etc/turnserver.conf:ro
+      - ./coturn/privkey.pem:/etc/ssl/private/privkey.pem:ro
+      - ./coturn/cert.pem:/etc/ssl/certs/cert.pem:ro
+    ports:
+## STUN/TURN
+      - "3478:3478"
+      - "3478:3478/udp"
+      - "3479:3479"
+      - "3479:3479/udp"
+      - "80:80"
+      - "80:80/udp"
+## STUN/TURN SSL
+      - "5349:5349"
+      - "5349:5349/udp"
+      - "5350:5350"
+      - "5350:5350/udp"
+      - "443:443"
+      - "443:443/udp"
+# Relay Ports
+#      - "49152-65535:49152-65535"
+#      - "49152-65535:49152-65535/udp"
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      - mysql
+      - postgresql
+      - redis
+      - mongodb
+    env_file:
+      - coturn/coturn.env
+# DB
+      - mysql/mysql.env
+      - postgresql/postgresql.env
+      - redis/redis.env
+      - mongodb/mongodb.env
+volumes:
+  mysql-data:
+  postgresql-data:
+  redis-data:
+  mongodb-data:
+
+networks:
+  frontend:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.16.238.0/24
+  backend:
+    internal: true

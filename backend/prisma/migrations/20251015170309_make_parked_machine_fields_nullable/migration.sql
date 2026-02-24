@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "ParkedMachine" ALTER COLUMN "machineId" DROP NOT NULL,
+ALTER COLUMN "machineName" DROP NOT NULL,
+ALTER COLUMN "ipv4" DROP NOT NULL;

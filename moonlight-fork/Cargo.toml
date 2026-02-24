@@ -1,0 +1,102 @@
+cargo-features = ["profile-rustflags"]
+
+[workspace]
+resolver = "3"
+members = [
+    "moonlight-client-simple",
+    "moonlight-common",
+    "moonlight-common-sys",
+    "moonlight-web/common",
+    "moonlight-web/streamer",
+    "moonlight-web/web-server",
+]
+default-members = ["moonlight-web/streamer", "moonlight-web/web-server"]
+
+[profile.release]
+# strip release information
+rustflags = ["-Zremap-cwd-prefix=.", "-Zlocation-detail=none"]
+
+[workspace.package]
+version = "2.3.0"
+license = "GPL-3.0-or-later"
+
+[workspace.dependencies]
+moonlight-common = { path = "./moonlight-common", features = [
+    "backend_reqwest",
+], default-features = false }
+moonlight-common-sys = { path = "./moonlight-common-sys", features = [
+    "generate-bindings",
+] }
+
+# Log
+log = "0.4.28"
+simplelog = "0.12.2"
+printf-compat = { version = "0.3.0" }
+
+# Cli
+clap = { version = "4.5.53" }
+
+# Util
+slab = "0.4.10"
+ts-rs = "11.0.1"
+async-trait = "0.1.89"
+
+# Async
+tokio = { version = "1.47.1" }
+async-stream = "0.3.6"
+futures = "0.3.31"
+bytes = "1.10.1"
+
+# -- Http / Https
+# Reqwest Backend
+reqwest = { version = "0.12.23", default-features = false }
+# Hyper Openssl Backend
+hyper = { version = "1.7.0", default-features = false }
+hyper-openssl = { version = "0.10.2", default-features = false }
+hyper-util = { version = "0.1.17", default-features = false }
+http-body-util = { version = "0.1.3", default-features = false }
+# Curl Backend
+curl = { version = "0.4.49", features = [
+    "static-ssl",
+], default-features = false }
+# other
+uuid = { version = "1.17.0" }
+hex = { version = "0.4.3" }
+url = { version = "2.5.4" }
+roxmltree = { version = "0.20.0" }
+form_urlencoded = { version = "1.2.1" }
+
+# WebRTC
+webrtc = "0.14.0"
+
+# Actix
+actix-web = { version = "4.11.0" }
+actix-files = "0.6.6"
+actix-ws = "0.3.0"
+
+# OpenSSL / Crypto
+openssl = "0.10.73"
+openssl-src = "300.5.4+3.5.4"
+openssl-sys = "0.9.111"
+pem = "3.0.5"
+
+# Serialization
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.142"
+
+# Error
+anyhow = "1.0.99"
+thiserror = "2.0.16"
+
+# Numbers
+num = "0.4"
+num-derive = "0.4"
+num-traits = "0.2"
+
+# Sys
+bindgen = { version = "0.72.0" }
+cmake = { version = "0.1.54" }
+
+[workspace.lints.clippy]
+too_many_arguments = "allow"
+unwrap_used = "warn"

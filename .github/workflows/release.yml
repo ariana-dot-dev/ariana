@@ -1,0 +1,163 @@
+name: Tauri v2 Release Process
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v1.0.0)'
+        required: true
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CN_APPLICATION: "ariana/ariana-ide"
+  MACOS_CERTIFICATE: ${{secrets.MACOS_CERTIFICATE}}
+  MACOS_CERTIFICATE_PASSWORD: ${{secrets.MACOS_CERTIFICATE_PASSWORD}}
+  APPLE_ID: ${{secrets.APPLE_ID}}
+  APPLE_PASSWORD: ${{secrets.APPLE_PASSWORD}}
+  APPLE_TEAM_ID: ${{secrets.APPLE_TEAM_ID}}
+
+jobs:
+  draft:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: create draft release
+        uses: crabnebula-dev/cloud-release@v0
+        with:
+          command: release draft ${{ env.CN_APPLICATION }} --framework tauri
+          api-key: ${{ secrets.CN_API_KEY }}
+
+  build_desktop:
+    needs: draft
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+          - os: macos-latest
+          - os: windows-latest
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+
+      - name: install Linux dependencies
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y webkit2gtk-4.1
+
+      - name: Generate Prisma Client
+        working-directory: ./backend
+        run: |
+          npm ci --legacy-peer-deps
+          npx prisma generate
+
+      - name: build Tauri app for Windows, Linux
+        if: matrix.os != 'macos-latest'
+        working-directory: ./frontend
+        run: |
+          npm ci --legacy-peer-deps
+          npm exec tauri build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          MACOS_CERTIFICATE: ${{secrets.MACOS_CERTIFICATE}}
+          MACOS_CERTIFICATE_PASSWORD: ${{secrets.MACOS_CERTIFICATE_PASSWORD}}
+          APPLE_ID: ${{secrets.APPLE_ID}}
+          APPLE_PASSWORD: ${{secrets.APPLE_PASSWORD}}
+          APPLE_TEAM_ID: ${{secrets.APPLE_TEAM_ID}}
+
+      - name: import Apple Developer Certificate
+        if: matrix.os == 'macos-latest'
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          echo $MACOS_CERTIFICATE | base64 --decode > certificate.p12
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security set-keychain-settings -t 3600 -u build.keychain
+          security import certificate.p12 -k build.keychain -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" build.keychain
+          security find-identity -v -p codesigning build.keychain
+
+      - name: verify certificate
+        if: matrix.os == 'macos-latest'
+        run: |
+          CERT_INFO=$(security find-identity -v -p codesigning build.keychain | grep "Developer ID Application")
+          CERT_ID=$(echo "$CERT_INFO" | awk -F'"' '{print $2}')
+          echo "CERT_ID=$CERT_ID" >> $GITHUB_ENV
+          echo "Certificate imported: $CERT_ID"
+
+      - name: Install x86_64-apple-darwin target for mac and build Tauri binaries
+        if: matrix.os == 'macos-latest'
+        working-directory: ./frontend
+        run: |
+          rustup target add x86_64-apple-darwin
+          npm ci --legacy-peer-deps
+          npm exec tauri build -- --target x86_64-apple-darwin
+          npm exec tauri build -- --target aarch64-apple-darwin
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          MACOS_CERTIFICATE: ${{secrets.MACOS_CERTIFICATE}}
+          MACOS_CERTIFICATE_PASSWORD: ${{secrets.MACOS_CERTIFICATE_PASSWORD}}
+          APPLE_ID: ${{secrets.APPLE_ID}}
+          APPLE_PASSWORD: ${{secrets.APPLE_PASSWORD}}
+          APPLE_TEAM_ID: ${{secrets.APPLE_TEAM_ID}}
+          APPLE_SIGNING_IDENTITY: ${{ env.CERT_ID }}
+
+      - name: upload assets
+        uses: crabnebula-dev/cloud-release@v0
+        with:
+          command: release upload ${{ env.CN_APPLICATION }} --framework tauri
+          api-key: ${{ secrets.CN_API_KEY }}
+          path: ./frontend
+        env:
+          MACOS_CERTIFICATE: ${{secrets.MACOS_CERTIFICATE}}
+          MACOS_CERTIFICATE_PASSWORD: ${{secrets.MACOS_CERTIFICATE_PASSWORD}}
+          APPLE_ID: ${{secrets.APPLE_ID}}
+          APPLE_PASSWORD: ${{secrets.APPLE_PASSWORD}}
+          APPLE_TEAM_ID: ${{secrets.APPLE_TEAM_ID}}
+
+  publish:
+    needs: [build_desktop]
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: publish release
+        uses: crabnebula-dev/cloud-release@v0
+        with:
+          command: release publish ${{ env.CN_APPLICATION }} --framework tauri
+          api-key: ${{ secrets.CN_API_KEY }}
+
+        env:
+          MACOS_CERTIFICATE: ${{secrets.MACOS_CERTIFICATE}}
+          MACOS_CERTIFICATE_PASSWORD: ${{secrets.MACOS_CERTIFICATE_PASSWORD}}
+          APPLE_ID: ${{secrets.APPLE_ID}}
+          APPLE_PASSWORD: ${{secrets.APPLE_PASSWORD}}
+          APPLE_TEAM_ID: ${{secrets.APPLE_TEAM_ID}}

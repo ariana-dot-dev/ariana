@@ -1,0 +1,82 @@
+---
+title: Environments
+description: Manage environment variables, secrets, and SSH keys for your AI agents
+---
+
+<Note>
+Environments and [Automations](/essentials/automations) work together as a powerful system. Environments can bundle automations alongside configuration, and automations can access environment variables. We recommend reading both pages to understand the full capabilities.
+</Note>
+
+## Overview
+
+Use environments to provide API keys, database credentials, SSH access, or any configuration your agent needs to interact with external services. Environments work seamlessly with automations, allowing you to orchestrate complex workflows that require authenticated access to tools and services.
+
+## Key Concepts
+
+### Personal & Private
+
+Environments are **user-scoped**. Even within shared projects, each team member maintains their own set of environments with their own credentials and configurations.
+
+### Environment Variables
+
+Define environment variables in standard `.env` format:
+
+```bash
+API_KEY=sk-1234567890abcdef
+DATABASE_URL=postgresql://user:pass@localhost:5432/db
+NODE_ENV=production
+```
+
+These variables are injected into your agent's runtime environment and are accessible to:
+- Agent's bash commands
+- Automation scripts
+- Any processes spawned by the agent
+
+The backend validates the `.env` format and parses key-value pairs, supporting both quoted and unquoted values.
+
+### Secret Files
+
+Secret files allow you to inject sensitive files directly into your agent's filesystem. Common use cases include:
+
+- **SSH private keys** (for git operations with private repositories)
+- **Service account credentials** (`.json` files for Google Cloud, AWS, etc.)
+- **Configuration files** (`.npmrc`, `.pypirc`, custom configs)
+
+Each secret file consists of:
+- **Path**: Where the file should be created (e.g., `/home/user/.ssh/id_rsa`)
+- **Contents**: The file's content
+
+Secret files are written when the agent starts and when the environment is updated on a running agent.
+
+### SSH Key Pairs
+
+Generate ed25519 SSH keypairs directly from the Ariana interface. The backend uses `ssh-keygen` to create secure keypairs that can be added to your GitHub/GitLab account for repository access, used for SSH authentication to remote servers, or stored as secret files in the environment.
+
+### Integration with Automations
+
+Environments can bundle [automations](/essentials/automations) alongside configuration. When you install an environment on an agent, all associated automations are activated.
+
+## Example: Automated Commit Notifications
+
+Send real-time development updates to your team every time your agent makes a commit.
+
+**Environment Variables:**
+```bash
+BOSS_EMAIL=boss@company.com
+SLACK_WEBHOOK_URL=https://hooks.slack.com/services/xxx
+```
+
+**Automation** (trigger: `after_commit`):
+```bash
+#!/bin/bash
+COMMIT_MSG=$(git log -1 --pretty=%B)
+COMMIT_HASH=$(git rev-parse --short HEAD)
+
+curl -X POST $SLACK_WEBHOOK_URL \
+  -H 'Content-Type: application/json' \
+  -d "{\"text\":\"🚀 Just shipped another commit! ($COMMIT_HASH)\n\n*${COMMIT_MSG}*\n\nI'm basically working 24/7 now that I have an AI agent. 😎\"}"
+
+echo "✅ Boss notified of your productivity!"
+```
+
+Every commit = instant notification to your boss. Maximum perceived productivity achieved.

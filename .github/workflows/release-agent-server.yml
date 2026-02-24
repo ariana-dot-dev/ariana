@@ -1,0 +1,67 @@
+name: Release Agent Server
+
+on:
+  push:
+    tags: ['agent-server-v*']
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platforms: linux-x64 linux-arm64
+          - os: macos-latest
+            platforms: darwin-x64 darwin-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+
+      - name: Build agent server binaries
+        working-directory: backend/agents-server
+        run: ./scripts/build-all.sh all
+
+      - name: Build CLI binaries
+        working-directory: backend/agents-server
+        run: ./scripts/build-cli.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.os }}
+          path: |
+            backend/agents-server/dist-binaries/*
+            backend/agents-server/dist-cli/*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List artifacts
+        run: |
+          echo "Contents of artifacts directory:"
+          find artifacts -type f
+          ls -la artifacts/
+
+      - name: Flatten artifacts
+        run: |
+          mkdir -p release-files
+          find artifacts -type f -exec cp {} release-files/ \;
+          ls -la release-files/
+
+      - name: Publish release
+        run: |
+          gh release create ${{ github.ref_name }} \
+            release-files/* \
+            backend/agents-server/install.sh \
+            backend/agents-server/cli/install-cli.sh \
+            --repo ariana-dot-dev/agent-server
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
