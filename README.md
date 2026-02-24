@@ -26,7 +26,7 @@ Some nice features include:
 - setup automations to run scripts when an agents starts, does a commit...
 - since agents run on VPSs, run docker compose, host things publicly. we even generate https certs for you
 - agents can spawn other agents, manage agents, and environments, automations
-- agents forking to keep a copy of the disk, of chrome logins and od the context over multiple agents 
+- agents forking to keep a copy of the disk, of chrome logins and of the context over multiple agents 
 - gaming-grade desktop streaming for each agents
 - beautiful markdown & mermaid rendering
 - nice diffs view using Pierre Computer's diffs.com
