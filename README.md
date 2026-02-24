@@ -32,7 +32,7 @@ Some nice features include:
 - nice diffs view using Pierre Computer's diffs.com
 - web previews, desktop streaming, desktop use to test agent's changes
 
-## Installation
+## Dev Installation
 
 It's quite unpractical to setup Ariana for now as there are a lot of 3rd party services and custom infra needed to make it work, but we will try to improve this asap.
 
