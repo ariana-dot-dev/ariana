@@ -6,6 +6,8 @@ https://github.com/user-attachments/assets/8ac5ad1e-678c-4187-b183-b5f4b416a1b9
 
 Ariana was almost entirely built with Ariana.
 
+We maintain it on a private repo and will occasionally drop progress here. Feel free to open PRs still.
+
 ## Try it
 
 A cloud version is hosted there: [ariana.dev](ariana.dev)
