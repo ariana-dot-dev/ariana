@@ -53,6 +53,18 @@ regarding your current task:
 4. document as you do things for the next agent to be able to dive gradually into what you did, what you learned, not repeat the same mistakes
 5. if the task is finished and would like to notify the human or you're dead stuck and need a human to intervene, delete the .task-lock file`;
 
+interface PerAgentState {
+    stateTimer?: NodeJS.Timeout;
+    machineFailureCount: number;
+    /** Last emitted context threshold (10% boundaries); default 70 = start warning at 60% remaining */
+    contextThreshold: number;
+    lastGitHistoryPoll: number;
+    lastGithubTokenRefresh: number;
+    lastProcessedMsgCount: number;
+    /** Timestamp when unproductive running (0 messages) was first observed; undefined if not stuck */
+    unproductiveRunningStart?: number;
+}
+
 export class ClaudeAgentService {
     private repositories: RepositoryContainer;
     private githubService: GitHubService;
@@ -61,16 +73,10 @@ export class ClaudeAgentService {
     private personalEnvironmentService: PersonalEnvironmentService;
     private claudeOAuthService: ClaudeOAuthService;
     private authService: AuthService;
-    private stateTimers = new Map<string, NodeJS.Timeout>();
-    private machineFailureCount = new Map<string, number>();
+    /** Single consolidated map of per-agent runtime state, replacing 7 parallel Maps */
+    private agentStates = new Map<string, PerAgentState>();
     private readonly MACHINE_FAILURE_THRESHOLD = 5; // After 5 consecutive failures (~15 seconds), transition to ERROR
-    // Track last emitted context threshold per agent (for 10% boundary warnings)
-    private contextThresholds = new Map<string, number>();
-    // Throttle git history polling to once per 10s per agent
-    private lastGitHistoryPoll = new Map<string, number>();
     private readonly GIT_HISTORY_INTERVAL_MS = 10_000;
-    // Throttle GitHub token refresh to once per 5 min per agent (tokens expire after ~8 hours)
-    private lastGithubTokenRefresh = new Map<string, number>();
     private readonly GITHUB_TOKEN_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
     // Cap poll HTTP calls to prevent slow network from blocking the poll loop
     private readonly POLL_HTTP_TIMEOUT_MS = 1_500;
@@ -80,12 +86,6 @@ export class ClaudeAgentService {
     private readonly PUSH_HTTP_TIMEOUT_MS = 30_000;
     private readonly PROMPT_HTTP_TIMEOUT_MS = 10_000;
     private readonly AUTOMATION_HTTP_TIMEOUT_MS = 10_000;
-    // Delta-based message processing: track last known finalized message count per agent
-    // to skip re-checking hundreds of already-stored messages every cycle
-    private lastProcessedMsgCount = new Map<string, number>();
-    // Track agents stuck in RUNNING with 0 messages (ghost agents)
-    // Maps agentId -> timestamp when unproductive running was first observed
-    private unproductiveRunningStart = new Map<string, number>();
     private readonly UNPRODUCTIVE_RUNNING_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes
 
     constructor(
@@ -104,6 +104,22 @@ export class ClaudeAgentService {
         this.personalEnvironmentService = personalEnvironmentService;
         this.claudeOAuthService = claudeOAuthService;
         this.authService = authService;
+    }
+
+    /** Returns the per-agent runtime state object, creating it with defaults if absent. */
+    private getAgentState(agentId: string): PerAgentState {
+        let state = this.agentStates.get(agentId);
+        if (!state) {
+            state = {
+                machineFailureCount: 0,
+                contextThreshold: 70,
+                lastGitHistoryPoll: 0,
+                lastGithubTokenRefresh: 0,
+                lastProcessedMsgCount: 0,
+            };
+            this.agentStates.set(agentId, state);
+        }
+        return state;
     }
 
     /**
@@ -1165,9 +1181,9 @@ export class ClaudeAgentService {
         const timing: PollTiming = { conv: 0, git: 0, pr: 0, auto: 0, ctx: 0, store: 0, msgCount: 0, msgProcessed: 0 };
 
         // Git history: throttled to once per 10s, fire-and-forget (doesn't block poll)
-        const lastGit = this.lastGitHistoryPoll.get(agentId) || 0;
-        if (Date.now() - lastGit >= this.GIT_HISTORY_INTERVAL_MS) {
-            this.lastGitHistoryPoll.set(agentId, Date.now());
+        const agentState = this.getAgentState(agentId);
+        if (Date.now() - agentState.lastGitHistoryPoll >= this.GIT_HISTORY_INTERVAL_MS) {
+            agentState.lastGitHistoryPoll = Date.now();
             const gitStart = Date.now();
             this.pollAndSyncGitHistory(agent)
                 .then(() => { timing.git = Date.now() - gitStart; })
@@ -1442,7 +1458,7 @@ export class ClaudeAgentService {
                 }
 
                 if (isReady && !hasBlockingAutomation) {
-                    this.unproductiveRunningStart.delete(agentId);
+                    delete this.getAgentState(agentId).unproductiveRunningStart;
                     const currentTaskId = agent.currentTaskId!;
                     await this.createCheckpointForTask(agentId, currentTaskId);
 
@@ -1492,16 +1508,17 @@ export class ClaudeAgentService {
                     }
                 } else if (isReady && hasBlockingAutomation) {
                     logger.debug`Agent ${agentId} - Blocked by automation(s), staying in RUNNING state`;
-                    this.unproductiveRunningStart.delete(agentId);
+                    delete this.getAgentState(agentId).unproductiveRunningStart;
                 } else {
                     // !isReady: Claude reports busy. Check for ghost/stuck agents that will never produce output.
                     // Ghost agents are RUNNING with 0 conversation messages — e.g. project dir never set, agent-server 404s.
                     const totalMessages = sharedMsgCount;
                     if (totalMessages === 0) {
-                        if (!this.unproductiveRunningStart.has(agentId)) {
-                            this.unproductiveRunningStart.set(agentId, Date.now());
+                        const _agentState = this.getAgentState(agentId);
+                        if (_agentState.unproductiveRunningStart === undefined) {
+                            _agentState.unproductiveRunningStart = Date.now();
                         }
-                        const stuckSince = this.unproductiveRunningStart.get(agentId)!;
+                        const stuckSince = _agentState.unproductiveRunningStart;
                         const stuckMs = Date.now() - stuckSince;
                         if (stuckMs >= this.UNPRODUCTIVE_RUNNING_TIMEOUT_MS) {
                             logger.warn`Agent ${agentId} ${agent.name} - Stuck in RUNNING for ${Math.round(stuckMs / 1000)}s with 0 messages, transitioning to ERROR`;
@@ -1513,7 +1530,7 @@ export class ClaudeAgentService {
                             this.cleanupAgentResources(agentId);
                         }
                     } else {
-                        this.unproductiveRunningStart.delete(agentId);
+                        delete this.getAgentState(agentId).unproductiveRunningStart;
                     }
                 }
 
@@ -1554,7 +1571,7 @@ export class ClaudeAgentService {
         // This turns 983 sequential DB queries into 0-2 for idle agents.
         const streamingMessages = messages.filter(m => m.isStreaming);
         const finalizedMessages = messages.filter(m => !m.isStreaming);
-        const lastCount = this.lastProcessedMsgCount.get(agentId) ?? 0;
+        const lastCount = this.getAgentState(agentId).lastProcessedMsgCount;
         const currentCount = finalizedMessages.length;
 
         let startIndex: number;
@@ -1675,7 +1692,7 @@ export class ClaudeAgentService {
         }
 
         // Update the count after successful processing
-        this.lastProcessedMsgCount.set(agentId, currentCount);
+        this.getAgentState(agentId).lastProcessedMsgCount = currentCount;
 
         // Notify WS subscribers with specific IDs of what changed
         if (addedMessageIds.length > 0 || modifiedMessageIds.length > 0) {
@@ -1904,7 +1921,7 @@ export class ClaudeAgentService {
                         logger.info`Agent ${agentId} - Created compaction complete event (tokensBefore: ${event.data.tokensBefore})`;
 
                         // Reset context threshold tracking after compaction
-                        this.contextThresholds.delete(agentId);
+                        this.getAgentState(agentId).contextThreshold = 70;
                     }
                 } catch (error) {
                     logger.error`Agent ${agentId} - Failed to sync context event: ${error}`;
@@ -1923,10 +1940,10 @@ export class ClaudeAgentService {
         const agentId = agent.id;
         if (!agent.machineId) return;
 
-        const lastRefresh = this.lastGithubTokenRefresh.get(agentId) || 0;
-        if (Date.now() - lastRefresh < this.GITHUB_TOKEN_REFRESH_INTERVAL_MS) return;
+        const _githubState = this.getAgentState(agentId);
+        if (Date.now() - _githubState.lastGithubTokenRefresh < this.GITHUB_TOKEN_REFRESH_INTERVAL_MS) return;
 
-        this.lastGithubTokenRefresh.set(agentId, Date.now());
+        _githubState.lastGithubTokenRefresh = Date.now();
 
         try {
             const githubTokens = await this.githubService.getUserTokens(agent.userId);
@@ -2462,35 +2479,21 @@ export class ClaudeAgentService {
     }
 
     private cleanupAgentResources(agentId: string): void {
-        // Clean up timers
-        const stateTimer = this.stateTimers.get(agentId);
-        if (stateTimer) {
-            clearInterval(stateTimer);
-            this.stateTimers.delete(agentId);
+        const state = this.agentStates.get(agentId);
+        if (state?.stateTimer) {
+            clearInterval(state.stateTimer);
         }
-        // Clean up all per-agent tracking maps to prevent unbounded growth
-        this.machineFailureCount.delete(agentId);
-        this.contextThresholds.delete(agentId);
-        this.lastGitHistoryPoll.delete(agentId);
-        this.lastProcessedMsgCount.delete(agentId);
-        this.unproductiveRunningStart.delete(agentId);
-        this.lastGithubTokenRefresh.delete(agentId);
+        this.agentStates.delete(agentId);
     }
 
-    /** Remove map entries for agents that are no longer running. Called periodically from poll loop. */
+    /** Remove entries for agents that are no longer running. Called periodically from poll loop. */
     sweepStaleAgentEntries(runningAgentIds: Set<string>): void {
-        for (const map of [this.machineFailureCount, this.contextThresholds, this.lastGitHistoryPoll, this.lastProcessedMsgCount, this.unproductiveRunningStart, this.lastGithubTokenRefresh]) {
-            for (const key of map.keys()) {
-                if (!runningAgentIds.has(key)) {
-                    map.delete(key);
-                }
-            }
-        }
-        // stateTimers need special cleanup (clearInterval)
-        for (const [agentId, timer] of this.stateTimers.entries()) {
+        for (const [agentId, state] of this.agentStates.entries()) {
             if (!runningAgentIds.has(agentId)) {
-                clearInterval(timer);
-                this.stateTimers.delete(agentId);
+                if (state.stateTimer) {
+                    clearInterval(state.stateTimer);
+                }
+                this.agentStates.delete(agentId);
             }
         }
     }
@@ -2514,11 +2517,13 @@ export class ClaudeAgentService {
             // Then cleanup the machine pool (this deletes all machines)
             await this.machinePoolService.cleanupAllMachines();
 
-            // Clear all timers
-            for (const timer of this.stateTimers.values()) {
-                clearInterval(timer);
+            // Clear all timers and agent state
+            for (const state of this.agentStates.values()) {
+                if (state.stateTimer) {
+                    clearInterval(state.stateTimer);
+                }
             }
-            this.stateTimers.clear();
+            this.agentStates.clear();
 
             logger.debug`Machine cleanup completed`;
         } catch (error) {
@@ -2740,7 +2745,7 @@ export class ClaudeAgentService {
 
             const stateData: ClaudeStateResponse = await response.json();
             // Reset failure counter on successful communication
-            this.machineFailureCount.delete(agent.id);
+            this.getAgentState(agent.id).machineFailureCount = 0;
             return stateData;
         } catch (error) {
             logger.debug`Agent ${agent.id} - Failed to get Claude state: ${error}`;
@@ -2754,8 +2759,8 @@ export class ClaudeAgentService {
      */
     private async trackMachineFailure(agent: Agent): Promise<boolean> {
         const agentId = agent.id;
-        const currentCount = (this.machineFailureCount.get(agentId) || 0) + 1;
-        this.machineFailureCount.set(agentId, currentCount);
+        const currentCount = this.getAgentState(agentId).machineFailureCount + 1;
+        this.getAgentState(agentId).machineFailureCount = currentCount;
 
         logger.warn`Agent ${agentId} ${agent.name} - Machine unreachable (failure ${currentCount}/${this.MACHINE_FAILURE_THRESHOLD})`;
 
@@ -2790,7 +2795,8 @@ export class ClaudeAgentService {
 
         // Get last emitted threshold for this agent (default to 70% = start warning at 60%)
         // We only warn when remaining drops below 60%, so first warning is at 60% threshold
-        const lastThreshold = this.contextThresholds.get(agentId) ?? 70;
+        const state = this.getAgentState(agentId);
+        const lastThreshold = state.contextThreshold;
 
         // Calculate current threshold (rounded down to nearest 10)
         const currentThreshold = Math.floor(remainingPercent / 10) * 10;
@@ -2811,7 +2817,7 @@ export class ClaudeAgentService {
             });
 
             // Update last emitted threshold
-            this.contextThresholds.set(agentId, currentThreshold);
+            state.contextThreshold = currentThreshold;
         }
     }
 
@@ -2819,7 +2825,7 @@ export class ClaudeAgentService {
      * Reset context threshold tracking for an agent (call after reset or compaction).
      */
     resetContextThreshold(agentId: string): void {
-        this.contextThresholds.delete(agentId);
+        this.getAgentState(agentId).contextThreshold = 70;
     }
 
     /**
