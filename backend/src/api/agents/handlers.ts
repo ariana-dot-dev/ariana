@@ -11,6 +11,16 @@ import type { Prompt } from '@shared/types/agent/prompt.types';
 
 const logger = getLogger(['api', 'agents']);
 
+// Helper: build a CORS-wrapped error response
+function corsErrorResponse(
+  origin: string | null,
+  error: string,
+  status: number,
+  extra?: Record<string, unknown>
+): Response {
+  return addCorsHeaders(Response.json({ success: false, error, ...extra }, { status }), origin);
+}
+
 export interface RequestContext {
   services: ServiceContainer;
   origin: string | null;
@@ -60,29 +70,19 @@ export async function handleCreateAgent(
     // Get project details
     const project = await context.services.projects.getProject(projectId);
     if (!project) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Project not found'
-      }, { status: 404 }), context.origin);
+      return corsErrorResponse(context.origin, 'Project not found', 404);
     }
 
     // Check if user is a member of the project
     const members = await context.services.projects.getProjectMembers(projectId);
     const member = members.find(m => m.userId === auth.user.id);
     if (!member) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Access denied to project'
-      }, { status: 403 }), context.origin);
+      return corsErrorResponse(context.origin, 'Access denied to project', 403);
     }
 
     // VISITOR role cannot create agents (only access shared ones and fork)
     if (member.role === ProjectRole.VISITOR) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'VISITOR role cannot create agents. Please sync with GitHub to upgrade permissions.',
-        code: 'VISITOR_ROLE_RESTRICTION'
-      }, { status: 403 }), context.origin);
+      return corsErrorResponse(context.origin, 'VISITOR role cannot create agents. Please sync with GitHub to upgrade permissions.', 403, { code: 'VISITOR_ROLE_RESTRICTION' });
     }
 
     // Check machine pool capacity BEFORE decrementing user quota
@@ -91,15 +91,7 @@ export async function handleCreateAgent(
 
     if (activeMachineCount >= maxActiveMachines) {
       logger.warn`Machine pool exhausted: ${activeMachineCount}/${maxActiveMachines} active machines`;
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Server is currently at capacity. Please try again in a few minutes.',
-        code: 'MACHINE_POOL_EXHAUSTED',
-        details: {
-          currentMachines: activeMachineCount,
-          maxMachines: maxActiveMachines
-        }
-      }, { status: 503 }), context.origin);
+      return corsErrorResponse(context.origin, 'Server is currently at capacity. Please try again in a few minutes.', 503, { code: 'MACHINE_POOL_EXHAUSTED', details: { currentMachines: activeMachineCount, maxMachines: maxActiveMachines } });
     }
 
     // Atomically check and increment usage limits (prevents race conditions)
@@ -107,25 +99,11 @@ export async function handleCreateAgent(
     if (!limitCheck.allowed) {
       // User doesn't exist in database
       if (limitCheck.userNotFound) {
-        return addCorsHeaders(Response.json({
-          success: false,
-          error: 'User not found'
-        }, { status: 404 }), context.origin);
+        return corsErrorResponse(context.origin, 'User not found', 404);
       }
 
       // Rate limit exceeded
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Agent creation limit reached',
-        code: 'LIMIT_EXCEEDED',
-        limitInfo: {
-          limitType: limitCheck.limitType,
-          resourceType: limitCheck.resourceType,
-          current: limitCheck.current,
-          max: limitCheck.max,
-          isMonthlyLimit: limitCheck.isMonthlyLimit || false
-        }
-      }, { status: 429 }), context.origin);
+      return corsErrorResponse(context.origin, 'Agent creation limit reached', 429, { code: 'LIMIT_EXCEEDED', limitInfo: { limitType: limitCheck.limitType, resourceType: limitCheck.resourceType, current: limitCheck.current, max: limitCheck.max, isMonthlyLimit: limitCheck.isMonthlyLimit || false } });
     }
 
     // Get default environment for this project/user if one exists
@@ -171,13 +149,8 @@ export async function handleCreateAgent(
       logger.error `Error stack: ${error.stack}`;
     }
 
-    const response: AgentAPI.CreateResponse = {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    };
-
     const status = error instanceof Error && error.message.includes('limit reached') ? 400 : 500;
-    return addCorsHeaders(Response.json(response, { status }), context.origin);
+    return corsErrorResponse(context.origin, error instanceof Error ? error.message : 'Unknown error', status);
   }
 }
 
@@ -194,10 +167,7 @@ export async function handleGetAgents(
     if (projectId) {
       const isMember = await context.services.projects.isProjectMember(projectId, auth.user.id);
       if (!isMember) {
-        return addCorsHeaders(Response.json({
-          success: false,
-          error: 'Access denied to project'
-        }, { status: 403 }), context.origin);
+        return corsErrorResponse(context.origin, 'Access denied to project', 403);
       }
 
       // Include trashed agents so frontend can display trash section
@@ -239,18 +209,12 @@ export async function handleGetAgent(
     // Check read access
     const hasAccess = await context.services.userAgentAccesses.hasReadAccess(auth.user.id, agentId);
     if (!hasAccess) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Agent not found or access denied'
-      }, { status: 404 }), context.origin);
+      return corsErrorResponse(context.origin, 'Agent not found or access denied', 404);
     }
 
     const agent = await context.services.agents.getAgent(agentId);
     if (!agent) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Agent not found'
-      }, { status: 404 }), context.origin);
+      return corsErrorResponse(context.origin, 'Agent not found', 404);
     }
 
     const enrichedAgent = await enrichWithCreator(agent, context.services);
@@ -275,29 +239,20 @@ export async function handleSendPrompt(
     // Check write access first
     const hasWrite = await context.services.userAgentAccesses.hasWriteAccess(auth.user.id, agentId);
     if (!hasWrite) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Write access required'
-      }, { status: 403 }), context.origin);
+      return corsErrorResponse(context.origin, 'Write access required', 403);
     }
 
     // Get agent to check state
     const agent = await context.services.agents.getAgent(agentId);
     if (!agent) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Agent not found'
-      }, { status: 404 }), context.origin);
+      return corsErrorResponse(context.origin, 'Agent not found', 404);
     }
 
     const body = await req.json() as AgentAPI.SendPromptRequest;
     const { prompt, mentions, model } = body;
 
     if (!prompt) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Prompt is required'
-      }, { status: 400 }), context.origin);
+      return corsErrorResponse(context.origin, 'Prompt is required', 400);
     }
 
     // Atomically check and increment usage limits (prevents race conditions)
@@ -305,25 +260,11 @@ export async function handleSendPrompt(
     if (!limitCheck.allowed) {
       // User doesn't exist in database
       if (limitCheck.userNotFound) {
-        return addCorsHeaders(Response.json({
-          success: false,
-          error: 'User not found'
-        }, { status: 404 }), context.origin);
+        return corsErrorResponse(context.origin, 'User not found', 404);
       }
 
       // Rate limit exceeded
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Prompt sending limit reached',
-        code: 'LIMIT_EXCEEDED',
-        limitInfo: {
-          limitType: limitCheck.limitType,
-          resourceType: limitCheck.resourceType,
-          current: limitCheck.current,
-          max: limitCheck.max,
-          isMonthlyLimit: limitCheck.isMonthlyLimit || false
-        }
-      }, { status: 429 }), context.origin);
+      return corsErrorResponse(context.origin, 'Prompt sending limit reached', 429, { code: 'LIMIT_EXCEEDED', limitInfo: { limitType: limitCheck.limitType, resourceType: limitCheck.resourceType, current: limitCheck.current, max: limitCheck.max, isMonthlyLimit: limitCheck.isMonthlyLimit || false } });
     }
 
     let mentionsString = null;
@@ -372,10 +313,7 @@ export async function handleSendPrompt(
     }), context.origin);
   } catch (error) {
     logger.error `Send prompt failed: ${error}`;
-    return addCorsHeaders(Response.json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 }), context.origin);
+    return corsErrorResponse(context.origin, error instanceof Error ? error.message : 'Unknown error', 500);
   }
 }
 
@@ -403,10 +341,7 @@ export async function handleStartAgent(
 
     const ownsAgent = await context.services.agents.userOwnsAgent(agentId, auth.user.id);
     if (!ownsAgent) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Agent not found or access denied'
-      }, { status: 403 }), context.origin);
+      return corsErrorResponse(context.origin, 'Agent not found or access denied', 403);
     }
 
     // Ensure OAuth token is fresh (refreshes if needed and updates config)
@@ -435,10 +370,7 @@ export async function handleStartAgent(
     }), context.origin);
   } catch (error) {
     logger.error `Start agent failed: ${error}`;
-    return addCorsHeaders(Response.json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 }), context.origin);
+    return corsErrorResponse(context.origin, error instanceof Error ? error.message : 'Unknown error', 500);
   }
 }
 
@@ -452,10 +384,7 @@ export async function handleGetUploadProgress(
   try {
     const ownsAgent = await context.services.agents.userOwnsAgent(agentId, auth.user.id);
     if (!ownsAgent) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Agent not found or access denied'
-      }, { status: 403 }), context.origin);
+      return corsErrorResponse(context.origin, 'Agent not found or access denied', 403);
     }
 
     const progress = await context.services.agentUploads.getProgress(agentId);
@@ -469,10 +398,7 @@ export async function handleGetUploadProgress(
     }), context.origin);
   } catch (error) {
     logger.error `Get upload progress failed: ${error}`;
-    return addCorsHeaders(Response.json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 }), context.origin);
+    return corsErrorResponse(context.origin, error instanceof Error ? error.message : 'Unknown error', 500);
   }
 }
 
@@ -488,10 +414,7 @@ export async function handleUploadProjectChunk(
 
     const ownsAgent = await context.services.agents.userOwnsAgent(agentId, auth.user.id);
     if (!ownsAgent) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Agent not found or access denied'
-      }, { status: 403 }), context.origin);
+      return corsErrorResponse(context.origin, 'Agent not found or access denied', 403);
     }
 
     const body = await req.json() as {
@@ -505,10 +428,7 @@ export async function handleUploadProjectChunk(
     // Get agent to find machine ID
     const agent = await context.services.agents.getAgent(agentId);
     if (!agent || !agent.machineId) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Agent machine not found'
-      }, { status: 404 }), context.origin);
+      return corsErrorResponse(context.origin, 'Agent machine not found', 404);
     }
 
     // Init progress tracking on first chunk
@@ -531,10 +451,7 @@ export async function handleUploadProjectChunk(
 
     if (!response.ok || !result.success) {
       logger.error `Failed to upload chunk to agents-server: ${result.error || 'Unknown error'}`;
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: result.error || 'Failed to upload chunk'
-      }, { status: 500 }), context.origin);
+      return corsErrorResponse(context.origin, result.error || 'Failed to upload chunk', 500);
     }
 
     // Track progress in DB (for resume capability)
@@ -549,10 +466,7 @@ export async function handleUploadProjectChunk(
     }), context.origin);
   } catch (error) {
     logger.error `Upload chunk failed: ${error}`;
-    return addCorsHeaders(Response.json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 }), context.origin);
+    return corsErrorResponse(context.origin, error instanceof Error ? error.message : 'Unknown error', 500);
   }
 }
 
@@ -568,19 +482,13 @@ export async function handleUploadProjectFinalize(
 
     const ownsAgent = await context.services.agents.userOwnsAgent(agentId, auth.user.id);
     if (!ownsAgent) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Agent not found or access denied'
-      }, { status: 403 }), context.origin);
+      return corsErrorResponse(context.origin, 'Agent not found or access denied', 403);
     }
 
     // Get agent to find machine ID
     const agent = await context.services.agents.getAgent(agentId);
     if (!agent || !agent.machineId) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Agent machine not found'
-      }, { status: 404 }), context.origin);
+      return corsErrorResponse(context.origin, 'Agent machine not found', 404);
     }
 
     // Tell agents-server to finalize (reconstruct from filesystem chunks)
@@ -595,10 +503,7 @@ export async function handleUploadProjectFinalize(
     if (!response.ok || !result.success) {
       logger.error `Failed to finalize upload on agents-server: ${result.error || 'Unknown error'}`;
       // Don't cleanup progress on error - allow retry
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: result.error || 'Failed to finalize upload'
-      }, { status: 500 }), context.origin);
+      return corsErrorResponse(context.origin, result.error || 'Failed to finalize upload', 500);
     }
 
     // Success - cleanup progress tracking
@@ -614,10 +519,7 @@ export async function handleUploadProjectFinalize(
     // Cleanup progress on error
     await context.services.agentUploads.deleteProgress(agentId).catch(() => {});
 
-    return addCorsHeaders(Response.json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 }), context.origin);
+    return corsErrorResponse(context.origin, error instanceof Error ? error.message : 'Unknown error', 500);
   }
 }
 
@@ -639,10 +541,7 @@ export async function handleTrashAgent(
     }), context.origin);
   } catch (error) {
     logger.error `Trash agent failed: ${error}`;
-    return addCorsHeaders(Response.json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 }), context.origin);
+    return corsErrorResponse(context.origin, error instanceof Error ? error.message : 'Unknown error', 500);
   }
 }
 
@@ -663,10 +562,7 @@ export async function handleUntrashAgent(
     }), context.origin);
   } catch (error) {
     logger.error `Restore agent from trash failed: ${error}`;
-    return addCorsHeaders(Response.json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 }), context.origin);
+    return corsErrorResponse(context.origin, error instanceof Error ? error.message : 'Unknown error', 500);
   }
 }
 
@@ -681,20 +577,14 @@ export async function handleRevertAgent(
     // Check write access
     const hasWrite = await context.services.userAgentAccesses.hasWriteAccess(auth.user.id, agentId);
     if (!hasWrite) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Write access required'
-      }, { status: 403 }), context.origin);
+      return corsErrorResponse(context.origin, 'Write access required', 403);
     }
 
     const body = await req.json() as AgentAPI.RevertRequest;
 
     const { commitSha } = body;
     if (!commitSha) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Commit SHA is required'
-      }, { status: 400 }), context.origin);
+      return corsErrorResponse(context.origin, 'Commit SHA is required', 400);
     }
 
     await context.services.agents.revertToCheckpoint(agentId, commitSha);
@@ -705,10 +595,7 @@ export async function handleRevertAgent(
     }), context.origin);
   } catch (error) {
     logger.error `Revert agent failed: ${error}`;
-    return addCorsHeaders(Response.json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 }), context.origin);
+    return corsErrorResponse(context.origin, error instanceof Error ? error.message : 'Unknown error', 500);
   }
 }
 
@@ -723,10 +610,7 @@ export async function handleInterruptAgent(
     // Check write access
     const hasWrite = await context.services.userAgentAccesses.hasWriteAccess(auth.user.id, agentId);
     if (!hasWrite) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Write access required'
-      }, { status: 403 }), context.origin);
+      return corsErrorResponse(context.origin, 'Write access required', 403);
     }
 
     await context.services.agents.interruptAgent(agentId, auth.user.id);
@@ -736,10 +620,7 @@ export async function handleInterruptAgent(
     }), context.origin);
   } catch (error) {
     logger.error `Interrupt agent failed: ${error}`;
-    return addCorsHeaders(Response.json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 }), context.origin);
+    return corsErrorResponse(context.origin, error instanceof Error ? error.message : 'Unknown error', 500);
   }
 }
 
@@ -754,19 +635,13 @@ export async function handleResetAgent(
     // Get agent first for validation
     const agent = await context.services.agents.getAgent(agentId);
     if (!agent) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Agent not found'
-      }, { status: 404 }), context.origin);
+      return corsErrorResponse(context.origin, 'Agent not found', 404);
     }
 
     // Check write access
     const hasWrite = await context.services.userAgentAccesses.hasWriteAccess(auth.user.id, agentId);
     if (!hasWrite) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Write access required'
-      }, { status: 403 }), context.origin);
+      return corsErrorResponse(context.origin, 'Write access required', 403);
     }
 
     // Auto-resume ARCHIVED agents (owner only)
@@ -776,10 +651,7 @@ export async function handleResetAgent(
         const result = await context.services.agentMovements.ensureAgentReadyOrResume(agentId, auth.user.id);
         currentAgent = result.agent;
       } catch (error) {
-        return addCorsHeaders(Response.json({
-          success: false,
-          error: error instanceof Error ? error.message : 'Failed to resume agent'
-        }, { status: 400 }), context.origin);
+        return corsErrorResponse(context.origin, error instanceof Error ? error.message : 'Failed to resume agent', 400);
       }
     }
 
@@ -793,10 +665,7 @@ export async function handleResetAgent(
         [AgentState.ERROR]: 'Agent is in an error state'
       };
 
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: stateMessages[currentAgent.state as AgentState] || 'Agent is not in a valid state for reset'
-      }, { status: 400 }), context.origin);
+      return corsErrorResponse(context.origin, stateMessages[currentAgent.state as AgentState] || 'Agent is not in a valid state for reset', 400);
     }
 
     await context.services.agents.resetAgent(agentId, auth.user.id);
@@ -806,10 +675,7 @@ export async function handleResetAgent(
     }), context.origin);
   } catch (error) {
     logger.error `Reset agent failed: ${error}`;
-    return addCorsHeaders(Response.json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 }), context.origin);
+    return corsErrorResponse(context.origin, error instanceof Error ? error.message : 'Unknown error', 500);
   }
 }
 
@@ -824,10 +690,7 @@ export async function handleGetEvents(
     // Check read access
     const hasAccess = await context.services.userAgentAccesses.hasReadAccess(auth.user.id, agentId);
     if (!hasAccess) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Agent not found'
-      }, { status: 404 }), context.origin);
+      return corsErrorResponse(context.origin, 'Agent not found', 404);
     }
 
     const url = new URL(req.url);
@@ -863,10 +726,7 @@ export async function handleGetEvents(
     return addCorsHeaders(Response.json(response), context.origin);
   } catch (error) {
     logger.error `Get agent events failed: ${error}`;
-    return addCorsHeaders(Response.json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 }), context.origin);
+    return corsErrorResponse(context.origin, error instanceof Error ? error.message : 'Unknown error', 500);
   }
 }
 
@@ -881,25 +741,16 @@ export async function handleGetMachineInfo(
     // Check read access
     const hasAccess = await context.services.userAgentAccesses.hasReadAccess(auth.user.id, agentId);
     if (!hasAccess) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Access denied'
-      }, { status: 403 }), context.origin);
+      return corsErrorResponse(context.origin, 'Access denied', 403);
     }
 
     const agent = await context.services.agents.getAgent(agentId);
     if (!agent) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Agent not found'
-      }, { status: 404 }), context.origin);
+      return corsErrorResponse(context.origin, 'Agent not found', 404);
     }
 
     if (!agent.machineId) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Agent has no machine'
-      }, { status: 404 }), context.origin);
+      return corsErrorResponse(context.origin, 'Agent has no machine', 404);
     }
 
     // Return machine info
@@ -913,10 +764,7 @@ export async function handleGetMachineInfo(
     return addCorsHeaders(Response.json(machineInfo), context.origin);
   } catch (error) {
     logger.error `Get machine info failed: ${error}`;
-    return addCorsHeaders(Response.json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 }), context.origin);
+    return corsErrorResponse(context.origin, error instanceof Error ? error.message : 'Unknown error', 500);
   }
 }
 
@@ -950,10 +798,7 @@ export async function handleGetAgentAccesses(
     }), context.origin);
   } catch (error) {
     logger.error `Get agent accesses failed: ${error}`;
-    return addCorsHeaders(Response.json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 }), context.origin);
+    return corsErrorResponse(context.origin, error instanceof Error ? error.message : 'Unknown error', 500);
   }
 }
 
@@ -968,10 +813,7 @@ export async function handleGetAgentSharedWith(
     // Check if user has read access to the agent
     const hasAccess = await context.services.userAgentAccesses.hasReadAccess(auth.user.id, agentId);
     if (!hasAccess) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Agent not found or access denied'
-      }, { status: 404 }), context.origin);
+      return corsErrorResponse(context.origin, 'Agent not found or access denied', 404);
     }
 
     // Get all users who have access to this agent
@@ -1001,10 +843,7 @@ export async function handleGetAgentSharedWith(
     }), context.origin);
   } catch (error) {
     logger.error `Get agent shared with failed: ${error}`;
-    return addCorsHeaders(Response.json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 }), context.origin);
+    return corsErrorResponse(context.origin, error instanceof Error ? error.message : 'Unknown error', 500);
   }
 }
 
@@ -1019,19 +858,13 @@ export async function handleExtendAgentLifetime(
     // Check if user owns the agent
     const ownsAgent = await context.services.agents.userOwnsAgent(agentId, auth.user.id);
     if (!ownsAgent) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Agent not found or access denied'
-      }, { status: 403 }), context.origin);
+      return corsErrorResponse(context.origin, 'Agent not found or access denied', 403);
     }
 
     // Get agent first
     const agent = await context.services.agents.getAgent(agentId);
     if (!agent) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Agent not found'
-      }, { status: 404 }), context.origin);
+      return corsErrorResponse(context.origin, 'Agent not found', 404);
     }
 
     // Parse request body to get hours (optional, defaults to 1 unit)
@@ -1057,25 +890,11 @@ export async function handleExtendAgentLifetime(
     if (!limitCheck.allowed) {
       // User doesn't exist in database
       if (limitCheck.userNotFound) {
-        return addCorsHeaders(Response.json({
-          success: false,
-          error: 'User not found'
-        }, { status: 404 }), context.origin);
+        return corsErrorResponse(context.origin, 'User not found', 404);
       }
 
       // Monthly limit exceeded
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Agent creation limit reached',
-        code: 'LIMIT_EXCEEDED',
-        limitInfo: {
-          limitType: limitCheck.limitType,
-          resourceType: limitCheck.resourceType,
-          current: limitCheck.current,
-          max: limitCheck.max,
-          isMonthlyLimit: limitCheck.isMonthlyLimit || false
-        }
-      }, { status: 429 }), context.origin);
+      return corsErrorResponse(context.origin, 'Agent creation limit reached', 429, { code: 'LIMIT_EXCEEDED', limitInfo: { limitType: limitCheck.limitType, resourceType: limitCheck.resourceType, current: limitCheck.current, max: limitCheck.max, isMonthlyLimit: limitCheck.isMonthlyLimit || false } });
     }
 
     // Increment monthly usage by 1 (not by unitsToAdd - we only charge once per extension action)
@@ -1099,10 +918,7 @@ export async function handleExtendAgentLifetime(
     }), context.origin);
   } catch (error) {
     logger.error `Extend agent lifetime failed: ${error}`;
-    return addCorsHeaders(Response.json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 }), context.origin);
+    return corsErrorResponse(context.origin, error instanceof Error ? error.message : 'Unknown error', 500);
   }
 }
 
@@ -1117,29 +933,20 @@ export async function handleForceRebootAgent(
     // Check if user owns the agent
     const ownsAgent = await context.services.agents.userOwnsAgent(agentId, auth.user.id);
     if (!ownsAgent) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Agent not found or access denied'
-      }, { status: 403 }), context.origin);
+      return corsErrorResponse(context.origin, 'Agent not found or access denied', 403);
     }
 
     // Get agent to verify state
     const agent = await context.services.agents.getAgent(agentId);
     if (!agent) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Agent not found'
-      }, { status: 404 }), context.origin);
+      return corsErrorResponse(context.origin, 'Agent not found', 404);
     }
 
     // Archive the agent first (skip if already archived - just resume it)
     if (agent.state !== AgentState.ARCHIVED) {
       const archiveResult = await context.services.agents.archiveAgent(agentId);
       if (!archiveResult.success) {
-        return addCorsHeaders(Response.json({
-          success: false,
-          error: archiveResult.error || 'Failed to archive agent'
-        }, { status: 500 }), context.origin);
+        return corsErrorResponse(context.origin, archiveResult.error || 'Failed to archive agent', 500);
       }
       logger.info `Archived agent ${agentId} for force reboot`;
     } else {
@@ -1170,27 +977,14 @@ export async function handleForceRebootAgent(
 
     // Handle specific error cases from agentMovements service
     if (err.code === 'MACHINE_POOL_EXHAUSTED') {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: err.message,
-        code: 'MACHINE_POOL_EXHAUSTED',
-        details: err.details
-      }, { status: 503 }), context.origin);
+      return corsErrorResponse(context.origin, err.message, 503, { code: 'MACHINE_POOL_EXHAUSTED', details: err.details });
     }
 
     if (err.code === 'LIMIT_EXCEEDED') {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: err.message,
-        code: 'LIMIT_EXCEEDED',
-        limitInfo: err.limitInfo
-      }, { status: 429 }), context.origin);
+      return corsErrorResponse(context.origin, err.message, 429, { code: 'LIMIT_EXCEEDED', limitInfo: err.limitInfo });
     }
 
-    return addCorsHeaders(Response.json({
-      success: false,
-      error: err.message || 'Unknown error'
-    }, { status: 500 }), context.origin);
+    return corsErrorResponse(context.origin, err.message || 'Unknown error', 500);
   }
 }
 
@@ -1205,19 +999,13 @@ export async function handleGenerateShareLink(
     // Check if user owns the agent
     const ownsAgent = await context.services.agents.userOwnsAgent(agentId, auth.user.id);
     if (!ownsAgent) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Only the agent owner can generate share links'
-      }, { status: 403 }), context.origin);
+      return corsErrorResponse(context.origin, 'Only the agent owner can generate share links', 403);
     }
 
     // Get agent to verify it exists and get project ID
     const agent = await context.services.agents.getAgent(agentId);
     if (!agent) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Agent not found'
-      }, { status: 404 }), context.origin);
+      return corsErrorResponse(context.origin, 'Agent not found', 404);
     }
 
     // Generate agent access JWT (30 day expiration)
@@ -1241,10 +1029,7 @@ export async function handleGenerateShareLink(
     }), context.origin);
   } catch (error) {
     logger.error `Generate share link failed - error: ${error instanceof Error ? error.message : JSON.stringify(error)}, stack: ${error instanceof Error ? error.stack : 'no stack'}`;
-    return addCorsHeaders(Response.json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 }), context.origin);
+    return corsErrorResponse(context.origin, error instanceof Error ? error.message : 'Unknown error', 500);
   }
 }
 
@@ -1258,20 +1043,14 @@ export async function handleGrantAgentAccess(
     const body = await req.json() as { token: string };
 
     if (!body.token) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Token is required'
-      }, { status: 400 }), context.origin);
+      return corsErrorResponse(context.origin, 'Token is required', 400);
     }
 
     // Validate and decode the agent access JWT
     const decoded = await context.services.auth.validateAgentAccessToken(body.token);
 
     if (!decoded) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Invalid or expired share token'
-      }, { status: 401 }), context.origin);
+      return corsErrorResponse(context.origin, 'Invalid or expired share token', 401);
     }
 
     const { agentId, access } = decoded;
@@ -1279,10 +1058,7 @@ export async function handleGrantAgentAccess(
     // Verify agent exists
     const agent = await context.services.agents.getAgent(agentId);
     if (!agent) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Agent not found'
-      }, { status: 404 }), context.origin);
+      return corsErrorResponse(context.origin, 'Agent not found', 404);
     }
 
     // Check if user already has access
@@ -1329,10 +1105,7 @@ export async function handleGrantAgentAccess(
     }), context.origin);
   } catch (error) {
     logger.error `Grant agent access failed: ${error}`;
-    return addCorsHeaders(Response.json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 }), context.origin);
+    return corsErrorResponse(context.origin, error instanceof Error ? error.message : 'Unknown error', 500);
   }
 }
 
@@ -1348,35 +1121,23 @@ export async function handleCancelPrompt(
     // Check write access
     const hasWrite = await context.services.userAgentAccesses.hasWriteAccess(auth.user.id, agentId);
     if (!hasWrite) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Write access required'
-      }, { status: 403 }), context.origin);
+      return corsErrorResponse(context.origin, 'Write access required', 403);
     }
 
     // Get the prompt
     const prompt = await context.services.agents.getPromptById(promptId);
     if (!prompt) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Prompt not found'
-      }, { status: 404 }), context.origin);
+      return corsErrorResponse(context.origin, 'Prompt not found', 404);
     }
 
     // Verify the prompt belongs to this agent
     if (prompt.agentId !== agentId) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Prompt does not belong to this agent'
-      }, { status: 400 }), context.origin);
+      return corsErrorResponse(context.origin, 'Prompt does not belong to this agent', 400);
     }
 
     // Only queued prompts can be cancelled
     if (prompt.status !== 'queued') {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: `Cannot cancel prompt: status is "${prompt.status}" (must be "queued")`
-      }, { status: 400 }), context.origin);
+      return corsErrorResponse(context.origin, `Cannot cancel prompt: status is "${prompt.status}" (must be "queued")`, 400);
     }
 
     // Delete the prompt
@@ -1388,10 +1149,7 @@ export async function handleCancelPrompt(
     }), context.origin);
   } catch (error) {
     logger.error `Cancel prompt failed: ${error}`;
-    return addCorsHeaders(Response.json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 }), context.origin);
+    return corsErrorResponse(context.origin, error instanceof Error ? error.message : 'Unknown error', 500);
   }
 }
 
@@ -1407,44 +1165,29 @@ export async function handleSkipQueue(
     // Check write access
     const hasWrite = await context.services.userAgentAccesses.hasWriteAccess(auth.user.id, agentId);
     if (!hasWrite) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Write access required'
-      }, { status: 403 }), context.origin);
+      return corsErrorResponse(context.origin, 'Write access required', 403);
     }
 
     // Get agent
     const agent = await context.services.agents.getAgent(agentId);
     if (!agent) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Agent not found'
-      }, { status: 404 }), context.origin);
+      return corsErrorResponse(context.origin, 'Agent not found', 404);
     }
 
     // Get the prompt
     const prompt = await context.services.agents.getPromptById(promptId);
     if (!prompt) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Prompt not found'
-      }, { status: 404 }), context.origin);
+      return corsErrorResponse(context.origin, 'Prompt not found', 404);
     }
 
     // Verify the prompt belongs to this agent
     if (prompt.agentId !== agentId) {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: 'Prompt does not belong to this agent'
-      }, { status: 400 }), context.origin);
+      return corsErrorResponse(context.origin, 'Prompt does not belong to this agent', 400);
     }
 
     // Only queued prompts can be skipped to front
     if (prompt.status !== 'queued') {
-      return addCorsHeaders(Response.json({
-        success: false,
-        error: `Cannot skip queue: prompt status is "${prompt.status}" (must be "queued")`
-      }, { status: 400 }), context.origin);
+      return corsErrorResponse(context.origin, `Cannot skip queue: prompt status is "${prompt.status}" (must be "queued")`, 400);
     }
 
     // Interrupt the agent if it's running
@@ -1461,9 +1204,6 @@ export async function handleSkipQueue(
     }), context.origin);
   } catch (error) {
     logger.error `Skip queue failed: ${error}`;
-    return addCorsHeaders(Response.json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 }), context.origin);
+    return corsErrorResponse(context.origin, error instanceof Error ? error.message : 'Unknown error', 500);
   }
 }
