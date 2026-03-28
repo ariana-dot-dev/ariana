@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
+import { unwrapApiResponse } from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
@@ -98,30 +99,20 @@ export function CohortAnalysis({ excludeUsers = '' }: CohortAnalysisProps) {
         fetch(`${apiUrl}/api/admin/analytics/cohorts/success?period=${period}${excludeParam}`, { headers }),
       ])
 
-      if (activationRes.ok) {
-        const data = await activationRes.json()
-        if (data.success) setActivationData(data.data)
-      }
+      const activation = await unwrapApiResponse<ActivationRateData[]>(activationRes)
+      if (activation) setActivationData(activation)
 
-      if (engagementRes.ok) {
-        const data = await engagementRes.json()
-        if (data.success) setEngagementData(data.data)
-      }
+      const engagement = await unwrapApiResponse<EngagementProgressionData[]>(engagementRes)
+      if (engagement) setEngagementData(engagement)
 
-      if (timeToActionRes.ok) {
-        const data = await timeToActionRes.json()
-        if (data.success) setTimeToActionData(data.data)
-      }
+      const timeToAction = await unwrapApiResponse<TimeToFirstActionData[]>(timeToActionRes)
+      if (timeToAction) setTimeToActionData(timeToAction)
 
-      if (retentionRes.ok) {
-        const data = await retentionRes.json()
-        if (data.success) setRetentionData(data.data)
-      }
+      const retention = await unwrapApiResponse<RetentionByWeekData[]>(retentionRes)
+      if (retention) setRetentionData(retention)
 
-      if (successRes.ok) {
-        const data = await successRes.json()
-        if (data.success) setSuccessData(data.data)
-      }
+      const success = await unwrapApiResponse<SuccessRateByCohortData[]>(successRes)
+      if (success) setSuccessData(success)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch cohort data')
     } finally {
