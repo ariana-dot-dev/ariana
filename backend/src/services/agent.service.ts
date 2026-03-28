@@ -67,7 +67,6 @@ export class AgentService {
   private readonly activeChains = new Map<string, ChainState>(); // key = "agentId:data" or "agentId:state"
   private readonly sharedMsgCount = new Map<string, number>(); // written by data chain, read by state chain
   private readonly recentTimings: ChainTiming[] = []; // ring buffer for benchmark logging
-  private readonly STALE_PR_CUTOFF_DAYS = 7;
 
   constructor(
     private repositories: RepositoryContainer,
