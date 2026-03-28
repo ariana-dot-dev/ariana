@@ -272,13 +272,6 @@ export class AgentService {
       let stateUpdateSuccess = false;
       let machineReleaseSuccess = false;
 
-      // Kill zombie running automation events (machine is going away)
-      try {
-        await this.repositories.automationEvents.killRunningEventsForAgent(agentId);
-      } catch (error) {
-        logger.warn`Agent ${agentId} - Failed to kill running automation events: ${error}`;
-      }
-
       // Step 1: Update agent state to ARCHIVED (we're already in ARCHIVING)
       try {
         await this.repositories.agents.updateAgentFields(agentId, {
