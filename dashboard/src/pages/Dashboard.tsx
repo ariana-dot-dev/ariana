@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
+import { unwrapApiResponse } from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
@@ -138,20 +139,14 @@ export function Dashboard() {
         }),
       ])
 
-      if (distributionRes.ok) {
-        const data = await distributionRes.json()
-        if (data.success) setUserDistribution(data.data)
-      }
+      const distribution = await unwrapApiResponse<UserDistributionData[]>(distributionRes)
+      if (distribution) setUserDistribution(distribution)
 
-      if (retentionRes.ok) {
-        const data = await retentionRes.json()
-        if (data.success) setRetentionCohorts(data.data)
-      }
+      const retention = await unwrapApiResponse<RetentionCohortData[]>(retentionRes)
+      if (retention) setRetentionCohorts(retention)
 
-      if (sessionRes.ok) {
-        const data = await sessionRes.json()
-        if (data.success) setSessionDuration(data.data)
-      }
+      const session = await unwrapApiResponse<SessionDurationData[]>(sessionRes)
+      if (session) setSessionDuration(session)
     } catch (err) {
       console.error('Failed to fetch analytics:', err)
     }
