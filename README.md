@@ -10,7 +10,7 @@ We maintain it on a private repo and will occasionally drop progress here. Feel 
 
 ## Try it
 
-A cloud version is hosted there: [ariana.dev](ariana.dev)
+A cloud version is hosted there: [ariana.dev](https://ariana.dev)
 
 You can use it from Desktop, Web and Mobile Web
 
